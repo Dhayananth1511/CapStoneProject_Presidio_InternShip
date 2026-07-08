@@ -101,7 +101,7 @@ graph TD
 
 ## 3. AI Agent Internal Flow
 
-Highlights conditional routing inside the backend agent orchestration layers for determining which services/tools need execution to complete a user request.
+Highlights sequential planning execution and conditional routing (handling ambiguity, budget checks, confidence failures, tool calling, and human validation) to complete traveler goals.
 
 ```mermaid
 graph TD
@@ -110,52 +110,49 @@ graph TD
     classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
     classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
     classDef tool fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
+    classDef error fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
 
-    Goal([User Goal]):::startEnd --> Planner["Coordinator Agent"]:::agent
-    Planner --> Create["Initialize Agent Memory & Execution Sequence"]:::process
+    Goal([User Natural Language Goal]):::startEnd --> Coord["Coordinator Agent"]:::agent
+    Coord --> Parse["Decompose Goal & Parse Intent"]:::process
     
-    %% Destination Step
-    Create --> CheckDest{"Need Destination?"}:::process
-    CheckDest -->|Yes| DestAgent["Destination Agent"]:::agent
-    CheckDest -->|No| CheckBudget{"Need Budget?"}:::process
-    DestAgent --> CheckBudget
+    %% Edge Case: Ambiguous Goals
+    Parse --> CheckAmb{"Are destination<br/>or dates ambiguous?"}:::process
+    CheckAmb -->|Yes| Clarify["Ask Clarifying Question<br/>(Require Traveler Input)"]:::process
+    Clarify --> Goal
     
-    %% Budget Step
-    CheckBudget -->|Yes| BudgetAgent["Budget Agent"]:::agent
-    CheckBudget -->|No| CheckTransport{"Need Transport?"}:::process
-    BudgetAgent --> CheckTransport
+    %% Sequential Execution
+    CheckAmb -->|No| DestAgent["1. Destination Agent<br/>(Select destination based on preferences)"]:::agent
+    DestAgent --> BudgetAgent["2. Budget Agent<br/>(Estimate total costs)"]:::agent
     
-    %% Transport Step
-    CheckTransport -->|Yes| TransportAgent["Transport Agent"]:::agent
-    CheckTransport -->|No| CheckAccom{"Need Accommodation?"}:::process
-    TransportAgent --> CheckAccom
+    %% Edge Case: Insufficient Budget
+    BudgetAgent --> CheckBudget{"Is budget sufficient<br/>for destination?"}:::process
+    CheckBudget -->|No| AltProp["Suggest alternatives & details<br/>(Insufficient budget flow)"]:::error
+    AltProp --> Goal
     
-    %% Accommodation Step
-    CheckAccom -->|Yes| AccomAgent["Accommodation Agent"]:::agent
-    CheckAccom -->|No| CheckItinerary{"Need Itinerary?"}:::process
-    AccomAgent --> CheckItinerary
+    CheckBudget -->|Yes| TransAgent["3. Transport Agent<br/>(Plan planes / trains / buses transit)"]:::agent
+    TransAgent --> AccomAgent["4. Accommodation Agent<br/>(Hotels & homestays recommendations)"]:::agent
+    AccomAgent --> ItinAgent["5. Itinerary Agent<br/>(Assemble daily scheduling)"]:::agent
     
-    %% Itinerary Step
-    CheckItinerary -->|Yes| ItineraryAgent["Itinerary Agent"]:::agent
-    CheckItinerary -->|No| CheckWeather{"Need Weather?"}:::process
-    ItineraryAgent --> CheckWeather
+    %% Tool Calling
+    ItinAgent --> Tools["Tool Calls: Weather API & Maps API"]:::tool
     
-    %% Weather Step
-    CheckWeather -->|Yes| WeatherTool["Weather Tool<br/>(API Call)"]:::tool
-    CheckWeather -->|No| CheckCalendar{"Need Calendar?"}:::process
-    WeatherTool --> CheckCalendar
+    %% Edge Case: Plan Confidence 
+    Tools --> ConfidenceCheck{"Can generate plan<br/>confidently?"}:::process
+    ConfidenceCheck -->|No| ErrorHandle["Graceful error response<br/>(Zero hallucinations)"]:::error
+    ErrorHandle --> EndGrace([Graceful Terminate]):::startEnd
     
-    %% Calendar Step
-    CheckCalendar -->|Yes| CalendarTool["Calendar Tool<br/>(API Call)"]:::tool
-    CheckCalendar -->|No| Coordinator["Coordinator Agent"]:::agent
-    CalendarTool --> Coordinator
+    ConfidenceCheck -->|Yes| CoordCompile["Coordinator Agent<br/>(Consolidate sequential outputs)"]:::agent
     
-    %% Wrap-up
-    Coordinator --> GenPlan["Generate Final Plan via Groq API (Free)"]:::process
-    GenPlan --> AppReq{"Human Approval?"}:::process
-    AppReq -->|Approved| Save["Save Trip Draft to DB"]:::process
-    AppReq -->|Rejected| Planner
-    Save --> End(["End"]):::startEnd
+    CoordCompile --> PromptGroq["Generate Final Document via Groq LLM"]:::process
+    PromptGroq --> Review["Traveler reviews full itinerary<br/>& budget breakdown"]:::process
+    
+    %% Human in the Loop (Crucial Constraint)
+    Review --> Approve{"Traveler approves?"}:::process
+    Approve -->|Yes| Save["Save Trip into MongoDB Atlas<br/>(Status: Draft / Planned / Confirmed)"]:::process
+    Approve -->|No| Modify["Modify Requirements & send back"]:::process
+    
+    Modify --> Coord
+    Save --> EndApp([End Workflow]):::startEnd
 ```
 
 ---
