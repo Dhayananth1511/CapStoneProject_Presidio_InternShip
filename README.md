@@ -4,17 +4,6 @@ This repository contains the architecture, workflow designs, and system integrat
 
 ---
 
-## 🗺️ Curriculum Integration (Week 1–5 Reference)
-
-The architecture is built upon the following learning objectives:
-* **Week 1 (Foundations & DSA)**: Schema design optimization, indexing configurations on database layers, and Git branching rules for robust repository management.
-* **Week 2 (Backend Engineering)**: Node.js Express application utilizing the **MVC (Model-View-Controller) Design Pattern**, global error handling middleware, request rate-limiting, logging (Morgan/Winston), and async/await processing patterns.
-* **Week 3 (Frontend & UX)**: Single Page Application (SPA) designed with React, TypeScript, state management (Zustand/Context), form state handling via **React Hook Form + Zod Schema Validation**, and optimized HTTP fetches/caching using **TanStack Query**.
-* **Week 4 (DevOps & Infrastructure)**: Automated build checks using GitHub Actions, containerization using Docker, secrets protection using Cloud Key Management, and Infrastructure as Code (IaC) provisioning using **Terraform on AWS (EC2, S3, CloudFront, and Security Groups)**.
-* **Week 5 (Agentic AI)**: Multi-Agent design featuring specialized decision blocks (Destination, Budget, Transport, Accommodation, and Itinerary agents) orchestrated by a centralized **Coordinator Agent** running on the free **Groq LLM API**.
-
----
-
 ## 1. Traveler Workflow
 
 Traces the execution path starting from client-side Zod form validation, user auth authorization, Express router middleware, agent orchestration, external API tool calling, and human-in-the-loop validation, down to MongoDB persistence.
