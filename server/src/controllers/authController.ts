@@ -9,13 +9,13 @@ const generateTokens = (userId: string, role: string) => {
   const accessToken = jwt.sign(
     { userId, role },
     process.env.JWT_ACCESS_SECRET!,
-    { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' }
+    { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' } as jwt.SignOptions
   );
 
   const refreshToken = jwt.sign(
     { userId, role },
     process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d' }
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d' } as jwt.SignOptions
   );
 
   return { accessToken, refreshToken };

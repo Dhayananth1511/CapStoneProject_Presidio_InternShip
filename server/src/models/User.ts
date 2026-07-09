@@ -46,20 +46,15 @@ const UserSchema = new Schema<IUser>(
  * Pre-Save hook: runs automatically before writing a user to the database.
  * If the password has been modified, we hash it securely using bcrypt.
  */
-UserSchema.pre('save', async function (next) {
-  const user = this as IUser;
+UserSchema.pre('save', async function () {
+  const user = this as any; // Cast as any or IUser to access properties without TS path errors
 
   // Only hash the password if it is new or modified
-  if (!user.isModified('password')) return next();
+  if (!user.isModified('password')) return;
 
-  try {
-    // Generate salt rounds (12 is strong and safe)
-    const salt = await bcrypt.genSalt(12);
-    user.password = await bcrypt.hash(user.password, salt);
-    next();
-  } catch (err: any) {
-    next(err);
-  }
+  // Generate salt rounds (12 is strong and safe)
+  const salt = await bcrypt.genSalt(12);
+  user.password = await bcrypt.hash(user.password, salt);
 });
 
 /**
