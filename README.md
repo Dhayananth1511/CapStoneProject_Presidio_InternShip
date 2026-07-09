@@ -14,13 +14,12 @@ This repository contains the architecture, workflow designs, and system integrat
 6. [MCP Architecture](#6-mcp-architecture-integration-model)
 7. [Multi-Agent Workflow — Agent I/O Specification](#7-multi-agent-workflow--agent-io-specification)
 8. [Agent Communication & Shared Trip Context](#8-agent-communication--shared-trip-context)
-9. [Full Request Lifecycle — Sequence Diagram](#9-full-request-lifecycle--sequence-diagram)
-10. [Error Handling & Retry Strategy](#10-error-handling--retry-strategy)
-11. [Deployment Architecture](#11-deployment-architecture)
-12. [Security Flow](#12-security-flow)
-13. [Observability — Logging, Metrics & Health Checks](#13-observability--logging-metrics--health-checks)
-14. [Functional Execution Scenarios](#14-functional-execution-scenarios-simulated-outputs)
-15. [Tech Stack](#15-tech-stack)
+9. [Error Handling & Retry Strategy](#10-error-handling--retry-strategy)
+10. [Deployment Architecture](#11-deployment-architecture)
+11. [Security Flow](#12-security-flow)
+12. [Observability — Logging, Metrics & Health Checks](#13-observability--logging-metrics--health-checks)
+13. [Functional Execution Scenarios](#14-functional-execution-scenarios-simulated-outputs)
+14. [Tech Stack](#15-tech-stack)
 
 ---
 
@@ -714,94 +713,6 @@ Every agent receives and returns data conforming to this shared context object. 
 
 ---
 
-## 9. Full Request Lifecycle — Sequence Diagram
-
-This diagram shows the **complete end-to-end request lifecycle** from a user submitting a trip query to the final dashboard update.
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant FE as React Frontend
-    participant BE as Express Backend
-    participant PS as Planner Service
-    participant CA as Coordinator Agent
-    participant WA as Weather Agent
-    participant TA as Transport Agent
-    participant AA as Accommodation Agent
-    participant BA as Budget Agent
-    participant IA as Itinerary Agent
-    participant MCP as MCP Servers
-    participant Redis as Redis Cache
-    participant LLM as Groq LLM
-    participant DB as MongoDB Atlas
-
-    User->>FE: Submit trip request ("Plan Ooty trip for 2, Oct, ₹30k")
-    FE->>FE: Zod validation pass
-    FE->>BE: POST /api/trips/plan (JWT in header)
-    BE->>BE: Middleware chain (Helmet → CORS → Rate Limit → JWT → RBAC)
-    BE->>PS: planTrip(userId, userMessage)
-    PS->>DB: Load short-term + long-term memory
-    DB-->>PS: Conversation history + preferences
-    PS->>CA: orchestrate(TripContext)
-
-    CA->>CA: Planner Agent — parse intent, fill slots
-    CA->>CA: Missing Info Agent — validate completeness
-
-    par Parallel Data Retrieval
-        CA->>WA: getWeather(destination, dates)
-        WA->>Redis: Cache lookup
-        Redis-->>WA: MISS
-        WA->>MCP: weather-mcp-server → OpenMeteo
-        MCP-->>WA: 5-day forecast
-        WA->>Redis: Write forecast (TTL: 1hr)
-        WA-->>CA: { forecast }
-
-        CA->>TA: getTransport(origin, destination, dates)
-        TA->>Redis: Cache lookup
-        Redis-->>TA: MISS
-        TA->>MCP: transit-mcp-server → Mock Rail
-        MCP-->>TA: Train options + costs
-        TA->>Redis: Write options (TTL: 30min)
-        TA-->>CA: { options }
-
-        CA->>AA: getAccommodation(destination, dates, travelers)
-        AA->>MCP: booking-mcp-server → Mock Hotel
-        MCP-->>AA: Hotel list + pricing
-        AA-->>CA: { hotels }
-    end
-
-    CA->>BA: calcBudget(TripContext with all costs)
-    BA->>BA: Sum categories + 10% emergency buffer
-    BA-->>CA: { breakdown, total: ₹22,330, feasible: true }
-
-    CA->>IA: buildItinerary(TripContext)
-    IA->>IA: Day-by-day scheduling with weather awareness
-    IA-->>CA: { itinerary: [...5 days] }
-
-    CA->>LLM: Format markdown plan (Groq Llama3)
-    LLM-->>CA: Formatted trip plan
-
-    CA-->>PS: Final TripContext
-    PS->>DB: Save session (status: AWAITING_APPROVAL)
-    PS-->>BE: Trip plan response
-    BE-->>FE: 200 OK { plan, sessionId }
-    FE-->>User: Display trip plan for review
-
-    User->>FE: Approve plan
-    FE->>BE: POST /api/trips/:id/approve
-    BE->>PS: confirmTrip(tripId)
-    PS->>MCP: booking-mcp-server → Mock Hotel + Payment
-    MCP-->>PS: { booking_ref, payment_ref }
-    PS->>MCP: calendar-mcp-server → Google Calendar
-    MCP-->>PS: { event_id, calendar_link }
-    PS->>DB: Update status → BOOKED
-    DB-->>PS: Saved
-    PS-->>BE: Booking confirmed
-    BE-->>FE: 200 OK { booking_refs, calendar_link }
-    FE-->>User: Dashboard updated — Trip Booked ✅
-```
-
----
 
 ## 10. Error Handling & Retry Strategy
 
