@@ -53,7 +53,9 @@ graph TD
     ExpressRouter --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
     PlannerService --> FetchMem["Load Memory<br/>(Short + Long Term)"]:::process
     
-    FetchMem --> Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
+    FetchMem --> PlannerDecision{"Request Type?"}:::process
+    PlannerDecision -->|New Trip| Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
+    PlannerDecision -->|Modification / Rejection| ModifyReq["Modify via Replanning Agent"]:::agent
     
     Planner --> CheckMiss["Missing Info Agent"]:::agent
     CheckMiss --> CheckData{"Missing critical info?"}:::process
@@ -130,7 +132,8 @@ graph TD
     
     Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
     
-    HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
+    HITL -->|Reject| BaseGoal
+    
     ModifyReq --> PreserData["Preserve Context<br/>(Keep destination, weather, transport, prefs)"]:::process
     PreserData --> UpdateReq["Update requested changes only<br/>(Edit accommodation, budget, or itinerary)"]:::process
     UpdateReq --> Coordinator
@@ -209,7 +212,9 @@ graph TD
     %% Turn State Memory (Dual-Layer)
     PlannerService --> FetchMem["Load Memories"]:::process
     
-    FetchMem --> Planner["Planner Agent"]:::agent
+    FetchMem --> RequestTypeDecision{"Request Type?"}:::process
+    RequestTypeDecision -->|New Goal| Planner["Planner Agent"]:::agent
+    RequestTypeDecision -->|Modification / Rejection| ReplanningAgent["Replanning Agent<br/>(Context Preservation)"]:::agent
     Planner --> Parse["Decompose Goal"]:::process
     
     %% Inference slot checks
@@ -297,7 +302,9 @@ graph TD
     SaveMem --> TravelerReview["User Review Plan"]:::process
     
     TravelerReview --> Approve{"Is plan approved?"}:::process
-    Approve -->|No| ReplanningAgent["Replanning Agent<br/>(Context Preservation)"]:::agent
+    Approve -->|No| RejectGoal["Submit Rejection Feedback"]:::process
+    RejectGoal --> Goal
+    
     ReplanningAgent --> PrefsKeep["Preserve Context<br/>(destination, weather, transport, prefs)"]:::process
     PrefsKeep --> UpdateOnly["Update only requested changes"]:::process
     UpdateOnly --> Coord
