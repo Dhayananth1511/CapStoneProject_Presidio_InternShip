@@ -53,9 +53,7 @@ graph TD
     ExpressRouter --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
     PlannerService --> FetchMem["Load Memory<br/>(Short + Long Term)"]:::process
     
-    FetchMem --> PlannerDecision{"Request Type?"}:::process
-    PlannerDecision -->|New Trip| Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
-    PlannerDecision -->|Modification / Rejection| ModifyReq["Modify via Replanning Agent"]:::agent
+    FetchMem --> Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
     
     Planner --> CheckMiss["Missing Info Agent"]:::agent
     CheckMiss --> CheckData{"Missing critical info?"}:::process
@@ -132,19 +130,18 @@ graph TD
     
     Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
     
-    HITL -->|Reject| BaseGoal
-    
+    HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
     ModifyReq --> PreserData["Preserve Context<br/>(Keep destination, weather, transport, prefs)"]:::process
     PreserData --> UpdateReq["Update requested changes only<br/>(Edit accommodation, budget, or itinerary)"]:::process
     UpdateReq --> Coordinator
     
     HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Mock reservations & payments)"]:::agent
     
-    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Booked)"]:::process
+    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Confirmed)"]:::process
     
     SaveDB --> Notifications["Dispatch Notifications<br/>(Calendar Sync / Email / Push Alerts)"]:::process
     
-    Notifications --> UpdateStatus["Update Trip Status Enums<br/>(Planning ➔ Awaiting Approval ➔ Booked)"]:::process
+    Notifications --> UpdateStatus["Update Trip Status Enums<br/>(Draft ➔ Planned ➔ Confirmed)"]:::process
     UpdateStatus --> DashboardUpdate([Dashboard Updated]):::startEnd
 ```
 
@@ -212,9 +209,7 @@ graph TD
     %% Turn State Memory (Dual-Layer)
     PlannerService --> FetchMem["Load Memories"]:::process
     
-    FetchMem --> RequestTypeDecision{"Request Type?"}:::process
-    RequestTypeDecision -->|New Goal| Planner["Planner Agent"]:::agent
-    RequestTypeDecision -->|Modification / Rejection| ReplanningAgent["Replanning Agent<br/>(Context Preservation)"]:::agent
+    FetchMem --> Planner["Planner Agent"]:::agent
     Planner --> Parse["Decompose Goal"]:::process
     
     %% Inference slot checks
@@ -302,9 +297,7 @@ graph TD
     SaveMem --> TravelerReview["User Review Plan"]:::process
     
     TravelerReview --> Approve{"Is plan approved?"}:::process
-    Approve -->|No| RejectGoal["Submit Rejection Feedback"]:::process
-    RejectGoal --> Goal
-    
+    Approve -->|No| ReplanningAgent["Replanning Agent<br/>(Context Preservation)"]:::agent
     ReplanningAgent --> PrefsKeep["Preserve Context<br/>(destination, weather, transport, prefs)"]:::process
     PrefsKeep --> UpdateOnly["Update only requested changes"]:::process
     UpdateOnly --> Coord
@@ -661,14 +654,14 @@ After parallel results are aggregated into the shared `TripContext`, the sequent
 | Agent | Trigger | Input | Output |
 |:---|:---|:---|:---|
 | **Replanning Agent** | User rejects plan | Rejection reason + original `TripContext` | Preserves existing context (destination, weather, transport), updates only modified slots, and hands back to Coordinator to re-plan |
-| **Booking Agent** | User approves plan | Final approved `TripContext` | `{ booking_refs: {...}, status: "BOOKED" }` |
+| **Booking Agent** | User approves plan | Final approved `TripContext` | `{ booking_refs: {...}, status: "CONFIRMED" }` |
 | **Calendar Agent** | Post-booking | Trip dates + user email | Google Calendar events created, confirmation sent |
 
 ### Workflow Termination Conditions
 
 | Condition | Result |
 |:---|:---|
-| Plan approved + booked successfully | ✅ Trip saved to MongoDB with status `BOOKED` |
+| Plan approved + booked successfully | ✅ Trip saved to MongoDB with status `CONFIRMED` |
 | Budget infeasible after 3 alternatives | ⚠️ Returns alternatives, awaits user budget update |
 | Itinerary confidence check fails | ❌ Graceful error response, session preserved |
 | User cancels mid-flow | Trip saved as `DRAFT` status |
@@ -707,7 +700,7 @@ Every agent receives and returns data conforming to this shared context object. 
 {
   "sessionId": "uuid-v4",
   "userId": "mongo-object-id",
-  "status": "PLANNING | AWAITING_APPROVAL | BOOKED | DRAFT | CANCELLED",
+  "status": "DRAFT | PLANNED | CONFIRMED",
   "input": {
     "destination": "Ooty, Tamil Nadu",
     "origin": "Chennai",
