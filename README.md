@@ -16,6 +16,7 @@ graph TD
     classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
     classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
     classDef api fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
+    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
     
     Traveler([Traveler]):::startEnd --> ClientInput["Dashboard Input Form<br/>(Client Validation: Hook Form + Zod)"]:::process
     ClientInput --> Auth["User Registration / Login<br/>JWT/RBAC Auth Middleware"]:::process
@@ -27,28 +28,31 @@ graph TD
     Create --> InputGoal["User enters Goal Input (includes Destination)<br/>e.g., 'Plan a 5-day trip to Manali for 2 people within ₹30,000'"]:::process
     View --> InputGoal
     
-    InputGoal --> ExpressRouter["Express.js Server Router<br/>Rate-limiting via express-rate-limit<br/>Morgan/Winston Session Logging"]:::process
+    InputGoal --> ExpressRouter["Express.js Server Router<br/>Rate-limiting, CORS, Helmet, Morgan Logging"]:::process
     
     ExpressRouter --> PlannerService["Planner Service Layer<br/>(Separates controller from AI orchestration)"]:::process
-    PlannerService --> FetchMem["Load Turn History from Conversation Memory"]:::process
+    PlannerService --> FetchMem["Load Turn History & Preferences<br/>(Short-Term & Long-Term Memory)"]:::process
     
     FetchMem --> Orchestrator["Coordinator Agent<br/>(MCP Client Agent utilizing Memory context)"]:::agent
     Orchestrator --> ParseIntent["Understand User Intent & Input Requirements"]:::process
     ParseIntent --> SplitTasks["Break Input into Sub-Tasks"]:::process
     
     SplitTasks --> TransAgent["Transport Agent<br/>Plan transit connections to destination"]:::agent
-    SplitTasks --> AccomAgent["Accommodation Agent<br/>Search hotels & homestays"]:::agent
     
-    TransAgent --> BudgetAgent["Budget Agent<br/>(Estimate costs & breakdown)"]:::agent
+    %% Cache Check for Weather & Transit
+    TransAgent --> CheckCache{"Cache Hit in Redis?"}:::cache
+    CheckCache -->|No| ToolCall["MCP Client Tool Requests<br/>(Weather & Maps Server API calls)"]:::api
+    CheckCache -->|Yes| BudgetAgent["Budget Agent<br/>(Estimate costs & breakdown)"]:::agent
+    
+    ToolCall --> CacheWrite["Write Data to Redis Cache"]:::cache
+    CacheWrite --> AccomAgent["Accommodation Agent<br/>Search hotels & homestays<br/>(Utilizes Weather & location constraints)"]:::agent
     AccomAgent --> BudgetAgent
     
-    BudgetAgent --> ItinAgent["Itinerary Agent<br/>Assemble scheduling sequence"]:::agent
+    BudgetAgent --> ItinAgent["Itinerary Agent<br/>Format daily activities scheduling"]:::agent
     
-    ItinAgent --> Coordinator["Coordinator Agent<br/>(Aggregates agent data)"]:::agent
+    ItinAgent --> Coordinator["Coordinator Agent<br/>(Aggregates collected data & reasoning)"]:::agent
     
-    Coordinator --> ToolCall["MCP Client Tool Request<br/>(Launches standardized MCP protocol requests)"]:::api
-    
-    ToolCall --> GenPlan["Generate Final Travel Plan via Groq API (Free)<br/>(Async/Await processing)"]:::process
+    Coordinator --> GenPlan["Log Reasoning & Format Response via Groq API<br/>(Generates user-facing markdown from real data)"]:::process
     GenPlan --> HITL{"Human-in-the-Loop Confirmation<br/>'Do you approve this travel plan?'"}:::process
     
     HITL -->|Approve| SaveDB["Save Trip to MongoDB Atlas<br/>(Mongoose write validations)"]:::process
@@ -100,12 +104,13 @@ graph TD
     classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
     classDef tool fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
     classDef error fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
+    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
 
     Goal([User Natural Language Goal]):::startEnd --> Controller["Trip Controller"]:::process
     Controller --> PlannerService["Planner Service<br/>(Service layer orchestrator)"]:::process
     
-    %% Turn State Memory
-    PlannerService --> FetchMem["Load Turn History from Conversation Memory"]:::process
+    %% Turn State Memory (Dual-Layer)
+    PlannerService --> FetchMem["Load Memories:<br/>1. Short-Term Memory (Session turn history)<br/>2. Long-Term Memory (User history & preferences)"]:::process
     
     FetchMem --> Coord["Coordinator Agent<br/>(MCP Client Agent)"]:::agent
     Coord --> Parse["Decompose Goal & Parse Intent"]:::process
@@ -115,9 +120,16 @@ graph TD
     CheckAmb -->|Yes| Clarify["Ask Clarifying Question<br/>(Require Traveler Input)"]:::process
     Clarify --> Goal
     
-    %% Sequential Execution of Sub-Agents
-    CheckAmb -->|No| TransAgent["1. Transport Agent<br/>(Plan planes / trains / buses transit)"]:::agent
-    TransAgent --> AccomAgent["2. Accommodation Agent<br/>(Hotels & homestays recommendations)"]:::agent
+    %% Sequential Execution of Sub-Agents & Tools
+    CheckAmb -->|No| TransAgent["1. Transport Agent<br/>(Plan transit options to destination)"]:::agent
+    
+    %% Weather retrieval early
+    TransAgent --> CheckCache{"Weather Cache Hit in Redis?"}:::cache
+    CheckCache -->|Yes| AccomAgent["2. Accommodation Agent<br/>(Lodging stays search)"]:::agent
+    CheckCache -->|No| WeatherTool["Weather MCP Server<br/>(Query forecast parameters)"]:::tool
+    
+    WeatherTool --> WriteCache["Write forecast to Redis Cache"]:::cache
+    WriteCache --> AccomAgent
     
     %% Budget Agent
     AccomAgent --> BudgetAgent["3. Budget Agent<br/>(Estimate and verify expenses)"]:::agent
@@ -130,28 +142,25 @@ graph TD
     CheckBudget -->|Yes| ItinAgent["4. Itinerary Agent<br/>(Assemble daily scheduling)"]:::agent
     
     %% Tool Calling
-    ItinAgent --> Tools["Orchestrate tool requests via Model Context Protocol"]:::tool
+    ItinAgent --> Tools["Orchestrate map & activity queries via Model Context Protocol"]:::tool
     subgraph MCPRegistries ["MCP Server Registry Tools"]
-        WeatherTool["Weather MCP Server (OpenMeteo Protocol)"]:::tool
         MapsTool["Maps MCP Server (Google Maps Protocol)"]:::tool
         CalendarTool["Calendar MCP Server (Google Calendar Protocol)"]:::tool
     end
-    Tools --> WeatherTool
     Tools --> MapsTool
     Tools --> CalendarTool
     
     %% Edge Case: Plan Confidence 
-    WeatherTool --> ConfidenceCheck{"Can generate plan<br/>confidently?"}:::process
-    MapsTool --> ConfidenceCheck
+    MapsTool --> ConfidenceCheck{"Can generate plan<br/>confidently?"}:::process
     CalendarTool --> ConfidenceCheck
     
     ConfidenceCheck -->|No| ErrorHandle["Graceful error response<br/>(Zero hallucinations)"]:::error
     ErrorHandle --> EndGrace([Graceful Terminate]):::startEnd
     
-    ConfidenceCheck -->|Yes| CoordCompile["Coordinator Agent<br/>(Consolidate sequential outputs)"]:::agent
+    ConfidenceCheck -->|Yes| CoordCompile["Coordinator Agent<br/>(Collect real API data & plan context)"]:::agent
     
-    CoordCompile --> PromptGroq["Generate Final Document via Groq LLM"]:::process
-    PromptGroq --> SaveMem["Save updated memory state to MongoDB"]:::process
+    CoordCompile --> PromptGroq["Query Groq LLM API<br/>(Orchestrate reasoning, verify data, & format outline)"]:::process
+    PromptGroq --> SaveMem["Save updated turn history and metrics to memory store"]:::process
     
     SaveMem --> Review["Traveler reviews full itinerary<br/>& budget breakdown"]:::process
     
@@ -228,7 +237,7 @@ graph TD
 
 ## 5. Complete System Architecture
 
-Maps out the structural tier boundaries: Frontend Web Client, Service Layer context, AI Agent orchestration cluster, External MCP Integrations, and persistent database layers.
+Maps out the structural tier boundaries: Frontend Web Client, Service Layer context, AI Agent orchestration cluster, External MCP Integrations, and persistent database/caching layers.
 
 ```mermaid
 graph TD
@@ -238,11 +247,12 @@ graph TD
     classDef backend fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
     classDef db fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
     classDef ext fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
+    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
 
     %% Frontend Tier
     subgraph ClientTier ["Frontend Client (React TS - Week 3)"]
         FE["React User Interface<br/>(Tailwind CSS)"]:::frontend
-        Val["Form Validation<br/>(React Hook Form + Zod)"]:::frontend
+        Val["Form Input validation<br/>(React Hook Form + Zod)"]:::frontend
         State["State Manager<br/>(Zustand / Context API)"]:::frontend
         Queries["API Client<br/>(TanStack Query / Axios)"]:::frontend
         ChartsFE["Visualizations<br/>(Chart.js Analytics)"]:::frontend
@@ -253,15 +263,18 @@ graph TD
     subgraph ServerTier ["Backend Server (Node.js/Express MVC + Service - Week 2)"]
         API["Express.js Server Route Handler"]:::backend
         
-        subgraph Middlewares ["Express.js Middleware Chain"]
+        subgraph Middlewares ["Express.js Middleware Chain (Hardened Security)"]
             Throttle["API Rate Limiter"]:::backend
+            CORSConn["CORS Safety Policy"]:::backend
+            HelmetShield["Helmet CSS/Header Protection"]:::backend
             Log["Morgan Logger"]:::backend
             JWT["JWT Validation & Authorization"]:::backend
+            InputVal["JSON Schema Input Validator"]:::backend
             RBAC["RBAC Role Validator"]:::backend
             ErrorM["Global Error Handler"]:::backend
         end
         
-        API --> Throttle --> Log --> JWT --> RBAC
+        API --> Throttle --> CORSConn --> HelmetShield --> Log --> JWT --> InputVal --> RBAC
         
         PlannerService["Planner Service<br/>(Core Business Logic Handler)"]:::backend
         RBAC --> PlannerService
@@ -289,9 +302,17 @@ graph TD
     end
 
     %% Storage Tier
-    subgraph DBTier ["Database & Storage (Week 1 / 2)"]
+    subgraph DBTier ["Database & Caching (Week 1 / 2)"]
         DB[("MongoDB Atlas Database<br/>(Indexed Collections & Users)")]:::db
-        MemStore[("MongoDB Conversation MemoryStore<br/>(Turn history state storage)")]:::db
+        
+        subgraph CacheStore ["In-Memory Caching (Redis)"]
+            RedisCache[("Redis Server<br/>(Weather & transit memory)")]:::cache
+        end
+        
+        subgraph MemStores ["Dual-Layer Memory Store"]
+            ST_Memory[("Short-Term Memory<br/>(Session turn history)")]:::db
+            LT_Memory[("Long-Term Memory<br/>(User travel history/profile)")]:::db
+        end
     end
 
     %% External Tier
@@ -315,7 +336,10 @@ graph TD
 
     %% Core Data flow
     Queries -->|JSON REST Requests| API
-    PlannerService -->|Search & Update History| MemStore
+    PlannerService -->|Query & Update History| ST_Memory
+    PlannerService -->|Query preferences| LT_Memory
+    PlannerService -->|Check cache| RedisCache
+    
     Coord -->|Inference Query| LLM
     LLM -->|Standardized MCP Requests| LCTools
     Coord -->|Store Completed Trip Profile| DB
