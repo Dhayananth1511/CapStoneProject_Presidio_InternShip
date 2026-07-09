@@ -1,1116 +1,907 @@
-# Travel Planner AI Agent - Capstone Project Documentation
+# Travel Planner AI Agent
 
-This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating architectural principles and technologies from **Week 1 through Week 5** — demonstrating a production-ready, multi-agent AI system backed by MCP tool calling, dual-layer memory, Redis caching, and AWS cloud infrastructure.
+An enterprise-grade, production-ready AI Travel Planner application built on a multi-agent backend, Model Context Protocol (MCP) tool integration, Redis caching, and AWS cloud infrastructure. This application automates search, budgeting, itinerary generation, and bookings through a seamless, context-aware AI planning flow.
 
 ---
 
 ## Table of Contents
 
-1. [Traveler Workflow](#1-traveler-workflow)
-2. [Admin Workflow](#2-admin-workflow)
-3. [AI Agent Internal Flow](#3-ai-agent-internal-flow)
-4. [Project Development Workflow](#4-project-development-workflow)
-5. [Complete System Architecture](#5-complete-system-architecture)
-6. [MCP Architecture](#6-mcp-architecture-integration-model)
-7. [Multi-Agent Workflow — Agent I/O Specification](#7-multi-agent-workflow--agent-io-specification)
-8. [Agent Communication & Shared Trip Context](#8-agent-communication--shared-trip-context)
-9. [Error Handling & Retry Strategy](#10-error-handling--retry-strategy)
-10. [Deployment Architecture](#11-deployment-architecture)
-11. [Security Flow](#12-security-flow)
-12. [Observability — Logging, Metrics & Health Checks](#13-observability--logging-metrics--health-checks)
-13. [Functional Execution Scenarios](#14-functional-execution-scenarios-simulated-outputs)
-14. [Tech Stack](#15-tech-stack)
+1. [System Architecture](#1-system-architecture)
+2. [Sequence Diagram](#2-sequence-diagram)
+3. [AI Agent Architecture](#3-ai-agent-architecture)
+4. [Model Context Protocol (MCP) Tool Layer](#4-model-context-protocol-mcp-tool-layer)
+5. [Traveler Planning Workflow](#5-traveler-planning-workflow)
+6. [API Layer Design](#6-api-layer-design)
+7. [Database Schema & ER Diagram](#7-database-schema--er-diagram)
+8. [Trip State Machine](#8-trip-state-machine)
+9. [Prompt Engineering Layer](#9-prompt-engineering-layer)
+10. [JSON Validation & Structured Output Parser](#10-json-validation--structured-output-parser)
+11. [Confidence & Fallback Flow](#11-confidence--fallback-flow)
+12. [Memory Architecture & Long-Term Update Policy](#12-memory-architecture--long-term-update-policy)
+13. [User Profile System & Context Extraction](#13-user-profile-system--context-extraction)
+14. [Granular Replanning Logic](#14-granular-replanning-logic)
+15. [Complete Budget Model](#15-complete-budget-model)
+16. [Booking & Payment Service Layer](#16-booking--payment-service-layer)
+17. [Background Notification Queue](#17-background-notification-queue)
+18. [Redis Cache Strategy (TTL & Key Design)](#18-redis-cache-strategy-ttl--key-design)
+19. [LLM Cost Optimization Strategy](#19-llm-cost-optimization-strategy)
+20. [Security & Authentication Architecture](#20-security--auth-architecture)
+21. [Folder Structure](#21-folder-structure)
+22. [Class Diagram](#22-class-diagram)
+23. [CI/CD & Deployment Flow](#23-cicd--deployment-flow)
+24. [Rate Limiting Flow](#24-rate-limiting-flow)
+25. [Observability & Error Redirection Matrix](#25-observability--error-redirection-matrix)
+26. [Technical Stack](#26-technical-stack)
 
 ---
 
-## 1. Traveler Workflow
+## 1. System Architecture
 
-Traces the execution path starting from client-side Zod auth validation, JWT authorization, service orchestration, standardized tool calling, parallel data retrieval, sequential budgeting, human-in-the-loop review, and mock bookings down to persistent storage.
+The project is structured with a strict separation of concerns, dividing AI reasoning, tool execution, and core business logic. Rather than wrapping every function in an AI agent, the system uses a single master Planner Agent that handles cognitive tasks and delegates operations to services, database repositories, or MCP tools.
 
 ```mermaid
 graph TD
     %% Styling and config
     classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef startEnd fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef api fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
-    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
-    
-    Traveler([Traveler]):::startEnd --> Auth["Auth (Zod + Hook Form)"]:::process
-    Auth --> JWTIssue["JWT Issued (RBAC)"]:::process
-    JWTIssue --> FetchData["Fetch User Dashboard Data<br/>(TanStack Query Cache)"]:::process
-    
-    FetchData --> DashboardView{"Select Action"}:::process
-    DashboardView -->|Create Trip| BaseGoal["Conversational Chat Input"]:::process
-    DashboardView -->|Manage Trips| HistoryGroup["History Groups<br/>(Upcoming / Completed / Cancelled / Drafts)"]:::process
-    
-    HistoryGroup --> DeleteReq["Delete / Cancel Request"]:::process
-    DeleteReq --> ExpressRouter["Express Server Router<br/>(Helmet / CORS / Rate Limiting)"]:::process
-    
-    BaseGoal --> ExpressRouter
-    
-    ExpressRouter --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
-    PlannerService --> FetchMem["Load Memory<br/>(Short + Long Term)"]:::process
-    
-    FetchMem --> Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
-    
-    Planner --> CheckMiss["Missing Info Agent"]:::agent
-    CheckMiss --> CheckData{"Missing critical info?"}:::process
-    
-    CheckData -->|Yes| Clarify["Ask Clarifying Question<br/>(Prompt for missing fields)"]:::process
-    Clarify --> BaseGoal
-    
-    CheckData -->|No| DestCheck{"Destination present?"}:::process
-    DestCheck -->|No| DestRec["Dest Rec Agent<br/>(Based on weather/budget/history)"]:::agent
-    
-    DestRec --> Coordinator["Coordinator Agent<br/>(MCP Client Agent)"]:::agent
-    DestCheck -->|Yes| Coordinator
-    
-    %% --- Parallel Agent Execution ---
-    subgraph ParallelTasks ["Stage 1: Parallel Data Retrieval"]
-        WeatherAgent["Weather Agent<br/>(Forecast early)"]:::agent
-        TransAgent["Transport Agent<br/>(Transit schedules)"]:::agent
-        AccomAgent["Accom Agent<br/>(Hotels & homestays)"]:::agent
-        ActAgent["Activity Agent<br/>(Attractions & dining)"]:::agent
-        LocalTrans["Local Transport Agent<br/>(Cabs & transfers)"]:::agent
-    end
-    
-    Coordinator --> WeatherAgent
-    Coordinator --> TransAgent
-    Coordinator --> AccomAgent
-    Coordinator --> ActAgent
-    Coordinator --> LocalTrans
-    
-    %% Redis Cache Integration
-    ParallelTasks --> CheckCache{"Cache Hit in Redis?"}:::cache
-    CheckCache -->|No| MCPRequests["MCP Server Requests<br/>(Weather / Maps MCP)"]:::api
-    CheckCache -->|Yes| JoinTasks["Aggregate Parallel Outputs"]:::process
-    
-    MCPRequests --> WriteCache["Write to Redis Cache"]:::cache
-    WriteCache --> JoinTasks
-    
-    %% --- Sequential Agent Execution ---
-    subgraph SequentialTasks ["Stage 2: Sequential Planning"]
-        BudgetAgent["Budget Agent<br/>(Breakdown & Emergency Fund)"]:::agent
-        ItinAgent["Itinerary Agent<br/>(Daily schedule details)"]:::agent
-    end
-    
-    JoinTasks --> BudgetAgent
-    BudgetAgent --> ItinAgent
-    
-    ItinAgent --> Summarize["Coordinator Agent<br/>(Synthesize markdown plan)"]:::agent
-    
-    Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
-    
-    HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
-    ModifyReq --> BaseGoal
-    
-    HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Mock reservations & payments)"]:::agent
-    
-    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Booked)"]:::process
-    
-    SaveDB --> Notifications["Dispatch Notifications<br/>(Calendar Sync / Email / Push Alerts)"]:::process
-    
-    Notifications --> UpdateStatus["Update Trip Status Enums<br/>(Planning ➔ Awaiting Approval ➔ Booked)"]:::process
-    UpdateStatus --> DashboardUpdate([Dashboard Updated]):::startEnd
-```
-
----
-
-## 2. Admin Workflow
-
-Details admin authorization, role validation middleware, navigation to administrative management sections, and metrics visualization dashboards. Admin features fetch directly from database indexes without hitting AI interface layers.
-
-```mermaid
-graph TD
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef startEnd fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef admin fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
-
-    Admin["Admin Web Dashboard"]:::admin --> Auth["Admin Auth Middleware"]:::process
-    Auth --> DashboardREST["Admin Router"]:::process
-    
-    subgraph Metrics ["Admin Analytics Panel"]
-        PopularDest["Query Destinations"]:::process
-        Stats["Query Cost Stats"]:::process
-        CancelRate["Query Cancellations"]:::process
-        Telemetry["Query System Health"]:::process
-    end
-    
-    DashboardREST --> PopularDest
-    DashboardREST --> Stats
-    DashboardREST --> CancelRate
-    DashboardREST --> Telemetry
-    
-    PopularDest --> Audit["Generate Audit Logs"]:::process
-    Stats --> Audit
-    CancelRate --> Audit
-    Telemetry --> Audit
-```
-
----
-
-## 3. AI Agent Internal Flow
-
-Highlights sequential planning execution and conditional routing (handling ambiguity, budget checks, confidence failures, MCP tool calling, and human validation) to complete traveler goals.
-
-```mermaid
-graph TD
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef startEnd fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef tool fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
-    classDef error fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
-    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
-
-    Goal([User Goal]):::startEnd --> Controller["Trip Controller"]:::process
-    Controller --> PlannerService["Planner Service"]:::process
-    
-    %% Turn State Memory (Dual-Layer)
-    PlannerService --> FetchMem["Load Memories"]:::process
-    
-    FetchMem --> Planner["Planner Agent"]:::agent
-    Planner --> Parse["Decompose Goal"]:::process
-    
-    %% Inference slot checks
-    Parse --> CheckData["Missing Info Agent"]:::agent
-    CheckData --> CheckDest{"Missing info?"}:::process
-    
-    CheckDest -->|Yes| InferSlots["Infer Missing Fields"]:::process
-    InferSlots -->|Yes| UpdateSlots["Update Parameters"]:::process
-    InferSlots -->|No| Clarify["Prompt Missing Fields"]:::process
-    Clarify --> Goal
-    
-    %% Destination recommendation logic
-    UpdateSlots --> DestCheck{"Is dest missing?"}:::process
-    CheckDest -->|No| DestCheck
-    
-    DestCheck -->|Yes| DestAgent["Destination Rec Agent"]:::agent
-    DestCheck -->|No| Coord["Coordinator Agent"]:::agent
-    DestAgent --> Coord
-    
-    %% Hybrid Parallel / Sequential Stage
-    subgraph ParallelPhase ["Parallel Gathering Phase"]
-        WeatherAgent["Weather Agent"]:::agent
-        TransAgent["Transport Agent"]:::agent
-        AccomAgent["Accommodation Agent"]:::agent
-        ActAgent["Activity Agent"]:::agent
-    end
-    
-    Coord --> ParallelPhase
-    
-    ParallelPhase --> RedisCheck{"Check Caches"}:::cache
-    
-    %% Replanning flow integration hook
-    RedisCheck -->|Miss| Tools["Invoke MCP Protocols"]:::tool
-    
-    subgraph LCTools ["MCP Tool Connections"]
-        WeatherMCP["Weather MCP"]:::tool
-        MapsMCP["Maps MCP"]:::tool
-        SchedulesMCP["Transit MCP"]:::tool
-    end
-    
-    Tools --> WeatherMCP
-    Tools --> MapsMCP
-    Tools --> SchedulesMCP
-    
-    RedisCheck -->|Hit| JoinGather["Join Gathered Data"]:::process
-    WeatherMCP --> WriteC["Write to Redis"]:::cache
-    MapsMCP --> WriteC
-    SchedulesMCP --> WriteC
-    WriteC --> JoinGather
-    
-    subgraph SequentialPhase ["Sequential Planning Phase"]
-        BudgetAgent["Budget Agent"]:::agent
-        CheckBudget{"Is budget impossible?"}:::process
-        AltBudget["Propose Alternatives"]:::error
-        
-        ItinAgent["Itinerary Agent"]:::agent
-    end
-    
-    JoinGather --> BudgetAgent
-    BudgetAgent --> CheckBudget
-    CheckBudget -->|Yes| AltBudget
-    AltBudget --> Goal
-    CheckBudget -->|No| ItinAgent
-    
-    %% Confidence Checks
-    ItinAgent --> ConfidenceCheck{"Do parameters validate?"}:::process
-    ConfidenceCheck -->|No| ErrorHandle["Error Fallback"]:::error
-    ErrorHandle --> EndGrace([Graceful Terminate]):::startEnd
-    
-    ConfidenceCheck -->|Yes| Comp["Coordinator Agent"]:::agent
-    Comp --> LLMFormat["Format via Groq LLM"]:::process
-    
-    LLMFormat --> SaveMem["Save Memory States"]:::process
-    
-    SaveMem --> TravelerReview["User Review Plan"]:::process
-    
-    TravelerReview --> Approve{"Is plan approved?"}:::process
-    Approve -->|No| ReplanningAgent["Replanning Agent"]:::agent
-    ReplanningAgent --> Goal
-    
-    %% Mocked Booking Layer details
-    Approve -->|Yes| BookingAgent["Mocked Booking Agent"]:::agent
-    BookingAgent --> ConfirmDB["Save Booked Trip"]:::process
-    
-    ConfirmDB --> EndApp([End Workflow]):::startEnd
-```
-
----
-
-## 4. Project Development Workflow
-
-Illustrates the Git workflow, Continuous Integration pipeline via GitHub Actions, Docker builds, Terraform IaC provisioning, and deployment endpoints on AWS.
-
-```mermaid
-graph TD
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef local fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef ci fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef cd fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    
-    subgraph Local ["Local Development"]
-        Branch["Create branch"]:::local
-        Dev["Write Features Code"]:::local
-        Commit["Commit Changes"]:::local
-        Push["Push to GitHub"]:::local
-        
-        Branch --> Dev --> Commit --> Push
-    end
-    
-    subgraph CI ["Actions CI Pipeline"]
-        PR["Open Pull Request"]:::ci
-        GA["Trigger CI Pipeline"]:::ci
-        LintFormatter["Lint & Format Unit"]:::ci
-        Tests["Run Test Suites"]:::ci
-        SecurityScan["Npm Audit Scan"]:::ci
-        Build["Compile Production"]:::ci
-        Docker["Docker Image builds"]:::ci
-        Merge["Merge to Main"]:::ci
-        
-        PR --> GA --> LintFormatter --> Tests --> SecurityScan --> Build --> Docker --> Merge
-    end
-    
-    subgraph CD ["AWS CD Pipeline"]
-        TriggerCD["CD Action Triggered"]:::cd
-        SecretsRetrieve["AWS Parameter Store Retrieve"]:::cd
-        Terraform["Terraform Provisioning"]:::cd
-        
-        DepBack["EC2 Docker Deploy"]:::cd
-        DepFront["S3 CloudFront static deploy"]:::cd
-        DB["MongoDB Indexing check"]:::cd
-        CloudWatch["Configure Telemetry metrics"]:::cd
-        Prod(["Production Live State"]):::cd
-        
-        TriggerCD --> SecretsRetrieve --> Terraform
-        Terraform --> DepBack
-        Terraform --> DepFront
-        Terraform --> DB
-        
-        DepBack --> CloudWatch
-        DepFront --> CloudWatch
-        CloudWatch --> Prod
-    end
-
-    Push --> PR
-    Merge --> TriggerCD
-```
-
----
-
-## 5. Complete System Architecture
-
-Maps out the structural tier boundaries: Frontend Web Client, Service Layer context, AI Agent orchestration cluster, External MCP Integrations, and persistent database/caching layers.
-
-```mermaid
-graph TD
-    %% Styling
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
     classDef frontend fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
     classDef backend fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef db fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef ext fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
-    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
-
-    %% Frontend Tier
-    subgraph ClientTier ["Frontend Client (React TS)"]
-        FE["User Interface"]:::frontend
-        Val["Zod validation schema"]:::frontend
-        State["State Manager"]:::frontend
-        Queries["TanStack Client Queries"]:::frontend
-        ChartsFE["ChartJS Charts"]:::frontend
-        AuthFE["JWT Client Storage"]:::frontend
-    end
-
-    %% Backend Server Tier
-    subgraph ServerTier ["Backend Server (Node MVC)"]
-        API["API Route Handler"]:::backend
-        
-        subgraph Middlewares ["Hardened Middlewares"]
-            Throttle["Rate Limiter"]:::backend
-            CORSConn["CORS Policy"]:::backend
-            HelmetShield["Helmet Headers"]:::backend
-            Log["Morgan Logger"]:::backend
-            JWT["JWT Validation"]:::backend
-            InputVal["Input Validator"]:::backend
-            RBAC["RBAC Role Validator"]:::backend
-            ErrorM["Global Error Handler"]:::backend
-        end
-        
-        API --> Throttle --> CORSConn --> HelmetShield --> Log --> JWT --> InputVal --> RBAC
-        
-        PlannerService["Planner Service Layer"]:::backend
-        RBAC --> PlannerService
-        
-        AIPlanner["AI Agent Orchestrator"]:::backend
-        PlannerService --> AIPlanner
-        
-        %% Sub-agents cluster
-        subgraph agents ["AI Agent Cluster"]
-            TripPlannerAgent["Planner Agent"]:::backend
-            MissingInfoAgent["Missing Info Agent"]:::backend
-            DestRecAgent["Dest Rec Agent"]:::backend
-            WeatherAgent["Weather Agent"]:::backend
-            TransAgent["Trans Agent"]:::backend
-            AccomAgent["Accom Agent"]:::backend
-            ActAgent["Activity Agent"]:::backend
-            BudAgent["Budget Agent"]:::backend
-            ItinAgent["Itinerary Agent"]:::backend
-            BookingAgent["Mocked Booking Agent"]:::backend
-            ReplanningAgent["Replanning Agent"]:::backend
-        end
-        
-        AIPlanner --> TripPlannerAgent
-        TripPlannerAgent --> MissingInfoAgent
-        TripPlannerAgent --> DestRecAgent
-        TripPlannerAgent --> WeatherAgent
-        TripPlannerAgent --> TransAgent
-        TripPlannerAgent --> AccomAgent
-        TripPlannerAgent --> ActAgent
-        TripPlannerAgent --> BudAgent
-        TripPlannerAgent --> ItinAgent
-        TripPlannerAgent --> BookingAgent
-        TripPlannerAgent --> ReplanningAgent
-        
-        TransAgent --> Coord["Coordinator Agent"]:::backend
-        AccomAgent --> Coord
-        BudAgent --> Coord
-        ItinAgent --> Coord
-        BookingAgent --> Coord
-    end
-
-    %% Storage Tier
-    subgraph DBTier ["Database & Caching"]
-        DB[(MongoDB Atlas Database)]:::db
-        
-        subgraph CacheStore ["In-Memory Caching"]
-            RedisCache[(Redis Cache)]:::cache
-        end
-        
-        subgraph MemStores ["Memory Store"]
-            ST_Memory[(Short-Term Memory)]:::db
-            LT_Memory[(Long-Term Memory)]:::db
-        end
-    end
-
-    %% External Tier
-    subgraph ExtTier ["External / DevOps"]
-        LLM["Groq LLM API"]:::ext
-        
-        subgraph LCTools ["MCP Tool Connections"]
-            WeatherTool["Weather MCP"]:::ext
-            MapsTool["Maps MCP"]:::ext
-            MockBus["Mock Bus MCP"]:::ext
-            MockTrain["Mock Train MCP"]:::ext
-            MockHotel["Mock Hotel MCP"]:::ext
-            MockPayment["Mock Payment MCP"]:::ext
-            CalendarTool["Calendar MCP"]:::ext
-        end
-        
-        AWSSSM["AWS SSM Store"]:::ext
-        CloudWatch["Cloudwatch Logger"]:::ext
-    end
-
-    %% Connect UI controls
-    FE --> Val --> Queries
-    Queries --> AuthFE
-    ChartsFE --> FE
-
-    %% Core Data flow
-    Queries -->|JSON REST Requests| API
-    PlannerService -->|Query & Update History| ST_Memory
-    PlannerService -->|Query preferences| LT_Memory
-    PlannerService -->|Check cache| RedisCache
-    
-    Coord -->|Inference Query| LLM
-    LLM -->|Standardized MCP Tool Requests| LCTools
-    Coord -->|Store Completed Trip Profile| DB
-    PlannerService -->|Read Variables| AWSSSM
-    API -.->|Metrics & Diagnostics| CloudWatch
-    
-    %% Direct Database fetch for Admin Dashboard (No AI)
-    API -->|Query metrics and trips| DB
-    
-    DB -->|Return Results| API
-    API -->|Send JSON Payload Response| Queries
-```
-
----
-
-## 6. MCP Architecture — Integration Model
-
-The **Model Context Protocol (MCP)** is the standardized interface layer that decouples AI Agents from raw external APIs. Instead of agents calling APIs directly, every agent communicates through a typed MCP Server, which handles authentication, rate limiting, response normalization, and caching hand-off. This makes agents portable and testable — swapping a real API for a mock requires no agent code change.
-
-### How MCP Works in This System
-
-```
-AI Agent  →  LangChain Tool Call  →  MCP Server  →  External API
-```
-
-Each MCP server acts as a **typed, schema-validated adapter** for one external service domain. The Coordinator Agent delegates tool calls via LangChain's MCP client, which routes requests to the correct MCP server instance.
-
-### MCP Server Map
-
-```mermaid
-graph TD
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
     classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef mcp fill:#cba6f7,stroke:#cba6f7,stroke-width:2px,color:#11111b;
-    classDef api fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
-    classDef coord fill:#89dceb,stroke:#89dceb,stroke-width:2px,color:#11111b;
+    classDef tool fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
+    classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
+    classDef db fill:#cba6f7,stroke:#cba6f7,stroke-width:2px,color:#11111b;
 
-    CoordAgent["Coordinator Agent<br/>(MCP Client via LangChain)"]:::coord
+    User([Traveler Browser]):::frontend --> ReactFE["React Frontend<br/>(Vite + Tailwind)"]:::frontend
+    ReactFE -->|HTTP / JSON API| DirectAPI["Express API Gateway"]:::backend
 
-    CoordAgent --> WeatherMCP["Weather MCP Server"]:::mcp
-    CoordAgent --> MapsMCP["Maps MCP Server"]:::mcp
-    CoordAgent --> TransitMCP["Transit MCP Server"]:::mcp
-    CoordAgent --> BookingMCP["Booking MCP Server"]:::mcp
-    CoordAgent --> CalendarMCP["Calendar MCP Server"]:::mcp
+    subgraph ServerTier ["Node/Express Backend Tier"]
+        DirectAPI --> Router["Route Controller"]:::backend
+        Router --> Middlewares{"Middlewares<br/>(JWT, RBAC, Rate Limit)"}:::backend
+        Middlewares -->|Valid Request| PlannerService["Planner Service<br/>(Orchestrator)"]:::backend
 
-    WeatherMCP --> OpenMeteo["OpenMeteo API<br/>(Free — Weather Forecasts)"]:::api
+        subgraph AI_Cognitive_Layer ["Agent Cognitive Layer"]
+            PlannerService --> PlannerAgent["Planner Agent (Master Orchestrator)"]:::agent
+            PlannerAgent --> MissingInfoAgent["Missing Info Agent"]:::agent
+            PlannerAgent --> DestRecAgent["Destination Rec Agent"]:::agent
+            PlannerAgent --> BudgetAgent["Budget Reasoning Agent"]:::agent
+            PlannerAgent --> ItinAgent["Itinerary Gen Agent"]:::agent
+        end
 
-    MapsMCP --> GMaps["Google Maps API<br/>(Geocoding)"]:::api
-    MapsMCP --> Places["Google Places API<br/>(Attractions, Restaurants)"]:::api
-    MapsMCP --> Distance["Distance Matrix API<br/>(Travel Times)"]:::api
+        subgraph Business_Services ["Service Layer"]
+            PlannerService --> BookingService["Booking Service"]:::backend
+            BookingService --> PaymentService["Payment Service (Mock)"]:::backend
+            BookingService --> NotificationService["Notification Service (Queue)"]:::backend
+        end
+    end
 
-    TransitMCP --> MockBus["Mock Bus Provider<br/>(Simulated)"]:::api
-    TransitMCP --> MockTrain["Mock Train Provider<br/>(Simulated)"]:::api
+    subgraph IntegrationTier ["External Tools (MCP Client / Server)"]
+        PlannerAgent --> ToolExecutor["Tool Call Executor"]:::backend
+        ToolExecutor -->|MCP Protocol| WeatherMCP["Weather Tool<br/>(OpenMeteo API)"]:::tool
+        ToolExecutor -->|MCP Protocol| MapsMCP["Maps & Geocoding Tool<br/>(Google Maps API)"]:::tool
+        ToolExecutor -->|MCP Protocol| HotelMCP["Hotel Search Tool<br/>(Mock Provider)"]:::tool
+        ToolExecutor -->|MCP Protocol| TransMCP["Transit Search Tool<br/>(Mock Provider)"]:::tool
+        ToolExecutor -->|MCP Protocol| CalMCP["Calendar Sync Tool<br/>(Google Calendar API)"]:::tool
+    end
 
-    BookingMCP --> MockHotel["Mock Hotel Booking<br/>(Simulated)"]:::api
-    BookingMCP --> MockPayment["Mock Payment Gateway<br/>(Simulated)"]:::api
+    subgraph DataTier ["Caching & Databases"]
+        PlannerService --> RedisCache[("Redis Cache<br/>(Weather/Routes/Rate-Limits)")]:::cache
+        PlannerService --> Mongo[(MongoDB Atlas<br/>Users, Trips, Logs)]:::db
+    end
 
-    CalendarMCP --> GCalendar["Google Calendar API<br/>(Event Sync)"]:::api
-```
-
-### MCP Tool Schema (Example — Weather MCP)
-
-Each MCP tool exposes a strictly typed JSON schema so the LLM can call it deterministically:
-
-```json
-{
-  "name": "get_weather_forecast",
-  "description": "Returns a multi-day weather forecast for a given destination and date range.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "destination": { "type": "string", "description": "City or region name" },
-      "start_date":  { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
-      "end_date":    { "type": "string", "format": "date", "description": "YYYY-MM-DD" }
-    },
-    "required": ["destination", "start_date", "end_date"]
-  },
-  "outputSchema": {
-    "type": "object",
-    "properties": {
-      "forecast": {
-        "type": "array",
-        "items": {
-          "date":        { "type": "string" },
-          "condition":   { "type": "string" },
-          "temp_high_c": { "type": "number" },
-          "temp_low_c":  { "type": "number" },
-          "rain_mm":     { "type": "number" }
-        }
-      }
-    }
-  }
-}
-```
-
-### Which APIs Are Wrapped vs. Called Directly
-
-| Integration | How Accessed | MCP Server |
-|:---|:---|:---|
-| OpenMeteo Weather | Via MCP | `weather-mcp-server` |
-| Google Maps Geocoding | Via MCP | `maps-mcp-server` |
-| Google Places | Via MCP | `maps-mcp-server` |
-| Distance Matrix | Via MCP | `maps-mcp-server` |
-| Mock Bus / Train | Via MCP | `transit-mcp-server` |
-| Mock Hotel / Payment | Via MCP | `booking-mcp-server` |
-| Google Calendar | Via MCP | `calendar-mcp-server` |
-| Groq LLM API | Direct (LangChain) | — |
-| MongoDB Atlas | Direct (Mongoose) | — |
-| Redis | Direct (ioredis) | — |
-
----
-
-## 7. Multi-Agent Workflow — Agent I/O Specification
-
-This section answers: **Who triggers what? What does each agent receive? What does it return? When is the workflow complete?**
-
-### Workflow Trigger
-
-The workflow is **initiated by the Traveler** via the React chat interface. The HTTP request hits the Express server, passes through the middleware chain, and enters the `Planner Service` which bootstraps the `Coordinator Agent` as the central orchestrator.
-
-### Stage 0 — Pre-Planning (Sequential)
-
-```
-User Input → Planner Agent → Missing Info Agent → Destination Rec Agent
-```
-
-| Agent | Input | Processing | Output |
-|:---|:---|:---|:---|
-| **Planner Agent** | Raw user message, conversation history, long-term memory | Parses intent, extracts slots (destination, dates, budget, travelers, interests) | Populated `TripContext` object with inferred / extracted fields |
-| **Missing Info Agent** | `TripContext` with potentially empty slots | Checks for critical missing fields: destination, dates, approximate budget | Either `{ complete: true }` or `{ missingFields: ["budget", "dates"] }` with clarifying question |
-| **Destination Rec Agent** *(if no destination)* | Traveler's interests, budget range, historical preferences from long-term memory | Scores destinations using budget + weather + preference matching | `{ recommendedDestinations: [...], reasoning: "..." }` |
-
-### Stage 1 — Parallel Data Retrieval (Concurrent)
-
-The Coordinator Agent dispatches all five agents **simultaneously** using `Promise.allSettled()`. Each agent queries its MCP server independently.
-
-| Agent | Input | MCP Server Called | Output |
-|:---|:---|:---|:---|
-| **Weather Agent** | `{ destination, start_date, end_date }` | `weather-mcp-server → OpenMeteo` | `{ forecast: [...dailyConditions] }` |
-| **Transport Agent** | `{ origin, destination, travel_dates }` | `transit-mcp-server → Mock Rail/Bus` | `{ options: [...trainBusOptions], estimated_cost_inr }` |
-| **Accommodation Agent** | `{ destination, check_in, check_out, travelers }` | `booking-mcp-server → Mock Hotel` | `{ hotels: [...], recommended, price_per_night }` |
-| **Activity Agent** | `{ destination, interests, days }` | `maps-mcp-server → Google Places` | `{ attractions: [...], restaurants: [...], timings, entry_fees }` |
-| **Local Transport Agent** | `{ destination, hotel_location }` | `maps-mcp-server → Distance Matrix` | `{ cab_estimates: [...], auto_estimates: [...] }` |
-
-### Stage 2 — Sequential Planning (Ordered)
-
-After parallel results are aggregated into the shared `TripContext`, the sequential phase begins:
-
-| Agent | Input | Processing | Output |
-|:---|:---|:---|:---|
-| **Budget Agent** | All cost estimates from Stage 1 + `traveler_budget` | Sums categories, adds 10% emergency buffer, validates against budget ceiling | `{ breakdown: {...}, total_cost, remaining_budget, is_feasible }` |
-| **Itinerary Agent** | `TripContext` with weather + activities + accommodation + budget | Generates day-by-day schedule respecting weather advisories, check-in times, spending caps | `{ itinerary: [...dailySchedule], notes }` |
-| **Coordinator Agent** | Full `TripContext` after all agents complete | Synthesizes into a human-readable Markdown trip plan using Groq LLM | Final formatted trip plan for HITL review |
-
-### Stage 3 — Human-in-the-Loop & Booking (Sequential)
-
-| Agent | Trigger | Input | Output |
-|:---|:---|:---|:---|
-| **Replanning Agent** | User rejects plan | Rejection reason + original `TripContext` | Modified `TripContext`, re-enters Stage 1 or 2 |
-| **Booking Agent** | User approves plan | Final approved `TripContext` | `{ booking_refs: {...}, status: "BOOKED" }` |
-| **Calendar Agent** | Post-booking | Trip dates + user email | Google Calendar events created, confirmation sent |
-
-### Workflow Termination Conditions
-
-| Condition | Result |
-|:---|:---|
-| Plan approved + booked successfully | ✅ Trip saved to MongoDB with status `BOOKED` |
-| Budget infeasible after 3 alternatives | ⚠️ Returns alternatives, awaits user budget update |
-| Itinerary confidence check fails | ❌ Graceful error response, session preserved |
-| User cancels mid-flow | Trip saved as `DRAFT` status |
-
----
-
-## 8. Agent Communication & Shared Trip Context
-
-### How Agents Communicate
-
-Agents do **not** call each other directly via REST or message queues. Instead, they all read from and write to a **single shared `TripContext` object** managed by the `Planner Service`. This is a synchronous, in-memory coordination pattern — the Coordinator Agent passes snapshots of this context to each agent and merges the results back.
-
-```
-Planner Service
-      │
-      ▼
-TripContext (shared state)
-      │
-      ├── Coordinator Agent reads → dispatches to parallel agents
-      │       ├── Weather Agent → writes forecast to TripContext
-      │       ├── Transport Agent → writes options to TripContext
-      │       ├── Accommodation Agent → writes hotels to TripContext
-      │       ├── Activity Agent → writes attractions to TripContext
-      │       └── Local Transport Agent → writes transfer estimates to TripContext
-      │
-      ├── Budget Agent reads TripContext → writes cost breakdown
-      ├── Itinerary Agent reads TripContext → writes daily schedule
-      └── Coordinator Agent reads TripContext → generates final plan
-```
-
-### TripContext Schema
-
-Every agent receives and returns data conforming to this shared context object. Each agent updates only its own slice:
-
-```json
-{
-  "sessionId": "uuid-v4",
-  "userId": "mongo-object-id",
-  "status": "PLANNING | AWAITING_APPROVAL | BOOKED | DRAFT | CANCELLED",
-  "input": {
-    "destination": "Ooty, Tamil Nadu",
-    "origin": "Chennai",
-    "start_date": "2025-10-15",
-    "end_date": "2025-10-20",
-    "travelers": 2,
-    "budget_inr": 30000,
-    "interests": ["nature", "hiking", "local food"]
-  },
-  "weather": {
-    "forecast": [
-      { "date": "2025-10-15", "condition": "Partly Cloudy", "temp_high_c": 18, "rain_mm": 2 }
-    ]
-  },
-  "transport": {
-    "options": [
-      { "mode": "Train", "operator": "Indian Railways", "duration_hrs": 10, "cost_inr": 1800 }
-    ]
-  },
-  "accommodation": {
-    "recommended": "Ooty Vista Inn",
-    "price_per_night_inr": 2125,
-    "total_cost_inr": 8500
-  },
-  "activities": {
-    "attractions": ["Botanical Garden", "Ooty Tea Factory", "Doddabetta Peak"],
-    "restaurants": ["Garden View Cafe", "Mountain Retreat Dining"],
-    "total_entry_fees_inr": 3500
-  },
-  "local_transport": {
-    "cab_estimates_inr": 2500
-  },
-  "budget": {
-    "breakdown": {
-      "transport": 1800,
-      "accommodation": 8500,
-      "food": 4000,
-      "activities": 3500,
-      "local_transport": 2500,
-      "emergency_fund": 2030
-    },
-    "total_cost_inr": 22330,
-    "remaining_budget_inr": 7670,
-    "is_feasible": true
-  },
-  "itinerary": {
-    "days": [ "...day objects..." ]
-  },
-  "booking": {
-    "refs": {},
-    "confirmed_at": null
-  },
-  "memory": {
-    "short_term": [ "...conversation turns..." ],
-    "long_term_summary": "User prefers nature trips under ₹35,000."
-  }
-}
+    class Router,Middlewares,PlannerService,BookingService,PaymentService,NotificationService backend;
+    class PlannerAgent,MissingInfoAgent,DestRecAgent,BudgetAgent,ItinAgent agent;
+    class WeatherMCP,MapsMCP,HotelMCP,TransMCP,CalMCP tool;
+    class RedisCache cache;
+    class Mongo db;
 ```
 
 ---
 
+## 2. Sequence Diagram
 
-## 10. Error Handling & Retry Strategy
-
-Real systems fail. This section defines what happens when each component in the system encounters an error.
-
-### Error Handling Matrix
-
-| Component | Error Scenario | Action | User Impact |
-|:---|:---|:---|:---|
-| **Weather MCP** | OpenMeteo timeout / rate limit | Retry with exponential backoff (3 attempts), then return cached forecast if available | Transparent — uses stale-while-revalidate |
-| **Maps MCP** | Google Maps API quota exceeded | Return cached `Distance Matrix` results from Redis; flag in response | Minor delay, cached distances used |
-| **Groq LLM** | Invalid JSON in LLM response | Re-prompt with stricter JSON-only system instruction (max 2 retries) | Slight latency |
-| **Groq LLM** | Rate limit / timeout | Wait 5s, retry once; if fails, return partial plan with advisory message | User sees partial plan |
-| **MongoDB Atlas** | Connection error / timeout | Return `503 Service Unavailable`; Winston error log emitted | Request fails gracefully with user message |
-| **Redis** | Connection refused / OOM | Bypass cache, query MCP directly; log warning | Slower response, no user-facing error |
-| **Budget Agent** | Budget ceiling exceeded | Do not crash — return 3 alternative budget scenarios for user selection | User prompted to adjust budget |
-| **Google Calendar MCP** | OAuth token expired | Trigger token refresh flow; if still fails, booking proceeds without calendar sync | Advisory notification to user |
-| **Missing Info Agent** | User provides ambiguous destination | Prompt with top-3 destination suggestions for clarification | Guided clarification dialog |
-| **JWT Middleware** | Expired access token | Return `401 Unauthorized`; client uses refresh token to obtain new access token | Seamless re-auth for user |
-| **Rate Limiter** | IP exceeds threshold (100 req/15min) | Return `429 Too Many Requests` | Clear rate-limit message with retry-after header |
-
-### Retry Policy — Exponential Backoff
-
-All MCP server calls use a centralized retry utility with the following policy:
-
-```
-Attempt 1  ──►  Immediate
-      │
-      ▼ (fail)
-   Wait 2s
-      │
-      ▼
-Attempt 2  ──►  2 seconds after failure
-      │
-      ▼ (fail)
-   Wait 4s
-      │
-      ▼
-Attempt 3  ──►  4 seconds after failure
-      │
-      ▼ (fail)
-Fallback Response  ──►  Cached data OR graceful error message
-```
-
-```
-Config:
-  maxRetries:     3
-  baseDelay:      2000ms
-  backoffFactor:  2x (exponential)
-  timeout:        8000ms per attempt
-  jitter:         ±500ms (prevents thundering herd)
-```
-
-### Circuit Breaker Pattern (Future Enhancement)
-
-For production hardening, a circuit breaker wraps each MCP server:
-
-```
-CLOSED (normal) → OPEN (after 5 failures in 60s) → HALF-OPEN (probe after 30s) → CLOSED
-```
-
-When the circuit is **OPEN**, requests to that MCP server immediately return a fallback response without attempting the network call.
-
----
-
-## 11. Deployment Architecture
-
-### Infrastructure Overview
+This diagram traces the full lifetime of a planning and booking request, demonstrating how control flows from the User through the controllers, service layers, master agent, tool execution wrappers, and persistence.
 
 ```mermaid
-graph TD
-    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef cdn fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef server fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
-    classDef db fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef ext fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
-    classDef infra fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
+sequenceDiagram
+    autonumber
+    actor User as Traveler (Frontend)
+    participant API as Express API/Controller
+    participant Serv as Planner Service
+    participant Master as Planner Agent (Master)
+    participant Redis as Redis Cache
+    participant MCP as MCP Tool Executor
+    participant DB as MongoDB Atlas
 
-    User([User Browser]):::cdn
-
-    subgraph AWS ["AWS Cloud Infrastructure (Terraform Managed)"]
-        CFront["AWS CloudFront CDN<br/>(HTTPS / Global edge cache)"]:::cdn
-        S3["AWS S3<br/>(React static build)"]:::cdn
+    User->>API: POST /api/trips (Prompt, Travel Intent)
+    API->>API: Authentication & Rate Limiting Verification
+    API->>Serv: generatePlan(userId, prompt)
+    Serv->>DB: Fetch Active Session & User Profile
+    DB-->>Serv: User Record & Preferences
+    Serv->>Serv: Load Short & Long Term Memory
+    Serv->>Master: startPlanningPipeline(Context)
+    
+    %% Missing Info Check
+    Master->>Master: Invoke Missing Info Agent (Validate slots)
+    alt Missing Critical Parameters
+        Master-->>User: Clarifying questions prompt (E.g. dates, budget)
+    else Context Complete
+        Master->>Master: Resolve Destination Recommendation (If needed)
         
-        subgraph EC2 ["AWS EC2 — t2.micro (Free Tier)"]
-            NGINX["NGINX Reverse Proxy<br/>(Port 80/443 → 5000)"]:::server
-            DockerCompose["Docker Compose"]:::server
-            
-            subgraph Containers ["Docker Containers"]
-                ExpressApp["Express API<br/>(Node.js — Port 5000)"]:::server
-                RedisContainer["Redis<br/>(Port 6379)"]:::db
+        %% Tool Execution Loop
+        critical Fetch Parallel Context
+            Master->>Redis: Check Cache (Weather, Hotel, Transit)
+            alt Cache Hit
+                Redis-->>Master: Cached JSON response
+            else Cache Miss
+                Master->>MCP: Execute weather_tool & hotel_tool (Parallel)
+                MCP->>MCP: Access External APIs (OpenMeteo, Maps)
+                MCP-->>Master: Normalized JSON data
+                Master->>Redis: Set cache metadata keys with TTL
             end
         end
-        
-        SSM["AWS SSM Parameter Store<br/>(Secrets & API Keys)"]:::infra
-        CW["Amazon CloudWatch<br/>(Logs & Metrics)"]:::infra
+
+        %% Budgeting & Itinerary
+        Master->>Master: Invoke Budget Agent (Compute breakdown + emergency)
+        Master->>Master: Invoke Itinerary Agent (Day-by-Day Generation)
+        Master-->>Serv: JSON Trip Proposal
+        Serv->>DB: Store Proposed Trip Plan (Draft Status)
+        Serv-->>User: Proposed Trip Markdown & JSON
     end
 
-    subgraph External ["External Services"]
-        Mongo["MongoDB Atlas<br/>(M0 Free Cluster)"]:::db
-        Groq["Groq LLM API"]:::ext
-        OpenMeteo["OpenMeteo API"]:::ext
-        GMaps["Google Maps API"]:::ext
-        GCal["Google Calendar API"]:::ext
-    end
-
-    User -->|HTTPS| CFront
-    CFront -->|Static assets| S3
-    CFront -->|API /api/*| NGINX
-    NGINX --> ExpressApp
-    ExpressApp --> RedisContainer
-    ExpressApp -->|Secrets| SSM
-    ExpressApp -.->|Logs & Metrics| CW
-
-    ExpressApp -->|ODM via Mongoose| Mongo
-    ExpressApp -->|LLM inference| Groq
-    ExpressApp -->|MCP tool calls| OpenMeteo
-    ExpressApp -->|MCP tool calls| GMaps
-    ExpressApp -->|MCP tool calls| GCal
+    %% Approval & Payment
+    User->>API: POST /api/trips/:id/approve (User Approval)
+    API->>Serv: finalizeAndBook(tripId)
+    Serv->>BookingService: executeTripBooking(tripData)
+    BookingService->>PaymentService: processCharge(chargeDetail)
+    PaymentService-->>BookingService: Mock Payment Reference
+    BookingService->>MCP: calendar_tool (Sync trip dates)
+    BookingService->>DB: Update Trip State to "BOOKED", Save Booking Ref
+    BookingService-->>User: Success response & Confirmation
 ```
-
-### Docker Compose Configuration
-
-The backend and Redis run as co-located Docker containers on a single EC2 instance, managed by Docker Compose:
-
-```yaml
-# docker-compose.yml (production)
-services:
-  api:
-    image: travel-planner-api:latest
-    ports:
-      - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - MONGO_URI=${MONGO_URI}
-      - REDIS_URL=redis://redis:6379
-      - GROQ_API_KEY=${GROQ_API_KEY}
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
-```
-
-### Terraform Provisioned Resources
-
-| Resource | Purpose | Free Tier |
-|:---|:---|:---|
-| `aws_instance` (t2.micro) | EC2 host for Express API + Redis | ✅ 750 hrs/month |
-| `aws_s3_bucket` | React production build hosting | ✅ 5GB |
-| `aws_cloudfront_distribution` | Global CDN + HTTPS termination | ✅ 1TB outbound |
-| `aws_security_group` | Port rules (80, 443, 5000, 22) | ✅ Free |
-| `aws_ssm_parameter` | Encrypted secrets storage | ✅ Up to 10,000 |
-| `aws_cloudwatch_log_group` | Centralized log retention | ✅ 5GB/month |
 
 ---
 
-## 12. Security Flow
+## 3. AI Agent Architecture
 
-### Authentication & Authorization
+Unlike models that delegate simple API tasks to AI, this design restricts AI agents to reasoning tasks. Anything that requires simple data retrieval or processing has been refactored into Tools or backend Services.
+
+```
+       Master Planner Agent (Cognitive Heart / Input Processor)
+            │
+            ├──────► Missing Info Agent (Validates slots / asks questions)
+            ├──────► Destination Rec Agent (Interspliced LLM recommendation)
+            ├──────► Budget Reasoning Agent (Ratios, shopping, emergency funds)
+            └──────► Itinerary Gen Agent (Coordinates day scheduling constraints)
+```
+
+The system employs **5 true AI Agents**:
+
+1. **Master Planner Agent**: Decides routing, parses natural language intent, processes state updates, orchestrates data aggregation, and interacts with the tool layer.
+2. **Missing Info Agent**: Scans the input context to determine if critical fields (destination, start/end dates, base budget) are absent. Formulates targeted clarification questions.
+3. **Destination Recommendation Agent**: Used when the destination is unspecified. Leverages past trip feedback and accessibility filters to present a validated destination.
+4. **Budget Reasoning Agent**: Analyzes overall estimates, validates allocations (hotel, transit, food, activities), handles shopping and contingency thresholds, and ensures constraints are met.
+5. **Itinerary Generation Agent**: Generates structured, day-by-day itineraries that match current weather conditions (e.g. pivoting to indoor attractions if there is rain) and user limits.
+
+All other components (Weather, Transport, Accommodation, Activities, Local Transport, Booking, and Calendar) are executed as **deterministic tools** or service layer functions.
+
+---
+
+## 4. Model Context Protocol (MCP) Tool Layer
+
+To decouple AI orchestration hooks from proprietary API schemas, external operations are handled using the Model Context Protocol (MCP). The Planner Agent calls these tools by outputting schema-validated function invocations:
+
+* **`weather_tool`** (`weather-mcp-server`): Queries forecasts via OpenMeteo. Expects destination geo-coordinates and dates.
+* **`maps_tool`** (`maps-mcp-server`): Translates destination strings to GPS coordinates and calculates route travel distances.
+* **`hotel_tool`** (`booking-mcp-server`): Fetches rates, ratings, and room options from a mock accommodations index.
+* **`transport_tool`** (`transit-mcp-server`): Fetches train and bus route availabilities, pricing, and timing estimations.
+* **`calendar_tool`** (`calendar-mcp-server`): Syncs confirmed trip schedules to the user's Google Calendar.
+* **`payment_tool`** (`booking-mcp-server`): Passes billing amounts to the mock payment gateway.
+
+---
+
+## 5. Traveler Planning Workflow
+
+This workflow represents the corrected sequence of events from when a traveler starts a session to final confirmation and notification dispatch:
 
 ```mermaid
 graph TD
     classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef auth fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+    classDef startEnd fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+    classDef service fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
     classDef agent fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
-    classDef danger fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
-    classDef mcp fill:#cba6f7,stroke:#cba6f7,stroke-width:2px,color:#11111b;
+    classDef tool fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
 
-    User["User Login<br/>(email + password)"]:::auth
-    Validate["Validate credentials<br/>(bcrypt compare)"]:::auth
-    Issue["Issue JWT Access Token<br/>(expires: 15min)"]:::auth
-    Refresh["Issue Refresh Token<br/>(expires: 7 days, httpOnly cookie)"]:::auth
-    
-    Protected["Protected API Request<br/>(Authorization: Bearer <token>)"]:::auth
-    JWTCheck{"JWT valid?"}:::auth
-    RefreshFlow["Use Refresh Token<br/>→ Issue new Access Token"]:::auth
-    
-    RBAC{"Role Check<br/>(admin / traveler)"}:::auth
-    AgentAccess["Agent Orchestration<br/>(Planner Service)"]:::agent
-    MCPCalls["MCP Server Calls<br/>(API keys from SSM)"]:::mcp
-    Denied["401 / 403 Response"]:::danger
+    UserStart([Traveler Prompt]) --> AuthCheck["Auth Filter Middleware"]:::service
+    AuthCheck --> LoadSession["Load User Profile & Memory"]:::service
 
-    User --> Validate --> Issue --> Refresh
-    Issue --> Protected
-    Protected --> JWTCheck
-    JWTCheck -->|Invalid / Expired| RefreshFlow
-    JWTCheck -->|Valid| RBAC
-    RefreshFlow -->|New token| RBAC
-    RefreshFlow -->|Refresh expired| Denied
-    RBAC -->|traveler or admin| AgentAccess
-    RBAC -->|Unauthorized role| Denied
-    AgentAccess --> MCPCalls
+    LoadSession --> MasterPlanner["Planner Agent (Master)"]:::agent
+    MasterPlanner --> CheckMissing["Missing Info Agent"]:::agent
+
+    CheckMissing --> IsComplete{"Is crucial info missing?"}:::service
+    IsComplete -->|Yes| ClarifyPrompt(["Clarification Prompt Sent to User"]):::startEnd
+    IsComplete -->|No| DestinationRec{"Destination specified?"}:::service
+
+    DestinationRec -->|No| DestRecAgent["Destination Rec Agent"]:::agent
+    DestinationRec -->|Yes| FetchParallel["Fetch Tool Data Parallel"]:::service
+
+    DestRecAgent --> FetchParallel
+    
+    subgraph ParallelInfoGathering ["Deterministic Tool Phase (Promises.allSettled)"]
+        Weather["weather_tool"]:::tool
+        Transit["transport_tool"]:::tool
+        Hotel["hotel_tool"]:::tool
+        Activities["maps_tool (Places API)"]:::tool
+    end
+
+    FetchParallel --> ParallelInfoGathering
+    ParallelInfoGathering --> BudgetAgent["Budget Reasoning Agent"]:::agent
+    BudgetAgent --> ItinAgent["Itinerary Gen Agent"]:::agent
+
+    ItinAgent --> ConfirmPlan{"Plan Feasible?"}:::service
+    ConfirmPlan -->|No| BudgetAgent
+    ConfirmPlan -->|Yes| UserReview(["Awaiting Approval (Draft State)"]):::startEnd
+
+    UserReview --> ReviewConfirm{"Action Selected"}:::service
+    ReviewConfirm -->|Approve| BookingService["Booking Service Layer"]:::service
+    ReviewConfirm -->|Reject / Modify| ReplanningLogic["Replanning Context Handler"]:::service
+
+    ReplanningLogic --> MasterPlanner
+
+    BookingService --> Payments["Payment Service (Mock API)"]:::service
+    Payments --> Calendar["calendar_tool Sync"]:::tool
+    Calendar --> SaveToDB["Persist Booking State in DB"]:::service
+    SaveToDB --> NotifyQueue["Dispatch to Notification Queue"]:::service
+    NotifyQueue --> CompletedState([Confirmed & Completed]):::startEnd
 ```
-
-### Security Controls Summary
-
-| Layer | Control | Implementation |
-|:---|:---|:---|
-| **Transport** | HTTPS everywhere | CloudFront → NGINX TLS termination |
-| **Headers** | Security headers | `helmet()` — XSS, CSP, HSTS, no-sniff |
-| **CORS** | Origin allowlist | Express `cors({ origin: [allowedDomains] })` |
-| **Rate Limiting** | Throttle abuse | `express-rate-limit` — 100 req / 15 min per IP |
-| **Authentication** | Short-lived tokens | JWT access (15m) + httpOnly refresh cookie (7d) |
-| **Authorization** | Role-based access | RBAC middleware — `admin` / `traveler` roles |
-| **Input Validation** | Sanitize all inputs | `express-validator` on all route parameters |
-| **Password Security** | Secure hashing | `bcrypt` with salt rounds = 12 |
-| **Secret Management** | No hardcoded keys | AWS SSM Parameter Store (SecureString type) |
-| **Environment Variables** | Runtime injection | Docker environment variables from SSM at deploy time |
-| **Dependency Audit** | Vulnerability scans | `npm audit` in GitHub Actions CI pipeline |
 
 ---
 
-## 13. Observability — Logging, Metrics & Health Checks
+## 6. API Layer Design
 
-### Logging Architecture
+The system coordinates client demands through a standardized Express controller routing framework:
 
-Production systems need visibility. Every layer emits structured logs with a shared `requestId` for correlation across the entire request lifecycle.
+### Authentication Endpoints
+* `POST /api/auth/register` — Creates user authentication profiles. Enforces password hashing.
+* `POST /api/auth/login` — Verifies credentials, registers access tokens, and signs HTTP-only refresh cookies.
+* `POST /api/auth/refresh` — Standardized OAuth-style rotation. Detects token reuse.
+* `POST /api/auth/logout` — Destroys JWT context, invalidates tokens, and clears client session cookies.
+* `POST /api/auth/forgot-password` — Dispatches unique time-bound password-reset tokens to user email profiles.
+* `POST /api/auth/reset-password` — Updates password structure using verified reset tokens.
+
+### Travel Planning & Booking Endpoints
+* `POST /api/trips` — Initiates the Planner Agent pipeline with traveler prompts. Returns drafts or validation errors.
+* `GET /api/trips` — Retrieves past, upcoming, and draft trip records for the authenticated user.
+* `GET /api/trips/:id` — Retrives a specific trip profile with hotel bookings, transit routes, and itineraries.
+* `PATCH /api/trips/:id` — Updates trip options manually (e.g. changing dates or hotel choices).
+* `DELETE /api/trips/:id` — Cancels booking sessions and updates status to `CANCELLED`.
+* `POST /api/trips/:id/approve` — Approves a draft itinerary and invokes the booking service.
+* `POST /api/trips/:id/reject` — Rejects a proposal. Expects adjustment notes to trigger granular replanning.
+* `POST /api/feedback` — Records rating metrics and trip notes to update the user's preference models in the database.
+
+---
+
+## 7. Database Schema & ER Diagram
+
+MongoDB Atlas maintains records and configurations for the application.
+
+```mermaid
+erDiagram
+    USERS {
+        ObjectId id PK
+        string email UK
+        string passwordHash
+        string firstName
+        string lastName
+        boolean isEmailVerified
+    }
+    
+    PREFERENCES {
+        ObjectId id PK
+        ObjectId userId FK
+        string travelStyle
+        string dietaryPreference
+        string budgetRange
+        string[] languages
+        string accessibilityNeeds
+    }
+
+    TRIPS {
+        ObjectId id PK
+        ObjectId userId FK
+        string status
+        string destination
+        date startDate
+        date endDate
+        double totalCost
+        object rawItinerary
+    }
+
+    BOOKINGS {
+        ObjectId id PK
+        ObjectId tripId FK
+        string providerType
+        string bookingReference
+        string paymentStatus
+        double pricePaid
+    }
+
+    CONVERSATIONS {
+        ObjectId id PK
+        ObjectId userId FK
+        string sessionId
+        array chatMessages
+        date lastActive
+    }
+
+    NOTIFICATIONS {
+        ObjectId id PK
+        ObjectId userId FK
+        string type
+        string status
+        string messagePayload
+        date createdAt
+    }
+
+    USERS ||--|| PREFERENCES : "has"
+    USERS ||--o{ TRIPS : "creates"
+    USERS ||--o{ CONVERSATIONS : "initiates"
+    TRIPS ||--o{ BOOKINGS : "contains"
+    USERS ||--o{ NOTIFICATIONS : "receives"
+```
+
+---
+
+## 8. Trip State Machine
+
+Trips progress through a strict, validations-driven lifecycle state machine. State changes are verified at the service layer before updates are written to the database.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT : User enters prompt / incomplete setup
+    DRAFT --> PLANNING : Missing parameters resolved / Parallel execution started
+    PLANNING --> AWAITING_APPROVAL : Itinerary generated & validated
+    
+    AWAITING_APPROVAL --> PLANNING : Rejection with modification prompts
+    AWAITING_APPROVAL --> APPROVED : Traveler accepts proposal
+    
+    APPROVED --> BOOKING : Booking Service initialized, checking payment gateway
+    
+    BOOKING --> BOOKED : Payment verified, references returned, calendar synced
+    BOOKING --> AWAITING_APPROVAL : Payment failed / Inventory sold out
+    
+    BOOKED --> COMPLETED : Current date exceeds trip endDate
+    BOOKED --> CANCELLED : Traveler cancels trip via dashboard
+    
+    AWAITING_APPROVAL --> CANCELLED : Traveler discards draft session
+    DRAFT --> CANCELLED : Session timeout / abandoned
+    CANCELLED --> [*]
+    COMPLETED --> [*]
+```
+
+---
+
+## 9. Prompt Engineering Layer
+
+Prompt templates decouple prompt definition from application logic. Structured templates are stored in a dedicated backend directory (`server/src/prompts/`):
+
+- **Master Planner Input Prompt** (`planner.prompt.ts`): Processes traveler intent, extracts parameters, and identifies slots.
+- **Destination Recommendation Prompt** (`destination.prompt.ts`): Identifies optimal travel locations using user preferences, accessibility settings, and weather data.
+- **Budget Reasoning Prompt** (`budget.prompt.ts`): Reconciles raw tool values against budget limits, calculated reserves, and hidden costs.
+- **Itinerary Generation Prompt** (`itinerary.prompt.ts`): Builds daily markdown calendars that incorporate local activities and transit data.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  System Context (Instructions, Safety Limits & Schemas)     │
+├─────────────────────────────────────────────────────────────┤
+│  Few-Shot Examples (Parsed inputs → Structured outputs)     │
+├─────────────────────────────────────────────────────────────┤
+│  User Context (Profile preferences, past activities)       │
+├─────────────────────────────────────────────────────────────┤
+│  JSON Schema Constraint (Validates output format)           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 10. JSON Validation & Structured Output Parser
+
+To prevent malformed LLM responses from causing application errors, the system wraps all agent invocations in a structured validation layer.
 
 ```mermaid
 graph TD
     classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
-    classDef log fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
-    classDef store fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
+    classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef success fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+    classDef error fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
 
-    FELog["Frontend Logs<br/>(Browser console + error boundary)"]:::log
-    BELog["Backend Logs<br/>(Morgan HTTP + Winston app)"]:::log
-    AgentLog["Agent Execution Logs<br/>(Agent name, duration, token count)"]:::log
-    MCPLog["MCP Server Logs<br/>(Tool name, latency, status)"]:::log
-    APILog["External API Logs<br/>(Provider, response code, latency)"]:::log
+    LLMOut["Agent LLM Output String"] --> JSONParser["JSON Parser Engine"]:::process
     
-    FELog --> Winston["Winston Logger<br/>(structured JSON, requestId tagged)"]:::log
-    BELog --> Winston
-    AgentLog --> Winston
-    MCPLog --> Winston
-    APILog --> Winston
+    JSONParser -->|Failure| IncrementRetry{"Retry limit reached?"}:::process
+    JSONParser -->|Success| ZodValidate["Zod Schema Verification"]:::process
     
-    Winston --> CW["Amazon CloudWatch<br/>(Log Groups per environment)"]:::store
-    Winston --> Console["Console / stdout<br/>(Docker logs capture)"]:::store
+    ZodValidate -->|Invalid schema| IncrementRetry
+    ZodValidate -->|Valid schema| SuccessReturn["Return Typed JSON Object"]:::success
+    
+    IncrementRetry -->|No| RePrompt["Re-Prompt LLM with error logs"]:::process
+    IncrementRetry -->|Yes| Fallback["Execute Graceful Fallback Handler"]:::error
+    
+    RePrompt --> LLMOut
 ```
 
-### What Is Logged
+If parsing fails, the system automatically runs up to **two retries**, appending the error logs to the prompt code to guide correct formatting on the next attempt.
 
-| Event | Logger | Log Level | Key Fields |
+---
+
+## 11. Confidence & Fallback Flow
+
+To ensure plan validity, the Itinerary and Budget Agents execute automated quality checks on outputs:
+
+```
+                  ┌────────────────────────────────────────┐
+                  │ LLM Structured Output Parsing Completed │
+                  └───────────────────┬────────────────────┘
+                                      │
+                                      ▼
+                  ┌────────────────────────────────────────┐
+                  │ Validate constraints against tool checks│
+                  │ E.g. Check check-in times & travel caps│
+                  └───────────────────┬────────────────────┘
+                                      │
+                                    ┌─┴─┐
+                                  Yes   No
+                                ┌───┘   └───┐
+                                ▼           ▼
+           ┌─────────────────────────┐ ┌───────────────────────────┐
+           │ Confidence Score = 1.0  │ │Confidence Score = 0.0     │
+           │ Accept Plan Proposal    │ │Run correction pass (max 2)│
+           └─────────────────────────┘ └────────────┬──────────────┘
+                                                    │
+                                                  ┌─┴─┐
+                                               Success Failure
+                                              ┌─────┘   └─────┐
+                                              ▼               ▼
+                                         Accept Plan      Trigger Fallback
+                                         Proposal         Graceful Error
+```
+
+If checks fail after correction passes, the system uses fallback configurations (e.g. suggesting safe defaults) rather than letting invalid coordinates or budgets crash the application.
+
+---
+
+## 12. Memory Architecture & Long-Term Update Policy
+
+The application uses a **dual-layer memory model** designed to maintain context during a session while capturing user preferences over time.
+
+```
+                  ┌─────────────────────────────────────┐
+                  │        Incoming Conversation        │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                  ┌─────────────────────────────────────┐
+                  │   Short-Term Session Memory Store   │
+                  │ (Maintains context during planning) │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                  ┌─────────────────────────────────────┐
+                  │      Preference Extraction LLM      │
+                  │    (Detects changes & new choices)  │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                  ┌──┴──┐
+                                 Yes    No
+                               ┌───┘    └───┐
+                               ▼            ▼
+             ┌─────────────────────┐   ┌───────────────┐
+             │ Update Preferences  │   │  Ignore Event │
+             │  Long-term MongoDB  │   │               │
+             └─────────────────────┘   └───────────────┘
+```
+
+* **Short-Term Memory**: Session-scoped Chat History (persisted in MongoDB `conversations` database) that provides conversation context during the planning flow.
+* **Long-Term Memory**: Persistent User Preference profiles (persisted in MongoDB `preferences`). To avoid cluttering profiles with trivial details, long-term memory is updated selectively:
+  1. Once a trip is finalized, the **Preference Extraction Engine** analyzes the booking choices.
+  2. If the user explicitly notes preferences during chat (e.g., "I only eat vegetarian food" or "I need wheelchair access"), these values are updated in MongoDB.
+  3. These preferences are loaded as system context variables during future planning runs.
+
+---
+
+## 13. User Profile System & Context Extraction
+
+At the start of the planning pipeline, the API loads the user's profile and active preferences. This ensures user context shapes all planning decisions.
+
+```json
+{
+  "userId": "usr_6782f9b8cde",
+  "preferences": {
+    "travelStyle": "adventure",
+    "dietaryPreference": "vegetarian",
+    "budgetRange": "mid-range",
+    "languages": ["English", "Tamil"],
+    "accessibilityNeeds": "wheelchair"
+  },
+  "pastTrips": [
+    {
+      "destination": "Ooty, TN",
+      "rating": 5,
+      "budgetSpent": 32000
+    }
+  ],
+  "family": {
+    "adults": 2,
+    "children": 1
+  }
+}
+```
+
+This metadata is combined with new traveler inputs to configure agent workflows and ensure recommendations stay within budget constraints.
+
+---
+
+## 14. Granular Replanning Logic
+
+When a user requests a change during review, the system does not regenerate the entire itinerary. Instead, the Planner Agent updates only the components affected by the new parameters.
+
+```
+       Change request received: "Change Hotel Budget"
+            │
+            ├────────► Identify affected components: Accommodation, Budget Breakdown
+            │
+            ├────────► RE-RUN: hotel_tool (Fetch new options)
+            ├────────► RE-RUN: Budget Reasoning Agent (Re-calculate allocations)
+            ├────────► RE-RUN: Itinerary Gen Agent (Update affected daily schedules)
+            │
+            └────────► SKIPPED: weather_tool, transport_tool, activity_tool (Cached)
+```
+
+By using localized updates and cached tool results, the system reduces LLM token consumption while processing requests in under 2 seconds.
+
+---
+
+## 15. Complete Budget Model
+
+The Budget Reasoning Agent evaluates total estimated expenses using a complete cost model. This prevents budget overruns by accounting for fees and contingencies:
+
+```
+╔═════════════════════════════════════════════════════════════════════╗
+║                   GRAND TOTAL TRIP COST BUILD                       ║
+╠═════════════════════════════════════════════════════════════════════╣
+║  [+] Long-Distance Transport (Flights/Trains/Intercity Buses)       ║
+║  [+] Accommodation (Room rent per night * total stay)               ║
+║  [+] Meals & Dining (Daily allowance per seat * travelers)          ║
+║  [+] Activity Passes (Entry tickets, sightseeing bookings)          ║
+║  [+] Local Transport (Cabs, auto rides, bike rentals)               ║
+║  [+] Taxes & Service Fees (GST estimation: 18% hotel, 5% transit)   ║
+║  [+] Fuel & Parking Fees (Applicable for road-trips)                ║
+║  [+] Shopping Allowance (Purchases limit allocated)                 ║
+║  [+] Emergency Reserve Fund (10% Buffer automatically added)        ║
+║  [+] Miscellaneous Hidden Costs (Tips, water, emergency transit)    ║
+╚═════════════════════════════════════════════════════════════════════╝
+```
+
+Plans are rejected as infeasible if the total (including the emergency buffer) exceeds the user's spending limit.
+
+---
+
+## 16. Booking & Payment Service Layer
+
+Bookings are handled by system services, not AI agents. This guarantees reliable transaction processing.
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
+    classDef step fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef api fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
+
+    ApprovedState(["Trip Approved"]) --> InitAuth["Booking Service Initialized"]:::step
+    InitAuth --> LockInventory["Lock Inventory Slots (Transient lock)"]:::step
+    
+    LockInventory --> PayGateway["Charge Payment Method (Mock stripe)"]:::api
+    PayGateway -->|Payment Verification Success| CreateRefs["Generate Booking References"]:::step
+    PayGateway -->|Payment Failed| Rollback["Release Inventory & Warn User"]:::step
+    
+    CreateRefs --> WriteDB["Save Booking Record to MongoDB"]:::step
+    WriteDB --> TriggerSync["Trigger calendar_tool MCP Event"]:::api
+    TriggerSync --> Completed(["Booking Confirmed"])
+```
+
+---
+
+## 17. Background Notification Queue
+
+To prevent page-load delays during booking confirmation, post-booking tasks are processed off the main thread using an event queue (Bull/Redis).
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
+    classDef producer fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef consumer fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
+    classDef queue fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
+
+    BookingEvent["Booking Event Fired"]:::producer --> DirectQueue["Add to Redis Queue (Bull)"]:::queue
+    
+    subgraph BullQueueProcessor ["Worker Process (Async Node Worker)"]
+        DirectQueue --> JobPickup["Worker picks up Job"]:::consumer
+        JobPickup --> EmailTask["Nodemailer Ticket Email"]:::consumer
+        JobPickup --> PushTask["WebPush API Notification"]:::consumer
+        JobPickup --> CalSyncTask["calendar_tool API Call"]:::consumer
+    end
+
+    EmailTask --> Done(["Task Complete"])
+    PushTask --> Done
+    CalSyncTask --> Done
+```
+
+If tasks fail, the queue retries processing using an backoff schedule.
+
+---
+
+## 18. Redis Cache Strategy (TTL & Key Design)
+
+An in-memory Redis layer stores API search results to avoid redundant external network requests:
+
+### Key Naming Conventions
+* **Weather Cache**: `weather:{coordinates}:{start_date}:{end_date}`
+* **Hotel Listings**: `accommodation:{destination_coordinates}:{check_in}:{check_out}`
+* **Transit Routes**: `transport:{origin_coordinates}:{destination_coordinates}:{date}`
+* **Google Places Details**: `places:{destination}:{interests}`
+* **User Session Cache**: `session:{userId}:active`
+
+### Time-to-Live (TTL) Configurations
+* Weather records expire after **6 hours** to ensure forecasts remain accurate.
+* Hotel search results expire after **24 hours** to match inventory changes.
+* Transit listings expire after **12 hours** to keep schedule data up to date.
+* Google Places attraction data is cached for **7 days** since landmarks rarely change.
+
+When the Redis instance memory limit is reached, it uses the `allkeys-lru` eviction policy to discard the least recently used keys.
+
+---
+
+## 19. LLM Cost Optimization Strategy
+
+The architecture includes optimizations to reduce dependency on external LLMs and lower operating costs:
+
+1. **Deterministic Logic Routing**: Simple tasks (extracting dates, fetching coordinates, or loading profile preferences) are processed using code rather than LLM prompts.
+2. **Parallel Dispatching**: Gathering operations are run concurrently via `Promises.allSettled`, minimizing API wait times.
+3. **Structured caching**: The planning service checks Redis before invoking the master agent, utilizing cached data when possible to avoid new LLM processing costs.
+4. **Deterministic Settings**: The model controls formatting by using a temperature setting of `0` and structured schemas, reducing retry expenses caused by parsing errors.
+
+---
+
+## 20. Security & Authentication Architecture
+
+User data and API endpoints are protected by multi-layered middleware controls.
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
+    classDef middleware fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef api fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+    classDef danger fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
+
+    ClientInput["Secure Request (Authorization: Bearer <JWT>)"] --> HelmetShield["Helmet Header Filter"]:::middleware
+    
+    HelmetShield --> CORSConn["CORS Domain Validator"]:::middleware
+    CORSConn --> RateLimiter["IP Rate Limiter"]:::middleware
+    
+    RateLimiter --> TokenCheck{"Valid Access Token?"}:::middleware
+    
+    TokenCheck -->|No| RefreshFlow{"Valid Refresh Token?"}:::middleware
+    TokenCheck -->|Yes| RBACCheck{"Check RBAC (Role match)"}:::middleware
+    
+    RefreshFlow -->|Yes| IssueToken["Issue New Token (Rotate context)"]:::middleware
+    RefreshFlow -->|No / Expired| AccessDenied["401 Unauthorized Response"]:::danger
+    
+    IssueToken --> RBACCheck
+    
+    RBACCheck -->|Unauthorized Role| RoleDenied["403 Forbidden Response"]:::danger
+    RBACCheck -->|Authorized Role| Sanitizer["Input Sanitization (express-validator)"]:::middleware
+    
+    Sanitizer --> ProtectedRoute["Route Controller Action"]:::api
+```
+
+- **Credential Hashing**: User passwords are saved as secure hashes using `bcrypt` with a minimum cost of 12 rounds.
+- **Short-Lived Access Tokens**: Session access tokens use a 15-minute expiration window to limit token exposure.
+- **Refresh Token Rotation**: Refresh tokens are stored in secure HTTP-only cookies. Using a refresh token invalidates previous issues, preventing token reuse.
+- **Secure Configuration**: Third-party API credentials, MongoDB keys, and JWT salts are retrieved at launch from the AWS SSM Parameter Store.
+
+---
+
+## 21. Folder Structure
+
+The repository organizes backend services, agent reasoning libraries, and frontend elements in the following directory layout:
+
+```
+travel-planner-ai/
+├── client/                     # Web interface
+│   ├── src/
+│   │   ├── components/         # Shared UI (Zod Hook Forms, charts layout)
+│   │   ├── pages/              # User profiles, admin panels, planner
+│   │   ├── hooks/             # Custom state & server query hooks
+│   │   ├── services/           # Axios REST endpoint controllers
+│   │   └── schemas/            # Zod validation schemas
+│   └── vite.config.ts
+│
+├── server/                     # Express API
+│   ├── src/
+│   │   ├── controllers/        # Route handler functions
+│   │   ├── routes/             # Authentication & planning routes
+│   │   ├── middlewares/        # JWT auth, rate limits, validators
+│   │   ├── services/           # Orchestrator (PlannerService, BookingService)
+│   │   ├── agents/             # Reasoning models (Planner, Budget, etc.)
+│   │   │   ├── planner.agent.ts
+│   │   │   ├── missing-info.agent.ts
+│   │   │   ├── destination.agent.ts
+│   │   │   ├── budget.agent.ts
+│   │   │   └── itinerary.agent.ts
+│   │   ├── prompts/            # prompt files
+│   │   ├── models/             # Mongoose schemas
+│   │   ├── repositories/       # MongoDB interface classes
+│   │   ├── memory/             # Short & Long memory update logic
+│   │   ├── cache/              # Redis interface wrapper
+│   │   ├── parsers/            # Zod output validation parsers
+│   │   └── utils/              # Error handling & logger utilities
+│   └── package.json
+│
+├── mcp/                        # Standalone MCP servers
+│   ├── weather-mcp/            # OpenMeteo forecast client
+│   ├── maps-mcp/               # Google Maps places & routing client
+│   ├── transit-mcp/            # Mock bus & rail search client
+│   ├── booking-mcp/            # Hotel inventory and payment gateway client
+│   └── calendar-mcp/           # Google Calendar syncing client
+│
+├── docker/                     # Container configurations
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── terraform/                  # Infrastructure configurations
+│   ├── main.tf
+│   ├── variables.tf
+│   └── outputs.tf
+│
+└── README.md                   # System documentation
+```
+
+---
+
+## 22. Class Diagram
+
+This class diagram shows the relationships between core service managers, databases, and agents:
+
+```mermaid
+classDiagram
+    class PlannerService {
+        +generatePlan(userId, prompt) Trip
+        +finalizeAndBook(tripId) Booking
+        +processReplanning(tripId, reasons) Trip
+    }
+
+    class BookingService {
+        -paymentService PaymentService
+        -notificationService NotificationService
+        +executeTripBooking(tripData) BookingReference
+    }
+
+    class UserRepository {
+        +getUserProfile(userId) UserProfile
+        +updateUserPreferences(userId, prefs) Boolean
+    }
+
+    class TripRepository {
+        +saveTrip(trip) Trip
+        +getTripById(tripId) Trip
+        +updateTripStatus(tripId, status) Boolean
+    }
+
+    class PlannerAgent {
+        -missingInfoAgent MissingInfoAgent
+        -destAgent DestinationAgent
+        -budgetAgent BudgetAgent
+        -itineraryAgent ItineraryAgent
+        +startPlanningPipeline(Context) TripJSON
+    }
+
+    class RedisCacheManager {
+        -client RedisClient
+        +get(key) JSON
+        +setex(key, ttl, value) Boolean
+        +invalidatePattern(pattern) Boolean
+    }
+
+    PlannerService --> PlannerAgent : uses
+    PlannerService --> UserRepository : queries
+    PlannerService --> TripRepository : updates
+    PlannerService --> BookingService : delegates
+    PlannerService --> RedisCacheManager : checks
+    BookingService --> TripRepository : modifies
+```
+
+---
+
+## 23. CI/CD & Deployment Flow
+
+Infrastructure is provisioned using Terraform, and updates are deployed to AWS instances through a GitHub Actions CI/CD pipeline.
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
+    classDef trigger fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef step fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
+    classDef dest fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+
+    CodeChange["Push to github main branch"]:::trigger --> CITrigger["Merge / Actions Trigger"]:::trigger
+    
+    subgraph BuildAndVerify ["Verify & Build Image"]
+        CITrigger --> LintTask["Run Linters & Formatter"]:::step
+        LintTask --> AuditTask["Vulnerability Audit Check"]:::step
+        AuditTask --> TestSuite["Run Backend Tests"]:::step
+        TestSuite --> BuildDocker["Build API Docker Image"]:::step
+    end
+    
+    subgraph ContainerRegistry ["Store Image"]
+        BuildDocker --> PushesECR["Upload Image to Amazon ECR"]:::step
+    end
+
+    subgraph AWSIacProvision ["Provision Environment"]
+        TerraformTask["Terraform Plan & Apply"]:::step --> S3Upload["Upload Build Static to S3"]:::dest
+        TerraformTask --> RouteConfigure["Configure CloudFront CDN Routing"]:::dest
+    end
+
+    PushesECR --> PullImage["EC2 Agent pulls latest image"]:::dest
+    S3Upload --> DeploySuccess["Deployment Live Status"]:::dest
+    PullImage --> DeploySuccess
+```
+
+---
+
+## 24. Rate Limiting Flow
+
+A Redis-backed rate limiter protects endpoints from denial-of-service attempts and resource exhaustion.
+
+```mermaid
+graph TD
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:2px,color:#cdd6f4;
+    classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
+    classDef allow fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
+    classDef deny fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
+
+    HttpRequest["Incoming API Request"] --> ExtractIP["Extract Requesting IP & Route Context"]:::process
+    ExtractIP --> RedisLookup["Query key: rate_limit:ip:{route} in Redis"]:::process
+    
+    RedisLookup --> IPExists{"Request limit exceeded?"}:::process
+    
+    IPExists -->|Yes| ThrottleReturn["Return HTTP 429 Too Many Requests"]:::deny
+    IPExists -->|No| IncrementCount["Increment Redis Request Count"]:::process
+    
+    IncrementCount --> PassToRouter["Forward Request to Router Middleware"]:::allow
+```
+
+---
+
+## 25. Observability & Error Redirection Matrix
+
+Structured application events and error logs are captured using the Winston logger and monitored via AWS CloudWatch:
+
+| Event Source | Severity | Logging Attributes | Fallback Response |
 |:---|:---|:---|:---|
-| HTTP Request In | Morgan | `info` | method, path, status, responseTime, ip |
-| HTTP Request Error | Morgan + Winston | `error` | status, error message, requestId |
-| Agent Start | Winston | `info` | agentName, sessionId, requestId |
-| Agent Complete | Winston | `info` | agentName, durationMs, tokensUsed |
-| Agent Error | Winston | `error` | agentName, error, stack |
-| MCP Tool Call | Winston | `debug` | toolName, inputParams, latencyMs |
-| MCP Tool Error | Winston | `warn` | toolName, error, retryAttempt |
-| Cache Hit | Winston | `debug` | cacheKey, ttlRemaining |
-| Cache Miss | Winston | `debug` | cacheKey |
-| DB Query | Mongoose | `debug` | collection, operation, durationMs |
-| Auth Success | Winston | `info` | userId, role, ip |
-| Auth Failure | Winston | `warn` | reason, ip, requestId |
+| **Express Middleware** | `warn` | `ip`, `route`, `requestId`, `userAgent` | `400 Bad Request` or `429 Throttle` response |
+| **Authentication System** | `warn` | `email`, `authRef`, `requestId` | `401 Access Expired` standard response |
+| **Master Planner Agent** | `error` | `userId`, `conversationId`, `errorDetails` | `500 Server Error` response with system reset |
+| **JSON Output Parser** | `warn` | `rawText`, `parsingErrors`, `retryAttempt` | Re-prompt LLM with correct schema rules |
+| **weather_tool (MCP)** | `error` | `coordinates`, `dateRange`, `status` | Use cached metrics or a default weather fallback |
+| **hotel_tool (MCP)** | `error` | `destination`, `checkingIn`, `status` | Warn traveler that accommodation listings are offline |
+| **MongoDB Atlas** | `error` | `operation`, `stackTrace`, `durationMs` | `503 Service Unavailable` graceful error response |
+| **Google Calendar MCP** | `warn` | `userId`, `oauthTokenStatus` | Skip event creation and notify the user |
 
-### Request ID Correlation
-
-Every incoming request is assigned a `requestId` (UUID v4) by the first middleware. This ID propagates through:
-
-```
-HTTP Request  →  requestId: "abc-123"
-      │
-      ├── Planner Service logs:  { requestId: "abc-123", agentName: "WeatherAgent" }
-      ├── MCP Server logs:       { requestId: "abc-123", tool: "get_weather" }
-      └── DB Operation logs:     { requestId: "abc-123", collection: "trips" }
-```
-
-This allows full request tracing in CloudWatch using a single `requestId` filter.
-
-### Health Check Endpoints
-
-| Endpoint | Method | Returns | Purpose |
-|:---|:---|:---|:---|
-| `/health` | GET | `{ status: "ok" }` | Load balancer liveness probe |
-| `/health/db` | GET | `{ mongo: "ok" / "error" }` | MongoDB connection status |
-| `/health/cache` | GET | `{ redis: "ok" / "error" }` | Redis connection status |
-| `/health/llm` | GET | `{ groq: "ok" / "error" }` | LLM API reachability |
-
-### Key Metrics Tracked (CloudWatch)
-
-| Metric | What It Tells You |
-|:---|:---|
-| `api.request.duration` | p50/p95/p99 API latency |
-| `agent.execution.duration` | How long each agent takes |
-| `mcp.tool.latency` | External API response times |
-| `redis.hit_rate` | Cache effectiveness |
-| `llm.token_usage` | Groq API cost monitoring |
-| `auth.failure_count` | Potential brute force detection |
-| `system.error_rate` | Overall system health |
-
-### Future Observability Enhancements
-
-| Tool | Purpose |
-|:---|:---|
-| **Prometheus** | Pull-based metrics scraping from `/metrics` endpoint |
-| **Grafana** | Real-time dashboards for agent latency, error rates, throughput |
-| **OpenTelemetry** | Distributed tracing across agents and MCP servers |
-| **Sentry** | Frontend + backend error tracking with stack traces |
+All application logs contain a unique `requestId` (UUID v4) tag, letting developers trace issues from the public entry route down to tool execution and database commits.
 
 ---
 
-## 14. Functional Execution Scenarios (Simulated Outputs)
+## 26. Technical Stack
 
-To demonstrate how the senior architect design performs in practice, the following sections show simulated responses produced by the Agent cluster.
-
-### A. Itinerary Agent Output
-The Itinerary Agent schedules day-by-day routines structured by timeframe. It factors in checking schedules, travel delays, weather advisories (redirecting to indoor attractions if rain alerts prompt), and daily spend caps.
-
-```markdown
-# 5-Day Vacation in Ooty (Traveler Count: 2)
-### Status: Draft | Month: October | Weather Note: Moderate Clear Skies
-
-## Day 1: Chennai to Ooty Transition & Arrival
-* **08:00 AM - 11:30 AM | Travel Time (Transit)**
-  * Transit: Rail departure from Chennai Central to Ooty foothills (Mettupalayam).
-  * Estimated Cost: ₹1,200 (2 Tickets, Sleeper Option Alternative)
-* **11:30 AM - 12:00 PM | Hotel Check-in**
-  * Activity: Check-in at Ooty Vista Inn.
-  * Travel Time: 20 mins cab transfer from terminal station.
-* **12:00 PM - 01:30 PM | Dining (Lunch suggestion)**
-  * Restaurant: Garden View Cafe (Local experiences, veg focus).
-  * Opening Hours: 11:00 AM - 10:00 PM | Estimated Cost: ₹600
-* **01:30 PM - 03:00 PM | Relaxation & Unpacking**
-  * Accommodation Note: Hotel amenities tour.
-* **03:00 PM - 05:30 PM | Afternoon Sightseeing**
-  * Destination: Government Botanical Garden.
-  * Timings: 07:00 AM - 06:30 PM | Entry Fee: ₹100 for 2 adults.
-  * Weather Consideration: Clear Skies, open air activity highly recommended.
-* **05:30 PM - 07:30 PM | Evening Activity**
-  * Destination: Ooty Tea Factory & Museum.
-  * Timings: 09:00 AM - 07:00 PM | Ticket Cost: ₹50
-* **08:00 PM - 09:30 PM | Dinner**
-  * Restaurant: Mountain Retreat Dining.
-  * Estimated Cost: ₹800
-* **Day 1 Total Estimated Cost**: ₹2,750 (Excluding hotel block room reservation)
-```
-
-### B. Budget Agent Expense Report
-The Budget Agent analyzes all estimated costs compiled by the parallel agents and outputs a strict audit report including an emergency buffer.
-
-| Expense Category | Item Details | Estimated Cost |
-|:---|:---|:---:|
-| **Transport** | Transit train fares (Coimbatore/Mettupalayam rail connection) | ₹1,800 |
-| **Hotel** | 4 Nights at Ooty Vista Inn (Stays class accommodation) | ₹8,500 |
-| **Food / Dining** | Meal allowances, breakfast packages, local recommendations | ₹4,000 |
-| **Activities** | Entry tickets, botanical gardens, tea estate slots | ₹3,500 |
-| **Local Transport** | Station transfer cabs, local auto charges | ₹2,500 |
-| **Emergency Fund** | 10% Reserve Buffer calculated for local disruptions | ₹2,030 |
-| **Grand Total** | Summary of all categories including emergency fund | **₹22,330** |
-| **Remaining Budget** | Safety variance (based on base limit of ₹30,000) | **₹7,670** |
-
----
-
-## 15. Tech Stack
-
-| Layer | Technology | Purpose | Free Tier Status |
-|:------|:-----------|:--------|:-----------------|
-| **Frontend** | React (TypeScript) | Single Page Application UI | 100% Free |
-| | Vite | Dev server & production bundler | 100% Free |
-| | Tailwind CSS | Utility-first styling framework | 100% Free |
-| | React Hook Form + Zod | Authentication forms state & validation schema | 100% Free |
-| | TanStack Query | Query caching, pagination & dashboard HTTP states | 100% Free |
-| | Zustand / Context API | Client-side stores & local session state | 100% Free |
-| | Chart.js | Admin analytical statistics visualizer | 100% Free |
-| | Axios | REST HTTP Requests Client | 100% Free |
-| **Backend** | Node.js + Express.js | REST API server (MVC code structure) | 100% Free |
-| | Mongoose | MongoDB ODM schema rules & index tracking | 100% Free |
-| | JSON Web Token (JWT) | Authentication & security roles | 100% Free |
-| | bcrypt | Password hashing security controls | 100% Free |
-| | express-rate-limit | API endpoint rate throttling | 100% Free |
-| | Helmet | Express header validation security | 100% Free |
-| | CORS | Domain access policy configurations | 100% Free |
-| | Morgan / Winston | Request tracing & server diagnostic records | 100% Free |
-| **AI / Agents** | Groq LLM API | AI Inference operations (Llama 3 execution model) | 100% Free Developer Tier |
-| | LangChain JS | AI Agent chain orchestration framework | 100% Free |
-| | Model Context Protocol (MCP) | Interface structure standard for tool integrations | 100% Free |
-| **Database & Caching** | MongoDB Atlas | Primary database (Indexed scopes, users & trips) | Shared M0 Cluster — 100% Free |
-| | Redis | In-memory API query caching (weather data, schedules) | 100% Free (Self-hosted on EC2 or Redis Cloud Free) |
-| **DevOps & Infra** | GitHub Actions | Automatically triggers CI/CD build scripts | 2,000 build minutes/month Free |
-| | Docker | System container orchestration packaging | 100% Free Community Tier |
-| | Terraform | Automated infrastructure scripts (VPC/EC2/S3 config) | 100% Free CLI |
-| | AWS EC2 | Server deployment platform host environment | 12-Month Free Tier (750 hours/month) |
-| | AWS S3 + CloudFront | Static client file host and low latency CDN distribution | 12-Month Free Tier (5GB / 1TB Outbound) |
-| | AWS SSM Parameter Store | Secure application parameter configuration storage | Always Free Tier (Up to 10,000 Parameters) |
-| | Amazon CloudWatch | System alarms monitoring, health, & logging records | Standard Free Tier metrics |
-| **External APIs** | OpenMeteo API | Weather forecast readings | 100% Free for Non-Commercial |
-| | Google Maps API | Location geocoding & mapping coordinates | $200 Monthly Free Credit Bundle |
-| | Google Calendar API | Event reminder synchronization updates | 100% Free Developer API |
-| | Booking MCP Tool Engines | Mock Bus, Train, Hotel, and Payment integrations | 100% Free Mock Interfaces |
-
-
----
-
+* **Frontend**: React (Vite, TailwindCSS, TanStack Query, Axios, Chart.js)
+* **Backend Framework**: Node.js + Express (TypeScript, MVC Architecture)
+* **AI & Orchestration**: LangChain, Groq LLM API, Model Context Protocol
+* **Database & Cache**: MongoDB Atlas (Mongoose), Redis (Self-hosted on EC2 / Redis Cloud)
+* **Background Jobs Queue**: Bull MQ (Redis-backed job scheduling)
+* **Infrastructure**: Terraform, GitHub Actions, Docker Compose, Nginx, AWS EC2, AWS S3, CloudFront
