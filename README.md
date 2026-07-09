@@ -68,12 +68,41 @@ graph TD
     DestCheck -->|Yes| Coordinator
     
     %% --- Parallel Agent Execution ---
-    subgraph ParallelTasks ["Stage 1: Parallel Data Retrieval"]
-        WeatherAgent["Weather Agent<br/>(Forecast early)"]:::agent
-        TransAgent["Transport Agent<br/>(Transit schedules)"]:::agent
-        AccomAgent["Accom Agent<br/>(Hotels & homestays)"]:::agent
-        ActAgent["Activity Agent<br/>(Attractions & dining)"]:::agent
-        LocalTrans["Local Transport Agent<br/>(Cabs & transfers)"]:::agent
+    subgraph ParallelTasks ["Stage 1: Parallel Data Retrieval & Caching"]
+        %% Weather
+        WeatherAgent["Weather Agent<br/>(Forecast early)"]:::agent --> WeatherCacheCheck{"Redis Check"}:::cache
+        WeatherCacheCheck -->|Miss| WeatherMCP["Weather MCP Request"]:::api
+        WeatherMCP --> WeatherSave["Write to Redis"]:::cache
+        WeatherCacheCheck -->|Hit| WeatherOut["Weather Data"]
+        WeatherSave --> WeatherOut
+        
+        %% Transport
+        TransAgent["Transport Agent<br/>(Transit schedules)"]:::agent --> TransCacheCheck{"Redis Check"}:::cache
+        TransCacheCheck -->|Miss| TransMCP["Transit MCP Request"]:::api
+        TransMCP --> TransSave["Write to Redis"]:::cache
+        TransCacheCheck -->|Hit| TransOut["Transport Data"]
+        TransSave --> TransOut
+        
+        %% Accommodation
+        AccomAgent["Accom Agent<br/>(Hotels & homestays)"]:::agent --> AccomCacheCheck{"Redis Check"}:::cache
+        AccomCacheCheck -->|Miss| AccomMCP["Hotel MCP Request"]:::api
+        AccomMCP --> AccomSave["Write to Redis"]:::cache
+        AccomCacheCheck -->|Hit| AccomOut["Accommodation Data"]
+        AccomSave --> AccomOut
+        
+        %% Activity
+        ActAgent["Activity Agent<br/>(Attractions & dining)"]:::agent --> ActCacheCheck{"Redis Check"}:::cache
+        ActCacheCheck -->|Miss| ActMCP["Places MCP Request"]:::api
+        ActMCP --> ActSave["Write to Redis"]:::cache
+        ActCacheCheck -->|Hit| ActOut["Activity Data"]
+        ActSave --> ActOut
+        
+        %% Local Transport
+        LocalTrans["Local Transport Agent<br/>(Cabs & transfers)"]:::agent --> LocalCacheCheck{"Redis Check"}:::cache
+        LocalCacheCheck -->|Miss| LocalMCP["Distance MCP Request"]:::api
+        LocalMCP --> LocalSave["Write to Redis"]:::cache
+        LocalCacheCheck -->|Hit| LocalOut["Local Transport Data"]
+        LocalSave --> LocalOut
     end
     
     Coordinator --> WeatherAgent
@@ -82,13 +111,11 @@ graph TD
     Coordinator --> ActAgent
     Coordinator --> LocalTrans
     
-    %% Redis Cache Integration
-    ParallelTasks --> CheckCache{"Cache Hit in Redis?"}:::cache
-    CheckCache -->|No| MCPRequests["MCP Server Requests<br/>(Weather / Maps MCP)"]:::api
-    CheckCache -->|Yes| JoinTasks["Aggregate Parallel Outputs"]:::process
-    
-    MCPRequests --> WriteCache["Write to Redis Cache"]:::cache
-    WriteCache --> JoinTasks
+    WeatherOut --> JoinTasks["Aggregate Parallel Outputs"]:::process
+    TransOut --> JoinTasks
+    AccomOut --> JoinTasks
+    ActOut --> JoinTasks
+    LocalOut --> JoinTasks
     
     %% --- Sequential Agent Execution ---
     subgraph SequentialTasks ["Stage 2: Sequential Planning"]
@@ -104,7 +131,9 @@ graph TD
     Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
     
     HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
-    ModifyReq --> BaseGoal
+    ModifyReq --> PreserData["Preserve Context<br/>(Keep destination, weather, transport, prefs)"]:::process
+    PreserData --> UpdateReq["Update requested changes only<br/>(Edit accommodation, budget, or itinerary)"]:::process
+    UpdateReq --> Coordinator
     
     HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Mock reservations & payments)"]:::agent
     
@@ -128,26 +157,34 @@ graph TD
     classDef startEnd fill:#a6e3a1,stroke:#a6e3a1,stroke-width:2px,color:#11111b;
     classDef process fill:#89b4fa,stroke:#89b4fa,stroke-width:2px,color:#11111b;
     classDef admin fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
+    classDef db fill:#f9e2af,stroke:#f9e2af,stroke-width:2px,color:#11111b;
 
     Admin["Admin Web Dashboard"]:::admin --> Auth["Admin Auth Middleware"]:::process
-    Auth --> DashboardREST["Admin Router"]:::process
+    Auth --> AdminRouter["Admin Router<br/>(Express REST Endpoints)"]:::process
     
-    subgraph Metrics ["Admin Analytics Panel"]
-        PopularDest["Query Destinations"]:::process
-        Stats["Query Cost Stats"]:::process
-        CancelRate["Query Cancellations"]:::process
-        Telemetry["Query System Health"]:::process
+    AdminRouter --> AnalyticsService["Analytics Service<br/>(Business Logic)"]:::process
+    
+    subgraph Aggregation ["Database Query & Aggregation Tier"]
+        MongoDB["MongoDB Atlas Database"]:::db
+        AggQueries["Aggregation Queries<br/>(Stats Pipelines / Filters / Counts)"]:::process
     end
     
-    DashboardREST --> PopularDest
-    DashboardREST --> Stats
-    DashboardREST --> CancelRate
-    DashboardREST --> Telemetry
+    AnalyticsService --> MongoDB
+    MongoDB --> AggQueries
     
-    PopularDest --> Audit["Generate Audit Logs"]:::process
-    Stats --> Audit
-    CancelRate --> Audit
-    Telemetry --> Audit
+    subgraph Capability ["Admin Scope & Visualizations"]
+        AllTrips["View All Trip Plans<br/>(Read-Only Across All Travelers)"]:::process
+        FilterTrips["Filter Trips<br/>(By Status or Destination)"]:::process
+        DashboardCharts["Dashboard Charts<br/>(Popular Dest / Cancel Rates / Cost Stats)"]:::process
+    end
+    
+    AggQueries --> AllTrips
+    AggQueries --> FilterTrips
+    AggQueries --> DashboardCharts
+    
+    AllTrips --> Audit["Log Admin Action to Audit Logs"]:::process
+    FilterTrips --> Audit
+    DashboardCharts --> Audit
 ```
 
 ---
@@ -194,34 +231,44 @@ graph TD
     
     %% Hybrid Parallel / Sequential Stage
     subgraph ParallelPhase ["Parallel Gathering Phase"]
-        WeatherAgent["Weather Agent"]:::agent
-        TransAgent["Transport Agent"]:::agent
-        AccomAgent["Accommodation Agent"]:::agent
-        ActAgent["Activity Agent"]:::agent
+        %% Weather
+        WeatherAgent["Weather Agent"]:::agent --> WeatherCache{"Redis Check"}:::cache
+        WeatherCache -->|Miss| WeatherMCP["Weather MCP"]:::tool
+        WeatherMCP --> WeatherWrite["Write to Redis"]:::cache
+        WeatherCache -->|Hit| WeatherJoin["Weather Data"]
+        WeatherWrite --> WeatherJoin
+        
+        %% Transport
+        TransAgent["Transport Agent"]:::agent --> TransCache{"Redis Check"}:::cache
+        TransCache -->|Miss| SchedulesMCP["Transit MCP"]:::tool
+        SchedulesMCP --> TransWrite["Write to Redis"]:::cache
+        TransCache -->|Hit| TransJoin["Transport Data"]
+        TransWrite --> TransJoin
+        
+        %% Accommodation
+        AccomAgent["Accommodation Agent"]:::agent --> AccomCache{"Redis Check"}:::cache
+        AccomCache -->|Miss| HotelMCP["Hotel MCP"]:::tool
+        HotelMCP --> AccomWrite["Write to Redis"]:::cache
+        AccomCache -->|Hit| AccomJoin["Accommodation Data"]
+        AccomWrite --> AccomJoin
+        
+        %% Activity
+        ActAgent["Activity Agent"]:::agent --> ActCache{"Redis Check"}:::cache
+        ActCache -->|Miss| MapsMCP["Maps MCP"]:::tool
+        MapsMCP --> ActWrite["Write to Redis"]:::cache
+        ActCache -->|Hit| ActJoin["Activity Data"]
+        ActWrite --> ActJoin
     end
     
-    Coord --> ParallelPhase
+    Coord --> WeatherAgent
+    Coord --> TransAgent
+    Coord --> AccomAgent
+    Coord --> ActAgent
     
-    ParallelPhase --> RedisCheck{"Check Caches"}:::cache
-    
-    %% Replanning flow integration hook
-    RedisCheck -->|Miss| Tools["Invoke MCP Protocols"]:::tool
-    
-    subgraph LCTools ["MCP Tool Connections"]
-        WeatherMCP["Weather MCP"]:::tool
-        MapsMCP["Maps MCP"]:::tool
-        SchedulesMCP["Transit MCP"]:::tool
-    end
-    
-    Tools --> WeatherMCP
-    Tools --> MapsMCP
-    Tools --> SchedulesMCP
-    
-    RedisCheck -->|Hit| JoinGather["Join Gathered Data"]:::process
-    WeatherMCP --> WriteC["Write to Redis"]:::cache
-    MapsMCP --> WriteC
-    SchedulesMCP --> WriteC
-    WriteC --> JoinGather
+    WeatherJoin --> JoinGather["Join Gathered Data"]:::process
+    TransJoin --> JoinGather
+    AccomJoin --> JoinGather
+    ActJoin --> JoinGather
     
     subgraph SequentialPhase ["Sequential Planning Phase"]
         BudgetAgent["Budget Agent"]:::agent
@@ -250,8 +297,10 @@ graph TD
     SaveMem --> TravelerReview["User Review Plan"]:::process
     
     TravelerReview --> Approve{"Is plan approved?"}:::process
-    Approve -->|No| ReplanningAgent["Replanning Agent"]:::agent
-    ReplanningAgent --> Goal
+    Approve -->|No| ReplanningAgent["Replanning Agent<br/>(Context Preservation)"]:::agent
+    ReplanningAgent --> PrefsKeep["Preserve Context<br/>(destination, weather, transport, prefs)"]:::process
+    PrefsKeep --> UpdateOnly["Update only requested changes"]:::process
+    UpdateOnly --> Coord
     
     %% Mocked Booking Layer details
     Approve -->|Yes| BookingAgent["Mocked Booking Agent"]:::agent
@@ -604,7 +653,7 @@ After parallel results are aggregated into the shared `TripContext`, the sequent
 
 | Agent | Trigger | Input | Output |
 |:---|:---|:---|:---|
-| **Replanning Agent** | User rejects plan | Rejection reason + original `TripContext` | Modified `TripContext`, re-enters Stage 1 or 2 |
+| **Replanning Agent** | User rejects plan | Rejection reason + original `TripContext` | Preserves existing context (destination, weather, transport), updates only modified slots, and hands back to Coordinator to re-plan |
 | **Booking Agent** | User approves plan | Final approved `TripContext` | `{ booking_refs: {...}, status: "BOOKED" }` |
 | **Calendar Agent** | Post-booking | Trip dates + user email | Google Calendar events created, confirmation sent |
 
