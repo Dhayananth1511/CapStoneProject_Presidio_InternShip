@@ -128,7 +128,9 @@ graph TD
     
     ItinAgent --> Summarize["Coordinator Agent<br/>(Synthesize markdown plan)"]:::agent
     
-    Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
+    Summarize --> SavePlanned["Save Trip to MongoDB Atlas<br/>(Status: Planned - Awaiting Payment)"]:::process
+    
+    SavePlanned --> HITL{"Human-in-the-Loop Confirmation"}:::process
     
     HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
     ModifyReq --> PreserData["Preserve Context<br/>(Keep destination, weather, transport, prefs)"]:::process
@@ -137,7 +139,7 @@ graph TD
     
     HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Mock reservations & payments)"]:::agent
     
-    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Confirmed)"]:::process
+    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Confirmed - Paid)"]:::process
     
     SaveDB --> Notifications["Dispatch Notifications<br/>(Calendar Sync / Email / Push Alerts)"]:::process
     
@@ -292,7 +294,8 @@ graph TD
     ConfidenceCheck -->|Yes| Comp["Coordinator Agent"]:::agent
     Comp --> LLMFormat["Format via Groq LLM"]:::process
     
-    LLMFormat --> SaveMem["Save Memory States"]:::process
+    LLMFormat --> SavePlannedDB["Save Trip to DB<br/>(Status: Planned - Awaiting Payment)"]:::process
+    SavePlannedDB --> SaveMem["Save Memory States"]:::process
     
     SaveMem --> TravelerReview["User Review Plan"]:::process
     
@@ -304,7 +307,7 @@ graph TD
     
     %% Mocked Booking Layer details
     Approve -->|Yes| BookingAgent["Mocked Booking Agent"]:::agent
-    BookingAgent --> ConfirmDB["Save Booked Trip"]:::process
+    BookingAgent --> ConfirmDB["Save Booked Trip<br/>(Status: Confirmed - Paid)"]:::process
     
     ConfirmDB --> EndApp([End Workflow]):::startEnd
 ```
@@ -661,7 +664,8 @@ After parallel results are aggregated into the shared `TripContext`, the sequent
 
 | Condition | Result |
 |:---|:---|
-| Plan approved + booked successfully | ✅ Trip saved to MongoDB with status `CONFIRMED` |
+| Plan approved + booked successfully | ✅ Trip saved to MongoDB with status `CONFIRMED` (Paid) |
+| Itinerary generated (pre-booking) | 📋 Trip saved to MongoDB with status `PLANNED` (Awaiting Payment) |
 | Budget infeasible after 3 alternatives | ⚠️ Returns alternatives, awaits user budget update |
 | Itinerary confidence check fails | ❌ Graceful error response, session preserved |
 | User cancels mid-flow | Trip saved as `DRAFT` status |
