@@ -1,9 +1,17 @@
 # Travel Planner AI Agent - Capstone Project Documentation
 
-This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. 
+This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating the architectural principles and technologies studied from **Week 1 through Week 5**.
 
 ---
 
+## MAP: Applied Curriculum Topics
+* **Week 1 (Foundations & DSA)**: MongoDB Indexing configuration (`userId`, `tripId`, `status`), schema validations, and Git Branching strategies.
+* **Week 2 (Backend)**: Express.js REST application styled as **MVC structure with Planner Services**, global rates throttling, Morgan logs, JWT validation, and RBAC auth.
+* **Week 3 (Frontend)**: React Single Page Application utilizing Vite, Zustand state, **React Hook Form + Zod input verification** (limited to authentication), caching via **TanStack Query**, and **Chart.js** data visualizations.
+* **Week 4 (DevOps)**: GitHub Actions test loops, Docker container packaging, and infra automation using **Terraform on AWS (EC2 / S3 / CloudFront / Security Groups)**.
+* **Week 5 (Agentic AI)**: Multi-agent coordination (Transport, Accommodation, Budget, and Itinerary agents) orchestrated by a **Coordinator Agent** using **Groq LLM API**, featuring the **Model Context Protocol (MCP)** for standardized tool calling configuration, dual-layer conversation memory, Redis query caching, and human-in-the-loop validation.
+
+---
 
 ## 1. Traveler Workflow
 
@@ -19,41 +27,43 @@ graph TD
     classDef api fill:#f5c2e7,stroke:#f5c2e7,stroke-width:2px,color:#11111b;
     classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
     
-    Traveler([Traveler]):::startEnd --> Auth["Registration / Login<br/>(Form Validation: Hook Form + Zod)"]:::process
-    Auth --> JWTIssue["JWT Token Issued<br/>RBAC Role Assigned (Traveler / Admin)"]:::process
-    JWTIssue --> FetchData["Fetch User Dashboard Data<br/>(TanStack Query caching, API Pagination & Filters)"]:::process
+    Traveler([Traveler]):::startEnd --> Auth["Auth (Zod + Hook Form)"]:::process
+    Auth --> JWTIssue["JWT Issued (RBAC)"]:::process
+    JWTIssue --> FetchData["Fetch User Dashboard Data<br/>(TanStack Query Cache)"]:::process
     
-    FetchData --> Create["Create New Trip Request"]:::process
-    FetchData --> View["View Existing Trips / Delete Trip"]:::process
+    FetchData --> DashboardView{"Select Action"}:::process
+    DashboardView -->|Create Trip| BaseGoal["Conversational Chat Input"]:::process
+    DashboardView -->|Manage Trips| HistoryGroup["History Groups<br/>(Upcoming / Completed / Cancelled / Drafts)"]:::process
     
-    Create --> InputGoal["Natural Language Chat Input<br/>e.g., 'Plan a 5-day trip next weekend from Chennai to Ooty for my family'"]:::process
-    View --> InputGoal
+    HistoryGroup --> DeleteReq["Delete / Cancel Request"]:::process
+    DeleteReq --> ExpressRouter["Express Server Router<br/>(Helmet / CORS / Rate Limiting)"]:::process
     
-    InputGoal --> ExpressRouter["Express.js Server Router<br/>(Rate-limiting, CORS, Helmet, Morgan Logging)"]:::process
+    BaseGoal --> ExpressRouter
     
-    ExpressRouter --> PlannerService["Planner Service Layer<br/>(Separates controller from AI orchestration)"]:::process
-    PlannerService --> FetchMem["Load Memories:<br/>Short-Term Memory (History) & Long-Term Memory (Pref)"]:::process
+    ExpressRouter --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
+    PlannerService --> FetchMem["Load Memory<br/>(Short + Long Term)"]:::process
     
-    FetchMem --> Planner["Trip Planner Agent<br/>(Intent Extraction & Missing Data Check)"]:::agent
+    FetchMem --> Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
     
-    Planner --> CheckData{"Missing critical info?"}:::process
-    CheckData -->|Yes| Clarify["Ask Clarifying Question<br/>(Require traveler input for missing slots)"]:::process
-    Clarify --> InputGoal
+    Planner --> CheckMiss["Missing Info Agent"]:::agent
+    CheckMiss --> CheckData{"Missing critical info?"}:::process
     
-    %% AI Inference & Destination Recommendation
-    CheckData -->|No| DestRec{"Has destination?"}:::process
-    DestRec -->|No| DestAgent["Destination Rec Agent<br/>(Suggest options based on budget / weather / season)"]:::agent
+    CheckData -->|Yes| Clarify["Ask Clarifying Question<br/>(Prompt for missing fields)"]:::process
+    Clarify --> BaseGoal
     
-    DestAgent --> Coordinator["Coordinator Agent<br/>(Splits tasks into parallel and sequential queues)"]:::agent
-    DestRec -->|Yes| Coordinator
+    CheckData -->|No| DestCheck{"Destination present?"}:::process
+    DestCheck -->|No| DestRec["Dest Rec Agent<br/>(Based on weather/budget/history)"]:::agent
+    
+    DestRec --> Coordinator["Coordinator Agent<br/>(MCP Client Agent)"]:::agent
+    DestCheck -->|Yes| Coordinator
     
     %% --- Parallel Agent Execution ---
     subgraph ParallelTasks ["Stage 1: Parallel Data Retrieval"]
-        WeatherAgent["Weather Agent<br/>(Fetch Forecast early)"]:::agent
-        TransAgent["Transport Agent<br/>(Search transit schedules)"]:::agent
-        AccomAgent["Accommodation Agent<br/>(Filter hotels & rates)"]:::agent
-        ActAgent["Activity Agent<br/>(Identify local options)"]:::agent
-        LocalTrans["Local Transport Agent<br/>(Cab & transfer estimates)"]:::agent
+        WeatherAgent["Weather Agent<br/>(Forecast early)"]:::agent
+        TransAgent["Transport Agent<br/>(Transit schedules)"]:::agent
+        AccomAgent["Accom Agent<br/>(Hotels & homestays)"]:::agent
+        ActAgent["Activity Agent<br/>(Attractions & dining)"]:::agent
+        LocalTrans["Local Transport Agent<br/>(Cabs & transfers)"]:::agent
     end
     
     Coordinator --> WeatherAgent
@@ -63,37 +73,37 @@ graph TD
     Coordinator --> LocalTrans
     
     %% Redis Cache Integration
-    ParallelTasks --> CheckCache{"Cache hit in Redis?"}:::cache
-    CheckCache -->|No| MCPRequests["Invoke MCP Tool call interfaces<br/>(API integrations Weather/Maps)"]:::api
+    ParallelTasks --> CheckCache{"Cache Hit in Redis?"}:::cache
+    CheckCache -->|No| MCPRequests["MCP Server Requests<br/>(Weather / Maps MCP)"]:::api
     CheckCache -->|Yes| JoinTasks["Aggregate Parallel Outputs"]:::process
     
-    MCPRequests --> WriteCache["Write Query Data to Redis Cache"]:::cache
+    MCPRequests --> WriteCache["Write to Redis Cache"]:::cache
     WriteCache --> JoinTasks
     
     %% --- Sequential Agent Execution ---
     subgraph SequentialTasks ["Stage 2: Sequential Planning"]
-        BudgetAgent["Budget Agent<br/>(Math breakdowns & 10-15% Emergency calculations)"]:::agent
-        ItinAgent["Itinerary Agent<br/>(Assembles daily Morning/Afternoon/Evening/Night timeline)"]:::agent
+        BudgetAgent["Budget Agent<br/>(Breakdown & Emergency Fund)"]:::agent
+        ItinAgent["Itinerary Agent<br/>(Daily schedule details)"]:::agent
     end
     
     JoinTasks --> BudgetAgent
     BudgetAgent --> ItinAgent
     
-    ItinAgent --> Summarize["Coordinator Agent<br/>(Format Output as unified Markdown plan)"]:::agent
+    ItinAgent --> Summarize["Coordinator Agent<br/>(Synthesize markdown plan)"]:::agent
     
-    Summarize --> HITL{"Human-in-the-Loop Confirmation<br/>'Do you approve this travel plan?'"}:::process
+    Summarize --> HITL{"Human-in-the-Loop Confirmation"}:::process
     
-    HITL -->|Reject| ModifyReq["Modify Requirements & Send Back"]:::process
-    ModifyReq --> Planner
+    HITL -->|Reject| ModifyReq["Modify via Replanning Agent"]:::agent
+    ModifyReq --> BaseGoal
     
-    HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Generate mock reservations, PNRs & mock checkout payment)"]:::agent
+    HITL -->|Approve| BookingSystem["Mocked Booking Agent<br/>(Mock reservations & payments)"]:::agent
     
-    BookingSystem --> SaveDB["Save Booked Trip to MongoDB Atlas<br/>(Status: Booked, Mongoose validations)"]:::process
+    BookingSystem --> SaveDB["Save Trip to MongoDB Atlas<br/>(Status: Booked)"]:::process
     
-    SaveDB --> ScheduleRem["Schedule Reminders (Calendar MCP Server Tool)"]:::process
+    SaveDB --> Notifications["Dispatch Notifications<br/>(Calendar Sync / Email / Push Alerts)"]:::process
     
-    ScheduleRem --> UpdateStatus["Update Trip Status<br/>(Planned ➔ Confirmed ➔ Booked)"]:::process
-    UpdateStatus --> DashboardUpdate([User Dashboard UI Updated]):::startEnd
+    Notifications --> UpdateStatus["Update Trip Status Enums<br/>(Planning ➔ Awaiting Approval ➔ Booked)"]:::process
+    UpdateStatus --> DashboardUpdate([Dashboard Updated]):::startEnd
 ```
 
 ---
@@ -114,9 +124,9 @@ graph TD
     
     subgraph Metrics ["Admin Analytics Panel"]
         PopularDest["Query Popular Destinations & Booked Cities"]:::process
-        Stats["Average Trip Costs & Booking Statistics"]:::process
+        Stats["Average Budget & Trip Duration Statistics"]:::process
         CancelRate["Monitor Trip Cancellation %"]:::process
-        Telemetry["Agent Usage counts, API call logs, & Redis Cache Hit %"]:::process
+        Telemetry["Agent Info, API call stats, Redis Cache Hit %, & Failed Requests"]:::process
     end
     
     DashboardREST --> PopularDest
@@ -146,47 +156,50 @@ graph TD
     classDef error fill:#f38ba8,stroke:#f38ba8,stroke-width:2px,color:#11111b;
     classDef cache fill:#fab387,stroke:#fab387,stroke-width:2px,color:#11111b;
 
-    Goal([User Natural Language Goal]):::startEnd --> Controller["Trip Controller"]:::process
-    Controller --> PlannerService["Planner Service<br/>(Service layer orchestrator)"]:::process
+    Goal([User Goal]):::startEnd --> Controller["Trip Controller"]:::process
+    Controller --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
     
     %% Turn State Memory (Dual-Layer)
-    PlannerService --> FetchMem["Load Memories:<br/>1. Short-Term Memory (Session turn history)<br/>2. Long-Term Memory (User history & preferences)"]:::process
+    PlannerService --> FetchMem["Load Memories:<br/>1. Short-Term Memory (Session turn history)<br/>2. Long-Term Memory (User profiles & preferences)"]:::process
     
     FetchMem --> Planner["Trip Planner Agent<br/>(Orchestrator Brain)"]:::agent
     Planner --> Parse["Decompose Goal & Parse Intent"]:::process
     
     %% Inference slot checks
-    Parse --> CheckData{"Missing critical info?<br/>(Dest, Dates, Budget, Traveler counts)"}:::process
+    Parse --> CheckData["Missing Information Agent<br/>(Detail Slot validation check)"]:::agent
+    CheckData --> CheckDest{"Missing critical info?"}:::process
     
-    CheckData -->|Yes| InferSlots{"Can infer missing fields?<br/>(e.g., 'weekend' = Sat/Sun, 'family' = 2+ travelers)"}:::process
+    CheckDest -->|Yes| InferSlots{"Can infer missing fields?<br/>(e.g., 'weekend' = Sat/Sun, 'family' = 2+ travelers)"}:::process
     InferSlots -->|Yes| UpdateSlots["Populate state with inferred parameters"]:::process
     InferSlots -->|No| Clarify["Ask user only for missing fields<br/>(Maintain current state context)"]:::process
     Clarify --> Goal
     
     %% Destination recommendation logic
     UpdateSlots --> DestCheck{"Is destination missing?"}:::process
-    CheckData -->|No| DestCheck
+    CheckDest -->|No| DestCheck
     
-    DestCheck -->|Yes| DestAgent["Destination Recommendation Agent<br/>(Recommend locations based on season & budget constraints)"]:::agent
-    DestCheck -->|No| Coord["Coordinator Agent<br/>(Triggers Hybrid Orchestration Schedule)"]:::agent
+    DestCheck -->|Yes| DestAgent["Destination Rec Agent<br/>(Recommend locations based on season & budget constraints)"]:::agent
+    DestCheck -->|No| Coord["Coordinator Agent<br/>(Initializes Hybrid Orchestration)"]:::agent
     DestAgent --> Coord
     
     %% Hybrid Parallel / Sequential Stage
     subgraph ParallelPhase ["Parallel Gathering Phase"]
-        WeatherAgent["Weather Agent<br/>(Query forecast early to inform stays)"]:::agent
-        TransAgent["Transport Agent<br/>(Identify transport options: bus/train)"]:::agent
-        AccomAgent["Accommodation Agent<br/>(Identify lodgings)"]:::agent
-        ActAgent["Activity Agent<br/>(Match sights & timings)"]:::agent
+        WeatherAgent["Weather Agent<br/>(Check forecasts for rain warnings)"]:::agent
+        TransAgent["Transport Agent<br/>(Bus/Train transit lookups)"]:::agent
+        AccomAgent["Accommodation Agent<br/>(Search stays)"]:::agent
+        ActAgent["Activity Agent<br/>(Sights, restaurants, & events)"]:::agent
     end
     
     Coord --> ParallelPhase
     
     ParallelPhase --> RedisCheck{"Check caches in Redis"}:::cache
+    
+    %% Replanning flow integration hook
     RedisCheck -->|Miss| Tools["Invoke Standardized MCP Protocols"]:::tool
     
     subgraph LCTools ["MCP Tool Connections"]
-        WeatherMCP["Weather MCP Server"]:::tool
-        MapsMCP["Maps MCP Server"]:::tool
+        WeatherMCP["Weather MCP (Rain Alert Alerts)"]:::tool
+        MapsMCP["Maps MCP (Distance / Route)"]:::tool
         SchedulesMCP["Transit Schedules MCP (Mocked)"]:::tool
     end
     
@@ -205,7 +218,7 @@ graph TD
         CheckBudget{"Is specified budget<br/>impossible?"}:::process
         AltBudget["Suggest cost-saving alternatives<br/>(Hostels, sleeper train, public transport)"]:::error
         
-        ItinAgent["Itinerary Agent<br/>(Draft Morning/Afternoon/Evening/Night itinerary)"]:::agent
+        ItinAgent["Itinerary Agent<br/>(Draft morning, afternoon, evening, & night scheduling)"]:::agent
     end
     
     JoinGather --> BudgetAgent
@@ -216,10 +229,10 @@ graph TD
     
     %% Confidence Checks
     ItinAgent --> ConfidenceCheck{"Do all coordinates & dates validate?"}:::process
-    ConfidenceCheck -->|No| ErrorHandle["Return zero-hallucination error message"]:::error
+    ConfidenceCheck -->|No| ErrorHandle["Error Handler<br/>(API Failure Retries / Fallbacks / Graceful Notice)"]:::error
     ErrorHandle --> EndGrace([Graceful Terminate]):::startEnd
     
-    ConfidenceCheck -->|Yes| Comp["Coordinator Agent<br/>(Synthesize markdown for review)"]:::agent
+    ConfidenceCheck -->|Yes| Comp["Coordinator Agent<br/>(Grounding check: do not hallucinate)"]:::agent
     Comp --> LLMFormat["Format final unified outline details using Groq LLM"]:::process
     
     LLMFormat --> SaveMem["Update Short-Term Session & Long-Term Memory Stats"]:::process
@@ -227,11 +240,11 @@ graph TD
     SaveMem --> TravelerReview["Traveler reviews details: budget breakdown, weather & plans"]:::process
     
     TravelerReview --> Approve{"Is plan approved?"}:::process
-    Approve -->|No| Modify["Modify requirements (Retain conversation state)"]:::process
-    Modify --> Goal
+    Approve -->|No| ReplanningAgent["Replanning Agent<br/>(Update affected segments only)"]:::agent
+    ReplanningAgent --> Goal
     
     %% Mocked Booking Layer details
-    Approve -->|Yes| BookingAgent["Mocked Booking Agent<br/>(Generate mocked PNRs, stay checks & checkout logs)"]:::agent
+    Approve -->|Yes| BookingAgent["Booking Agent (Mocked)<br/>(Generate mocked PNRs, stay checks & checkouts)"]:::agent
     BookingAgent --> ConfirmDB["Save Trip to MongoDB Atlas<br/>(Status: Booked)"]:::process
     
     ConfirmDB --> EndApp([End Workflow]):::startEnd
@@ -349,19 +362,29 @@ graph TD
         %% Sub-agents cluster
         subgraph agents ["AI Agent Cluster (Agentic AI - Week 5)"]
             TripPlannerAgent["Trip Planner Agent (Brain)"]:::backend
+            MissingInfoAgent["Missing Info Agent"]:::backend
+            DestRecAgent["Destination Rec Agent"]:::backend
+            WeatherAgent["Weather Agent"]:::backend
             TransAgent["Transport Agent (Bus/Train)"]:::backend
             AccomAgent["Accommodation Agent"]:::backend
+            ActAgent["Activity Agent"]:::backend
             BudAgent["Budget Agent"]:::backend
             ItinAgent["Itinerary Agent"]:::backend
             BookingAgent["Booking Agent (Mocked Engine)"]:::backend
+            ReplanningAgent["Replanning Agent"]:::backend
         end
         
         AIPlanner --> TripPlannerAgent
+        TripPlannerAgent --> MissingInfoAgent
+        TripPlannerAgent --> DestRecAgent
+        TripPlannerAgent --> WeatherAgent
         TripPlannerAgent --> TransAgent
         TripPlannerAgent --> AccomAgent
+        TripPlannerAgent --> ActAgent
         TripPlannerAgent --> BudAgent
         TripPlannerAgent --> ItinAgent
         TripPlannerAgent --> BookingAgent
+        TripPlannerAgent --> ReplanningAgent
         
         TransAgent --> Coord["Coordinator Agent"]:::backend
         AccomAgent --> Coord
@@ -380,7 +403,7 @@ graph TD
         
         subgraph MemStores ["Dual-Layer Memory Store"]
             ST_Memory[("Short-Term Memory<br/>(Session turn history in MongoDB)")]:::db
-            LT_Memory[("Long-Term Memory<br/>(User travel profiles in MongoDB)")]:::db
+            LT_Memory[("Long-Term Memory<br/>(User preferences, past trips, hotel/transit presets)")]:::db
         end
     end
 
@@ -428,7 +451,59 @@ graph TD
 
 ---
 
-## 6. Tech Stack
+## 6. Functional Execution Scenarios (Simulated Outputs)
+
+To demonstrate how the senior architect design performs in practice, the following sections show simulated responses produced by the Agent cluster.
+
+### A. Itinerary Agent Output
+The Itinerary Agent schedules day-by-day routines structured by timeframe. It factors in checking schedules, travel delays, weather advisories (redirecting to indoor attractions if rain alerts prompt), and daily spend caps.
+
+```markdown
+# 5-Day Vacation in Ooty (Traveler Count: 2)
+### Status: Draft | Month: October | Weather Note: Moderate Clear Skies
+
+## Day 1: Chennai to Ooty Transition & Arrival
+* **08:00 AM - 11:30 AM | Travel Time (Transit)**
+  * Transit: Rail departure from Chennai Central to Ooty foothills (Mettupalayam).
+  * Estimated Cost: ₹1,200 (2 Tickets, Sleeper Option Alternative)
+* **11:30 AM - 12:00 PM | Hotel Check-in**
+  * Activity: Check-in at Ooty Vista Inn.
+  * Travel Time: 20 mins cab transfer from terminal station.
+* **12:00 PM - 01:30 PM | Dining (Lunch suggestion)**
+  * Restaurant: Garden View Cafe (Local experiences, veg focus).
+  * Opening Hours: 11:00 AM - 10:00 PM | Estimated Cost: ₹600
+* **01:30 PM - 03:00 PM | Relaxation & Unpacking**
+  * Accommodation Note: Hotel amenities tour.
+* **03:00 PM - 05:30 PM | Afternoon Sightseeing**
+  * Destination: Government Botanical Garden.
+  * Timings: 07:00 AM - 06:30 PM | Entry Fee: ₹100 for 2 adults.
+  * Weather Consideration: Clear Skies, open air activity highly recommended.
+* **05:30 PM - 07:30 PM | Evening Activity**
+  * Destination: Ooty Tea Factory & Museum Museum.
+  * Timings: 09:00 AM - 07:00 PM | Ticket Cost: ₹50
+* **08:00 PM - 09:30 PM | Dinner**
+  * Restaurant: Mountain Retreat Dining.
+  * Estimated Cost: ₹800
+* **Day 1 Total Estimated Cost**: ₹2,750 (Excluding hotel block room reservation)
+```
+
+### B. Budget Agent Expense Report
+The Budget Agent analyzes all estimated costs compiled by the parallel agents and outputs a strict audit report including an emergency buffer.
+
+| Expense Category | Item Details | Estimated Cost |
+|:---|:---|:---:|
+| **Transport** | Transit train fares (Coimbatore/Mettupalayam rail connection) | ₹1,800 |
+| **Hotel** | 4 Nights at Ooty Vista Inn (Stays class accommodation) | ₹8,500 |
+| **Food / Dining** | Meal allowances, breakfast packages, local recommendations | ₹4,000 |
+| **Activities** | Entry tickets, botanical gardens, tea estate slots | ₹3,500 |
+| **Local Transport** | Station transfer cabs, local auto charges | ₹2,500 |
+| **Emergency Fund** | 10% Reserve Buffer calculated for local disruptions | ₹2,030 |
+| **Grand Total** | Summary of all categories including emergency fund | **₹22,330** |
+| **Remaining Budget** | Safety variance (based on base limit of ₹30,000) | **₹7,670** |
+
+---
+
+## 7. Tech Stack
 
 | Layer | Technology | Purpose | Free Tier Status |
 |:------|:-----------|:--------|:-----------------|
