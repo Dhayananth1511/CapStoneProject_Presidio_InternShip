@@ -1,6 +1,6 @@
 # Travel Planner AI Agent - Capstone Project Documentation
 
-This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating architectural principles and technologies from **Week 1 through Week 5** — demonstrating a production-ready, multi-agent AI system backed by MCP tool calling, dual-layer memory, Redis caching, and AWS cloud infrastructure.
+This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating architectural principles and technologies demonstrating a production-ready, multi-agent AI system backed by MCP tool calling, dual-layer memory, Redis caching, and AWS cloud infrastructure.
 
 ---
 
