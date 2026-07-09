@@ -24,7 +24,7 @@ graph TD
     FetchData --> Create["Create New Trip Request"]:::process
     FetchData --> View["View Existing Trips / Delete Trip"]:::process
     
-    Create --> InputGoal["User enters Goal Input<br/>e.g., 'Plan a 5-day trip to Manali for 2 people within ₹30,000'"]:::process
+    Create --> InputGoal["User enters Goal Input (includes Destination)<br/>e.g., 'Plan a 5-day trip to Manali for 2 people within ₹30,000'"]:::process
     View --> InputGoal
     
     InputGoal --> ExpressRouter["Express.js Server Router<br/>Rate-limiting via express-rate-limit<br/>Morgan/Winston Session Logging"]:::process
@@ -33,18 +33,16 @@ graph TD
     PlannerService --> FetchMem["Load Turn History from Conversation Memory"]:::process
     
     FetchMem --> Orchestrator["Coordinator Agent<br/>(MCP Client Agent utilizing Memory context)"]:::agent
-    Orchestrator --> ParseIntent["Understand User Intent & Requirements"]:::process
+    Orchestrator --> ParseIntent["Understand User Intent & Input Requirements"]:::process
     ParseIntent --> SplitTasks["Break Input into Sub-Tasks"]:::process
     
-    SplitTasks --> DestAgent["Destination Agent<br/>Select ideal location options"]:::agent
-    SplitTasks --> TransAgent["Transport Agent<br/>Plan transit connections"]:::agent
+    SplitTasks --> TransAgent["Transport Agent<br/>Plan transit connections to destination"]:::agent
     SplitTasks --> AccomAgent["Accommodation Agent<br/>Search hotels & homestays"]:::agent
     
-    DestAgent --> BudgetJS["Deterministic JS Budget Function<br/>(Math calculation & limit validation)"]:::process
-    TransAgent --> BudgetJS
-    AccomAgent --> BudgetJS
+    TransAgent --> BudgetAgent["Budget Agent<br/>(Estimate costs & breakdown)"]:::agent
+    AccomAgent --> BudgetAgent
     
-    BudgetJS --> ItinAgent["Itinerary Agent<br/>Assemble scheduling sequence"]:::agent
+    BudgetAgent --> ItinAgent["Itinerary Agent<br/>Assemble scheduling sequence"]:::agent
     
     ItinAgent --> Coordinator["Coordinator Agent<br/>(Aggregates agent data)"]:::agent
     
@@ -117,20 +115,19 @@ graph TD
     CheckAmb -->|Yes| Clarify["Ask Clarifying Question<br/>(Require Traveler Input)"]:::process
     Clarify --> Goal
     
-    %% Sequential Execution
-    CheckAmb -->|No| DestAgent["1. Destination Agent<br/>(Select destination options)"]:::agent
-    DestAgent --> TransAgent["2. Transport Agent<br/>(Plan planes / trains / buses transit)"]:::agent
-    TransAgent --> AccomAgent["3. Accommodation Agent<br/>(Hotels & homestays recommendations)"]:::agent
+    %% Sequential Execution of Sub-Agents
+    CheckAmb -->|No| TransAgent["1. Transport Agent<br/>(Plan planes / trains / buses transit)"]:::agent
+    TransAgent --> AccomAgent["2. Accommodation Agent<br/>(Hotels & homestays recommendations)"]:::agent
     
-    %% Deterministic JavaScript Budget instead of AI
-    AccomAgent --> BudgetJS["4. Deterministic JS function<br/>(Calculate accurate total cost)"]:::process
+    %% Budget Agent
+    AccomAgent --> BudgetAgent["3. Budget Agent<br/>(Estimate and verify expenses)"]:::agent
     
     %% Edge Case: Insufficient Budget
-    BudgetJS --> CheckBudget{"Is budget sufficient<br/>for destination?"}:::process
-    CheckBudget -->|No| AltProp["Suggest alternatives & details<br/>(Insufficient budget flow)"]:::error
+    BudgetAgent --> CheckBudget{"Is budget sufficient<br/>for destination?"}:::process
+    CheckBudget -->|No| AltProp["Suggest cheaper stay/transport alternatives<br/>(Insufficient budget flow)"]:::error
     AltProp --> Goal
     
-    CheckBudget -->|Yes| ItinAgent["5. Itinerary Agent<br/>(Assemble daily scheduling)"]:::agent
+    CheckBudget -->|Yes| ItinAgent["4. Itinerary Agent<br/>(Assemble daily scheduling)"]:::agent
     
     %% Tool Calling
     ItinAgent --> Tools["Orchestrate tool requests via Model Context Protocol"]:::tool
@@ -269,25 +266,25 @@ graph TD
         PlannerService["Planner Service<br/>(Core Business Logic Handler)"]:::backend
         RBAC --> PlannerService
         
-        BudgetJS["Deterministic Budget Calculator<br/>(Deterministic JS functions)"]:::backend
-        PlannerService --> BudgetJS
-        
         AIPlanner["AI Agent Orchestrator (LangChain / MCP Client)"]:::backend
         PlannerService --> AIPlanner
         
         %% Sub-agents cluster
         subgraph agents ["AI Agent Cluster (Agentic AI - Week 5)"]
-            DestAgent["Destination Agent"]:::backend
             TransAgent["Transport Agent"]:::backend
+            AccomAgent["Accommodation Agent"]:::backend
+            BudAgent["Budget Agent"]:::backend
             ItinAgent["Itinerary Agent"]:::backend
         end
         
-        AIPlanner --> DestAgent
         AIPlanner --> TransAgent
+        AIPlanner --> AccomAgent
+        AIPlanner --> BudAgent
         AIPlanner --> ItinAgent
         
-        DestAgent --> Coord["Coordinator Agent"]:::backend
-        TransAgent --> Coord
+        TransAgent --> Coord["Coordinator Agent"]:::backend
+        AccomAgent --> Coord
+        BudAgent --> Coord
         ItinAgent --> Coord
     end
 
