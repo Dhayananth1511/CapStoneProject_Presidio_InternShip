@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    // "target" tells TypeScript what JavaScript version to compile to.
+    // ES2020 is widely supported by Node.js 14+ — safe choice.
+    "target": "ES2020",
+
+    // "module" defines how files import each other.
+    // "commonjs" is Node.js's style: require() and module.exports
+    "module": "commonjs",
+
+    // Built-in JavaScript features we're allowed to use (Promise, Map, etc.)
+    "lib": ["ES2020"],
+
+    // "outDir" is where compiled JavaScript files get written.
+    // When we run "npm run build", TypeScript → JavaScript lands in dist/
+    "outDir": "./dist",
+
+    // "rootDir" is where our TypeScript source files are.
+    // Everything inside src/ gets compiled.
+    "rootDir": "./src",
+
+    // "strict" enables ALL strict type checks at once.
+    // This catches more errors early — always turn this on!
+    "strict": true,
+
+    // Lets us use default imports from CommonJS modules
+    // e.g. import express from 'express' instead of import * as express from 'express'
+    "esModuleInterop": true,
+
+    // Skip type-checking node_modules — they're already compiled, speeds up builds
+    "skipLibCheck": true,
+
+    // Prevents Windows/Mac file casing bugs (import 'User' vs 'user')
+    "forceConsistentCasingInFileNames": true,
+
+    // Lets us import .json files directly in TypeScript
+    "resolveJsonModule": true,
+
+    // Helps editors (VS Code) navigate to source files when debugging
+    "sourceMap": true
+  },
+  "include": ["src/**/*"],   // Only compile files inside src/
+  "exclude": ["node_modules", "dist"]  // Never compile these
+}
