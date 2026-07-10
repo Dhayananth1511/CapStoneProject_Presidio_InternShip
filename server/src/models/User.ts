@@ -8,6 +8,8 @@ export interface IUser extends Document {
   password: string;
   role: 'traveler' | 'admin';
   refreshToken?: string;
+  googleAccessToken?: string;
+  googleRefreshToken?: string;
   longTermMemory: string; // Plain English summary of user's core travel preferences
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +36,8 @@ const UserSchema = new Schema<IUser>(
       default: 'traveler',
     },
     refreshToken: { type: String }, // Session validation key
+    googleAccessToken: { type: String },
+    googleRefreshToken: { type: String },
     longTermMemory: {
       type: String,
       default: 'User is a first-time traveler. No preferences recorded yet.',

@@ -5,7 +5,14 @@ import logger from '../utils/logger';
 // Defaults to local Redis on port 6379
 const redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
   maxRetriesPerRequest: 3,
-  lazyConnect: true // Prevent server crash if Redis isn't running yet in development
+  lazyConnect: true, // Prevent server crash if Redis isn't running yet in development
+  retryStrategy(times) {
+    // Only attempt to reconnect 3 times before giving up to avoid log spamming
+    if (times > 3) {
+      return null;
+    }
+    return Math.min(times * 1000, 3000);
+  }
 });
 
 // Listener: Log when Redis successfully attaches

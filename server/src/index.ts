@@ -1,4 +1,11 @@
 import 'dotenv/config'; // Loads .env first before anything else runs
+import dns from 'dns';
+
+// Resolve querySrv ECONNREFUSED by using public DNS servers in development mode
+if (process.env.NODE_ENV !== 'production') {
+  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+}
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -113,7 +120,11 @@ const startServer = async () => {
     await connectDB();
 
     // 2. Connect Redis cache
-    await redis.connect();
+    try {
+      await redis.connect();
+    } catch (redisError: any) {
+      logger.warn(`Redis connect failed: ${redisError.message}. Proceeding without cache.`);
+    }
 
     // 3. Bind Listener port
     app.listen(PORT, () => {
