@@ -549,13 +549,12 @@ graph TD
     MapsMCP --> Places["Google Places API<br/>(Attractions, Restaurants)"]:::api
     MapsMCP --> Distance["Distance Matrix API<br/>(Travel Times)"]:::api
 
-    TransitMCP --> MockBus["Mock Bus Provider<br/>(Simulated)"]:::api
-    TransitMCP --> MockTrain["Mock Train Provider<br/>(Simulated)"]:::api
+    TransitMCP --> Amadeus["Amadeus API & Maps Distance<br/>(Real Flights & Modelled Train/Bus)"]:::api
 
-    BookingMCP --> MockHotel["Mock Hotel Booking<br/>(Simulated)"]:::api
-    BookingMCP --> MockPayment["Mock Payment Gateway<br/>(Simulated)"]:::api
+    BookingMCP --> GooglePlacesLodging["Google Places API<br/>(Real Hotel Searches)"]:::api
+    BookingMCP --> MockPayment["Mock Payment Gateway<br/>(Simulated Booking Confirmation)"]:::api
 
-    CalendarMCP --> GCalendar["Google Calendar API<br/>(Event Sync)"]:::api
+    CalendarMCP --> GCalendar["Google Calendar API<br/>(Real Event Sync via googleapis)"]:::api
 ```
 
 ### MCP Tool Schema (Example — Weather MCP)
@@ -599,10 +598,10 @@ Each MCP tool exposes a strictly typed JSON schema so the LLM can call it determ
 |:---|:---|:---|
 | OpenMeteo Weather | Via MCP | `weather-mcp-server` |
 | Google Maps Geocoding | Via MCP | `maps-mcp-server` |
-| Google Places | Via MCP | `maps-mcp-server` |
+| Google Places (Attractions) | Via MCP | `maps-mcp-server` |
 | Distance Matrix | Via MCP | `maps-mcp-server` |
-| Mock Bus / Train | Via MCP | `transit-mcp-server` |
-| Mock Hotel / Payment | Via MCP | `booking-mcp-server` |
+| Amadeus Flights / Maps Rail | Via MCP | `transit-mcp-server` |
+| Google Places (Lodging) | Via MCP | `booking-mcp-server` |
 | Google Calendar | Via MCP | `calendar-mcp-server` |
 | Groq LLM API | Direct (LangChain) | — |
 | MongoDB Atlas | Direct (Mongoose) | — |
