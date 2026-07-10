@@ -108,7 +108,7 @@ export async function planTrip(
 
   // --- STAGE 1: Parallel Data Retrieval ---
   logger.info('Planner Service: Running parallel agents', { requestId });
-  context = await runParallelAgents(context);
+  context = await runParallelAgents(context, userMessage);
 
   // --- STAGE 2A: Budget Agent ---
   const budgetBreakdown = await runBudgetAgent(context);
