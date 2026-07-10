@@ -215,7 +215,7 @@ graph TD
     
     CheckDest -->|Yes| Clarify["Prompt Missing Fields"]:::process
     Clarify --> Goal
-    CheckDest -->|No (Complete)| Coord["Coordinator Agent"]:::agent
+    CheckDest -->|No| Coord["Coordinator Agent"]:::agent
     
     RoutingDecision -->|recommend_destination| DestAgent["Destination Rec Agent"]:::agent
     DestAgent --> CheckData
