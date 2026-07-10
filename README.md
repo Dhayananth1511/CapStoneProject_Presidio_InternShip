@@ -53,69 +53,63 @@ graph TD
     ExpressRouter --> PlannerService["Planner Service<br/>(Business Logic)"]:::process
     PlannerService --> FetchMem["Load Memory<br/>(Short + Long Term)"]:::process
     
-    FetchMem --> Planner["Trip Planner Agent<br/>(Cognitive Brain)"]:::agent
+    FetchMem --> Planner["Planner Agent / Supervisor<br/>(Dynamic Swarm Supervisor)"]:::agent
     
-    Planner --> CheckMiss["Missing Info Agent"]:::agent
+    Planner --> SupervisorRouter{"Supervisor Tool Selection<br/>(llama3-8b router)"}:::process
+    
+    SupervisorRouter -->|validate_trip_inputs| CheckMiss["Missing Info Agent"]:::agent
     CheckMiss --> CheckData{"Missing critical info?"}:::process
     
     CheckData -->|Yes| Clarify["Ask Clarifying Question<br/>(Prompt for missing fields)"]:::process
     Clarify --> BaseGoal
     
-    CheckData -->|No| DestCheck{"Destination present?"}:::process
-    DestCheck -->|No| DestRec["Dest Rec Agent<br/>(Based on weather/budget/history)"]:::agent
+    CheckData -->|No| Coordinator["Coordinator Agent<br/>(MCP Client Agent)"]:::agent
     
-    DestRec --> Coordinator["Coordinator Agent<br/>(MCP Client Agent)"]:::agent
-    DestCheck -->|Yes| Coordinator
+    SupervisorRouter -->|recommend_destination| DestRec["Dest Rec Agent<br/>(Suggest destinations)"]:::agent
+    DestRec --> CheckMiss
+    
+    SupervisorRouter -->|orchestrate_and_generate_trip_plan| Coordinator
     
     %% --- Parallel Agent Execution ---
-    subgraph ParallelTasks ["Stage 1: Parallel Data Retrieval & Caching"]
+    subgraph ParallelTasks ["Stage 1: Dynamic LLM-Routed Parallel Agents"]
         %% Weather
-        WeatherAgent["Weather Agent<br/>(Forecast early)"]:::agent --> WeatherCacheCheck{"Redis Check"}:::cache
+        WeatherAgent["Weather Agent<br/>(fetch_weather tool)"]:::agent --> WeatherCacheCheck{"Redis Check"}:::cache
         WeatherCacheCheck -->|Miss| WeatherMCP["Weather MCP Request"]:::api
         WeatherMCP --> WeatherSave["Write to Redis"]:::cache
         WeatherCacheCheck -->|Hit| WeatherOut["Weather Data"]
         WeatherSave --> WeatherOut
         
         %% Transport
-        TransAgent["Transport Agent<br/>(Transit schedules)"]:::agent --> TransCacheCheck{"Redis Check"}:::cache
+        TransAgent["Transport Agent<br/>(fetch_transport tool)"]:::agent --> TransCacheCheck{"Redis Check"}:::cache
         TransCacheCheck -->|Miss| TransMCP["Transit MCP Request"]:::api
         TransMCP --> TransSave["Write to Redis"]:::cache
         TransCacheCheck -->|Hit| TransOut["Transport Data"]
         TransSave --> TransOut
         
         %% Accommodation
-        AccomAgent["Accom Agent<br/>(Hotels & homestays)"]:::agent --> AccomCacheCheck{"Redis Check"}:::cache
+        AccomAgent["Accom Agent<br/>(fetch_accommodation tool)"]:::agent --> AccomCacheCheck{"Redis Check"}:::cache
         AccomCacheCheck -->|Miss| AccomMCP["Hotel MCP Request"]:::api
         AccomMCP --> AccomSave["Write to Redis"]:::cache
         AccomCacheCheck -->|Hit| AccomOut["Accommodation Data"]
         AccomSave --> AccomOut
         
         %% Activity
-        ActAgent["Activity Agent<br/>(Attractions & dining)"]:::agent --> ActCacheCheck{"Redis Check"}:::cache
+        ActAgent["Activity Agent<br/>(fetch_activities tool)"]:::agent --> ActCacheCheck{"Redis Check"}:::cache
         ActCacheCheck -->|Miss| ActMCP["Places MCP Request"]:::api
         ActMCP --> ActSave["Write to Redis"]:::cache
         ActCacheCheck -->|Hit| ActOut["Activity Data"]
         ActSave --> ActOut
-        
-        %% Local Transport
-        LocalTrans["Local Transport Agent<br/>(Cabs & transfers)"]:::agent --> LocalCacheCheck{"Redis Check"}:::cache
-        LocalCacheCheck -->|Miss| LocalMCP["Distance MCP Request"]:::api
-        LocalMCP --> LocalSave["Write to Redis"]:::cache
-        LocalCacheCheck -->|Hit| LocalOut["Local Transport Data"]
-        LocalSave --> LocalOut
     end
     
-    Coordinator --> WeatherAgent
-    Coordinator --> TransAgent
-    Coordinator --> AccomAgent
-    Coordinator --> ActAgent
-    Coordinator --> LocalTrans
+    Coordinator -->|fetch_weather| WeatherAgent
+    Coordinator -->|fetch_transport| TransAgent
+    Coordinator -->|fetch_accommodation| AccomAgent
+    Coordinator -->|fetch_activities| ActAgent
     
     WeatherOut --> JoinTasks["Aggregate Parallel Outputs"]:::process
     TransOut --> JoinTasks
     AccomOut --> JoinTasks
     ActOut --> JoinTasks
-    LocalOut --> JoinTasks
     
     %% --- Sequential Agent Execution ---
     subgraph SequentialTasks ["Stage 2: Sequential Planning"]
@@ -211,25 +205,22 @@ graph TD
     %% Turn State Memory (Dual-Layer)
     PlannerService --> FetchMem["Load Memories"]:::process
     
-    FetchMem --> Planner["Planner Agent"]:::agent
-    Planner --> Parse["Decompose Goal"]:::process
+    FetchMem --> Planner["Planner Agent / Supervisor"]:::agent
     
-    %% Inference slot checks
-    Parse --> CheckData["Missing Info Agent"]:::agent
+    %% Supervisor Dynamic routing via tool selection
+    Planner --> RoutingDecision{"Supervisor Tool Caller"}:::process
+    
+    RoutingDecision -->|validate_trip_inputs| CheckData["Missing Info Agent"]:::agent
     CheckData --> CheckDest{"Missing info?"}:::process
     
-    CheckDest -->|Yes| InferSlots["Infer Missing Fields"]:::process
-    InferSlots -->|Yes| UpdateSlots["Update Parameters"]:::process
-    InferSlots -->|No| Clarify["Prompt Missing Fields"]:::process
+    CheckDest -->|Yes| Clarify["Prompt Missing Fields"]:::process
     Clarify --> Goal
+    CheckDest -->|No (Complete)| Coord["Coordinator Agent"]:::agent
     
-    %% Destination recommendation logic
-    UpdateSlots --> DestCheck{"Is dest missing?"}:::process
-    CheckDest -->|No| DestCheck
+    RoutingDecision -->|recommend_destination| DestAgent["Destination Rec Agent"]:::agent
+    DestAgent --> CheckData
     
-    DestCheck -->|Yes| DestAgent["Destination Rec Agent"]:::agent
-    DestCheck -->|No| Coord["Coordinator Agent"]:::agent
-    DestAgent --> Coord
+    RoutingDecision -->|orchestrate_and_generate_trip_plan| Coord["Coordinator Agent"]:::agent
     
     %% Hybrid Parallel / Sequential Stage
     subgraph ParallelPhase ["Parallel Gathering Phase"]
@@ -311,6 +302,14 @@ graph TD
     
     ConfirmDB --> EndApp([End Workflow]):::startEnd
 ```
+
+### Supervisor Delegation & Dynamic Tool Orchestration Model
+In this architecture, rather than checking logic via a hardcoded controller script, the **Planner Agent** functions as the central **Supervisor Agent** that binds child agents as schema-level **LangChain Tools** to direct conversational execution:
+- **`validate_trip_inputs`**: Dynamically called if any slot (destination, dates, travelers, budget) is missing. Delegates execution to the `MissingInfoAgent` to capture conversation parameters.
+- **`recommend_destination`**: Dynamically called when no destination is provided to run the `DestinationRecAgent` for options.
+- **`orchestrate_and_generate_trip_plan`**: Dynamically called when parameters are fully complete to execute the trip generation swarm.
+
+Once the planning step is active, the orchestrator delegates parallel data collection. The **Coordinator Agent** executes an **LLM tool router** which binds the actual tool schemas of the parallel swarm. The LLM decides exactly which MCP tools (`fetch_weather`, `fetch_transport`, `fetch_accommodation`, `fetch_activities`) need to be invoked based on the traveler's inputs. This dynamic routing reduces external API costs and optimizes round-trip times by only executing modified parameters.
 
 ---
 
