@@ -1,15 +1,20 @@
-// Planner Agent — the "brain" that reads the raw user message and extracts
-// structured trip parameters. It uses the Groq LLM to parse natural language
-// like "I want to go to Manali for 5 days with ₹25,000 next month" into
-// a clean TripContext object with destination, dates, budget, etc.
+// Planner Agent — The swarm Supervisor.
+// Rather than using static controller steps, the Planner Agent acts as a Supervisor model,
+// extracting user inputs and dynamically selecting which child agent tool to route to.
 
 import { ChatGroq } from '@langchain/groq';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { runMissingInfoAgent } from './missingInfoAgent';
+import { runDestinationRecAgent } from './destinationRecAgent';
+import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
+import { runBudgetAgent } from './budgetAgent';
+import { runItineraryAgent } from './itineraryAgent';
+import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama3-8b-8192', // Fast, free, good for structured extraction
-  temperature: 0.1, // Low temperature = deterministic, consistent outputs
+  model: 'llama3-8b-8192', // Fast model for slots and supervisor routing
+  temperature: 0.1,
 });
 
 export interface TripContext {
@@ -37,12 +42,24 @@ export interface TripContext {
   conversationHistory: Array<{ role: string; content: string }>;
 }
 
+export interface PlannerAgentResult {
+  context: TripContext;
+  status: 'NEEDS_INFO' | 'PLANNED' | 'ERROR';
+  clarifyingQuestion?: string;
+  plan?: string;
+  budgetFeasible?: boolean;
+  budgetAlternatives?: string[];
+}
+
 export async function runPlannerAgent(
   userMessage: string,
   context: TripContext,
   longTermMemory: string
-): Promise<TripContext> {
-  const systemPrompt = `You are a travel planning assistant. Extract trip parameters from the user's message.
+): Promise<PlannerAgentResult> {
+  logger.info('Supervisor: Extracting slot parameters from user message', { sessionId: context.sessionId });
+
+  // Step 1: Parameter Slot Extraction
+  const extractionPrompt = `You are a travel planning assistant. Extract trip parameters from the user's message.
 Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
 {
   "destination": "string or empty",
@@ -57,30 +74,134 @@ Return ONLY valid JSON with this exact structure (leave fields empty string or 0
 User's travel history context: ${longTermMemory || 'No history yet.'}
 Current extracted params: ${JSON.stringify(context.input)}`;
 
-  const response = await llm.invoke([
-    new SystemMessage(systemPrompt),
+  const extractionResponse = await llm.invoke([
+    new SystemMessage(extractionPrompt),
     new HumanMessage(userMessage),
   ]);
 
+  let updatedInput = { ...context.input };
   try {
-    // Extract JSON from LLM response
-    const jsonMatch = response.content.toString().match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in response');
-    
-    const extracted = JSON.parse(jsonMatch[0]);
-    
-    // Merge with existing context — don't overwrite non-empty fields unless new value provided
-    return {
-      ...context,
-      input: {
+    const jsonMatch = extractionResponse.content.toString().match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const extracted = JSON.parse(jsonMatch[0]);
+      // Merge values (do not overwrite with empty values)
+      updatedInput = {
         ...context.input,
         ...Object.fromEntries(
           Object.entries(extracted).filter(([_, v]) => v !== '' && v !== 0 && (Array.isArray(v) ? v.length > 0 : true))
-        ),
-      },
-    };
-  } catch {
-    // If LLM returns malformed JSON, return context unchanged and let Missing Info Agent handle it
-    return context;
+        )
+      };
+    }
+  } catch (err) {
+    logger.warn('Failed to parse json slots inside Supervisor extractor');
   }
+
+  let updatedContext: TripContext = {
+    ...context,
+    input: updatedInput
+  };
+
+  // Step 2: Supervisor delegation using Tool Binding
+  const supervisorPrompt = `You are the lead travel coordinator supervisor. Examine the current trip input parameters and choose the appropriate child agent tool.
+
+Current trip variables: ${JSON.stringify(updatedContext.input)}
+
+Delegation Guidelines:
+1. If any critical variables (destination, start_date, end_date, budget_inr, travelers) are missing or 0, you MUST delegate to "validate_trip_inputs".
+2. If destination is empty/missing, you can call "recommend_destination".
+3. If all trip parameters are present and complete, delegate to "orchestrate_and_generate_trip_plan" to build the travel itinerary.
+
+You must invoke exactly one tool.`;
+
+  const supervisorWithTools = llm.bindTools([
+    {
+      name: 'validate_trip_inputs',
+      description: 'Analyzes inputs, identifies missing slots, and generates helpful questions for missing dates/budget/travelers.'
+    },
+    {
+      name: 'recommend_destination',
+      description: 'Triggers when no destination is chosen, presenting selection lists to the user.'
+    },
+    {
+      name: 'orchestrate_and_generate_trip_plan',
+      description: 'Triggers when all parameters are ready, coordinating concurrent API requests, safety checks, and printing the itinerary.'
+    }
+  ]);
+
+  const supervisorResponse = await supervisorWithTools.invoke([
+    new SystemMessage(supervisorPrompt),
+    new HumanMessage('Delegate the next workflow executor tool call.')
+  ]);
+
+  const toolCalls = supervisorResponse.tool_calls || [];
+  const selectedTool = toolCalls[0]?.name || 'validate_trip_inputs';
+
+  logger.info(`Supervisor: Delegating task execution to tool: ${selectedTool}`);
+
+  // Flow A: Check for missing info
+  if (selectedTool === 'validate_trip_inputs') {
+    const checkResult = await runMissingInfoAgent(updatedContext);
+    if (!checkResult.complete) {
+      updatedContext.status = 'DRAFT';
+      return {
+        context: updatedContext,
+        status: 'NEEDS_INFO',
+        clarifyingQuestion: checkResult.clarifyingQuestion
+      };
+    }
+    // If missing info is complete, trigger plan generation instead
+  }
+
+  // Flow B: Suggest a destination
+  if (selectedTool === 'recommend_destination') {
+    const recommendation = await runDestinationRecAgent(updatedContext, longTermMemory);
+    updatedContext.input.destination = recommendation.selectedDestination;
+
+    // Validate parameters again after completing destination recommend list
+    const checkResult = await runMissingInfoAgent(updatedContext);
+    if (!checkResult.complete) {
+      updatedContext.status = 'DRAFT';
+      return {
+        context: updatedContext,
+        status: 'NEEDS_INFO',
+        clarifyingQuestion: checkResult.clarifyingQuestion
+      };
+    }
+  }
+
+  // Flow C: Run scheduling swarm (Parallel Retrieve + Budget + Itinerary + Synthesize)
+  logger.info('Supervisor: Executing full swarm generation flow');
+
+  // Trigger parallel API data-retrievals dynamically routed by the coordinator LLM
+  updatedContext = await runParallelAgents(updatedContext, userMessage);
+
+  // Evaluate budget feasibility programmatically
+  const budgetBreakdown = await runBudgetAgent(updatedContext);
+  updatedContext.budget = budgetBreakdown;
+
+  if (!budgetBreakdown.is_feasible) {
+    updatedContext.status = 'PLANNED';
+    return {
+      context: updatedContext,
+      status: 'PLANNED',
+      budgetFeasible: false,
+      budgetAlternatives: budgetBreakdown.alternatives
+    };
+  }
+
+  // Generate day-by-day JSON schedule
+  const itinerary = await runItineraryAgent(updatedContext);
+  updatedContext.itinerary = itinerary;
+
+  // Synthesize final Markdown planner presentation
+  const formattedPlan = await synthesizeTripPlan(updatedContext);
+  updatedContext.formattedPlan = formattedPlan;
+  updatedContext.status = 'PLANNED';
+
+  return {
+    context: updatedContext,
+    status: 'PLANNED',
+    plan: formattedPlan,
+    budgetFeasible: true
+  };
 }
