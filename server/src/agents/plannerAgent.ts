@@ -134,7 +134,23 @@ You must invoke exactly one tool.`;
   ]);
 
   const toolCalls = supervisorResponse.tool_calls || [];
-  const selectedTool = toolCalls[0]?.name || 'validate_trip_inputs';
+  let selectedTool = toolCalls[0]?.name || 'validate_trip_inputs';
+
+  // Defensive validation guard: Ensure critical fields exist before executing plan coordination.
+  // This prevents LLM tool-calling hallucinations from crashing the downstream MCP APIs.
+  const fieldsToCheck = [
+    updatedContext.input.destination,
+    updatedContext.input.start_date,
+    updatedContext.input.end_date,
+    updatedContext.input.budget_inr,
+    updatedContext.input.travelers
+  ];
+  const hasMissingCriticalFields = fieldsToCheck.some(field => field === undefined || field === '' || field === 0);
+
+  if (selectedTool === 'orchestrate_and_generate_trip_plan' && hasMissingCriticalFields) {
+    logger.warn('Supervisor hallucinated plan generation but critical fields are missing. Overriding selection to validation.');
+    selectedTool = 'validate_trip_inputs';
+  }
 
   logger.info(`Supervisor: Delegating task execution to tool: ${selectedTool}`);
 
@@ -143,13 +159,14 @@ You must invoke exactly one tool.`;
     const checkResult = await runMissingInfoAgent(updatedContext);
     if (!checkResult.complete) {
       updatedContext.status = 'DRAFT';
+      const question = checkResult.clarifyingQuestion || 'Could you please provide the missing travel details?';
+      updatedContext.conversationHistory.push({ role: 'assistant', content: question });
       return {
         context: updatedContext,
         status: 'NEEDS_INFO',
-        clarifyingQuestion: checkResult.clarifyingQuestion
+        clarifyingQuestion: question
       };
     }
-    // If missing info is complete, trigger plan generation instead
   }
 
   // Flow B: Suggest a destination
@@ -161,10 +178,12 @@ You must invoke exactly one tool.`;
     const checkResult = await runMissingInfoAgent(updatedContext);
     if (!checkResult.complete) {
       updatedContext.status = 'DRAFT';
+      const question = checkResult.clarifyingQuestion || 'Could you please provide the missing travel details?';
+      updatedContext.conversationHistory.push({ role: 'assistant', content: question });
       return {
         context: updatedContext,
         status: 'NEEDS_INFO',
-        clarifyingQuestion: checkResult.clarifyingQuestion
+        clarifyingQuestion: question
       };
     }
   }
@@ -181,6 +200,8 @@ You must invoke exactly one tool.`;
 
   if (!budgetBreakdown.is_feasible) {
     updatedContext.status = 'PLANNED';
+    const altMessage = `Your requested budget is too low. Alternatives suggesting: ${(budgetBreakdown.alternatives || []).join(', ')}`;
+    updatedContext.conversationHistory.push({ role: 'assistant', content: altMessage });
     return {
       context: updatedContext,
       status: 'PLANNED',
@@ -197,6 +218,9 @@ You must invoke exactly one tool.`;
   const formattedPlan = await synthesizeTripPlan(updatedContext);
   updatedContext.formattedPlan = formattedPlan;
   updatedContext.status = 'PLANNED';
+
+  // Push assistant response to conversation history to retain context
+  updatedContext.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${formattedPlan}` });
 
   return {
     context: updatedContext,
