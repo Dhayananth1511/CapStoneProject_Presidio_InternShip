@@ -1,41 +1,44 @@
-// Weather Agent — fetches forecast data and checks the Redis cache first.
-// Cache key is destination+date range. TTL is 6 hours because weather
-// forecasts don't change that rapidly. This saves OpenMeteo API calls.
+// Weather Agent — exposes a LangChain tool to fetch forecast data with Redis caching.
+// Cache TTL is 6 hours to save OpenMeteo API calls.
 
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import redis from '../config/redis';
 import { getWeatherForecast } from '../mcp-servers/weatherMCP';
 import logger from '../utils/logger';
 
-export async function runWeatherAgent(
-  destination: string,
-  start_date: string,
-  end_date: string
-): Promise<{ forecast: any[] }> {
-  // Redis key format: weather:Chennai:2025-10-15:2025-10-20
-  const cacheKey = `weather:${destination}:${start_date}:${end_date}`;
+export const weatherTool = tool(
+  async ({ destination, start_date, end_date }) => {
+    const cacheKey = `weather:${destination}:${start_date}:${end_date}`;
 
-  try {
-    // Check cache first — if it's there, use it (avoids external API call)
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      logger.debug('Cache HIT — weather', { cacheKey });
-      return JSON.parse(cached);
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        logger.debug('Cache HIT — weather tool', { cacheKey });
+        return cached; // Return string format for the LLM
+      }
+    } catch {
+      logger.warn('Redis unavailable, bypassing weather cache');
     }
-  } catch {
-    // Redis is down — continue without cache, directly call MCP
-    logger.warn('Redis unavailable, bypassing weather cache');
+
+    logger.debug('Cache MISS — weather tool fetching from MCP', { cacheKey });
+    const weatherData = await getWeatherForecast(destination, start_date, end_date);
+
+    try {
+      await redis.setex(cacheKey, 21600, JSON.stringify(weatherData));
+    } catch {
+      logger.warn('Could not write weather to Redis cache');
+    }
+
+    return JSON.stringify(weatherData);
+  },
+  {
+    name: 'fetch_weather',
+    description: 'Fetch the weather forecast for a destination city within a start and end date range.',
+    schema: z.object({
+      destination: z.string().describe('The destination city name'),
+      start_date: z.string().describe('Starting travel date (YYYY-MM-DD)'),
+      end_date: z.string().describe('Ending travel date (YYYY-MM-DD)'),
+    }),
   }
-
-  // Cache miss — fetch from OpenMeteo via MCP
-  logger.debug('Cache MISS — fetching weather from MCP', { cacheKey });
-  const weatherData = await getWeatherForecast(destination, start_date, end_date);
-
-  try {
-    // Store in Redis with 6-hour TTL (21600 seconds)
-    await redis.setex(cacheKey, 21600, JSON.stringify(weatherData));
-  } catch {
-    logger.warn('Could not write weather to Redis cache');
-  }
-
-  return weatherData;
-}
+);
