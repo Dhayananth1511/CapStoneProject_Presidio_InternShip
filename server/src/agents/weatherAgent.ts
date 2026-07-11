@@ -13,7 +13,6 @@ const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: 'llama-3.1-8b-instant', // Fast, low-latency reasoning model for micro-agent tasks
   temperature: 0.3,
-  maxRetries: 5,
 });
 
 export const weatherTool = tool(

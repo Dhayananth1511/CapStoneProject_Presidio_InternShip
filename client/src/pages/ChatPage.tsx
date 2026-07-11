@@ -108,23 +108,30 @@ export default function ChatPage() {
   // Mutation for sending chat messages to the Planner Agent Swarm
   const chatMutation = useMutation({
     mutationFn: async (payload: { message: string; tripId?: string }) => {
-      setActiveStep('Supervisor Routing & Slot Extraction...');
-      await new Promise((r) => setTimeout(r, 600));
+      const steps = [
+        'Supervisor Routing & Slot Extraction...',
+        'Running Programmatic Context Validations...',
+        'Coordinating MCP Parallel Retrieval (Weather, Hotels, Transport)...',
+        'Performing Budget Calibration & Conflict Checks...',
+        'Generating Day-by-Day Itinerary Layout...'
+      ];
 
-      setActiveStep('Running Programmatic Context Validations...');
-      await new Promise((r) => setTimeout(r, 550));
+      let currentStepIndex = 0;
+      setActiveStep(steps[currentStepIndex]);
 
-      setActiveStep('Coordinating MCP Parallel Retrieval (Weather, Hotels, Transport)...');
-      await new Promise((r) => setTimeout(r, 900));
+      const interval = setInterval(() => {
+        if (currentStepIndex < steps.length - 1) {
+          currentStepIndex++;
+          setActiveStep(steps[currentStepIndex]);
+        }
+      }, 1200);
 
-      setActiveStep('Performing Budget Calibration & Conflict Checks...');
-      await new Promise((r) => setTimeout(r, 600));
-
-      setActiveStep('Generating Day-by-Day Itinerary Layout...');
-      await new Promise((r) => setTimeout(r, 600));
-
-      const res = await api.post('/trips/plan', payload);
-      return res.data;
+      try {
+        const res = await api.post('/trips/plan', payload);
+        return res.data;
+      } finally {
+        clearInterval(interval);
+      }
     },
     onSuccess: (data) => {
       setActiveStep(null);
@@ -191,10 +198,17 @@ export default function ChatPage() {
   const rejectMutation = useMutation({
     mutationFn: async (reason: string) => {
       setActiveStep('Replanning Agent: Clearing Selective Stale Contexts...');
-      await new Promise((r) => setTimeout(r, 650));
-      setActiveStep('Recycling Swarm Pipelines & Re-calculating...');
-      const res = await api.post(`/trips/${tripId}/reject`, { reason });
-      return res.data;
+      
+      const interval = setInterval(() => {
+        setActiveStep('Recycling Swarm Pipelines & Re-calculating...');
+      }, 1000);
+
+      try {
+        const res = await api.post(`/trips/${tripId}/reject`, { reason });
+        return res.data;
+      } finally {
+        clearInterval(interval);
+      }
     },
     onSuccess: (data) => {
       setActiveStep(null);

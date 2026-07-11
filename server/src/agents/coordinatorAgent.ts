@@ -14,14 +14,12 @@ const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: 'llama-3.3-70b-versatile',
   temperature: 0.5,
-  maxRetries: 5,
 });
 
 const routerLlm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: 'llama-3.1-8b-instant', // Fast model used for dynamic tool routing
   temperature: 0.1,
-  maxRetries: 5,
 });
 
 const modelWithTools = routerLlm.bindTools([

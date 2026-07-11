@@ -93,8 +93,12 @@ export async function getTransportOptions(
       const originIata = getIataCode(origin);
       const destIata = getIataCode(destination);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+
       const flightUrl = `https://api.aviationstack.com/v1/flights?access_key=${apiKey}&dep_iata=${originIata}&arr_iata=${destIata}&flight_date=${travel_date}`;
-      const flightRes = await fetch(flightUrl);
+      const flightRes = await fetch(flightUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const flightData: any = await flightRes.json();
 
       if (flightData.data && flightData.data.length > 0) {

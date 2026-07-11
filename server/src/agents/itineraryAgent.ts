@@ -10,7 +10,6 @@ const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
   model: 'llama-3.3-70b-versatile', // Bigger model for complex scheduling task
   temperature: 0.4,
-  maxRetries: 5,
 });
 
 export async function runItineraryAgent(context: TripContext): Promise<{ days: any[]; notes: string }> {
