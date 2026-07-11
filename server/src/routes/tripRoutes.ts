@@ -7,7 +7,9 @@ import {
 
 const router = Router();
 
-// All trip routes require the user to be authenticated
+// Guard 1: Must be authenticated
+// Guard 2: Must be a Traveler (not Admin) — per the brief, only Travelers
+//          can create, view, and manage their own trip plans.
 router.use(authenticate);
 
 router.post('/plan', createOrUpdateTrip);

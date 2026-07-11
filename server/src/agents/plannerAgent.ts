@@ -13,6 +13,7 @@ import { runBudgetAgent } from './budgetAgent';
 import { runItineraryAgent } from './itineraryAgent';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
+import { validateTripDates, clampTravelers, clampBudget } from '../utils/inputSanitizer';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -89,7 +90,8 @@ Crucial Rules:
 2. If the user mentions a relative date like "15th july", format it as "${currentYear}-07-15" using the Reference Year ${currentYear}.
 3. If you can determine the trip duration (e.g., "5-day trip") and have the start_date (e.g., "${currentYear}-07-15"), please calculate and populate the end_date accordingly (e.g., 5 days from July 15 is "${currentYear}-07-20").
 4. If the user asks to adjust the dates, shorten the trip, or reduce the duration (e.g. "Reduce duration of trip by 1 or 2 days" or "shorten dates"), you must compute a new end_date by subtracting the specified number of days from the current end_date (for example, if current end_date is "2026-07-23" and user requests to reduce by 1 day, you must output "2026-07-22").
-5. Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
+5. The "destination" must be a concrete, specific city, town, or tourist spot (like "Manali", "Shimla", "Gulmarg", "Ooty", "Goa"). If the user specifies a general region, category, environment, or description (like "snow hill station", "beach side", "mountains", "desert"), do NOT put it in destination. Instead, add it to the "interests" array (e.g., ["snow hill station"]) and leave "destination" as an empty string ("").
+6. Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
 {
   "destination": "string or empty",
   "origin": "string or empty",  
@@ -132,14 +134,45 @@ ${recentHistory || '(No history yet)'}
     input: updatedInput
   };
 
+  // --- Programmatic Input Clamping (applied AFTER LLM extraction, BEFORE supervisor routing) ---
+  // These guards cannot be bypassed by the LLM because they run on the extracted output.
+  if (updatedContext.input.travelers !== undefined) {
+    const { value, warning } = clampTravelers(updatedContext.input.travelers);
+    if (warning) logger.warn('Travelers clamped', { original: updatedContext.input.travelers, clamped: value });
+    updatedContext.input.travelers = value;
+  }
+  if (updatedContext.input.budget_inr !== undefined && updatedContext.input.budget_inr !== 0) {
+    const { value, warning } = clampBudget(updatedContext.input.budget_inr);
+    if (warning) logger.warn('Budget clamped', { original: updatedContext.input.budget_inr, clamped: value });
+    updatedContext.input.budget_inr = value;
+  }
+
+  // --- Date Sanity Check ---
+  if (updatedContext.input.start_date && updatedContext.input.end_date) {
+    const dateCheck = validateTripDates(updatedContext.input.start_date, updatedContext.input.end_date);
+    if (!dateCheck.valid) {
+      logger.warn('Date validation failed', { reason: dateCheck.reason });
+      // Clear invalid dates so the missingInfoAgent will prompt the user to re-enter them
+      updatedContext.input.start_date = undefined;
+      updatedContext.input.end_date = undefined;
+      const errorMsg = `⚠️ ${dateCheck.reason} Please provide valid travel dates.`;
+      updatedContext.conversationHistory.push({ role: 'assistant', content: errorMsg });
+      return {
+        context: updatedContext,
+        status: 'NEEDS_INFO',
+        clarifyingQuestion: errorMsg,
+      };
+    }
+  }
+
   // Step 2: Supervisor delegation using Tool Binding
   const supervisorPrompt = `You are the lead travel coordinator supervisor. Examine the current trip input parameters and choose the appropriate child agent tool.
 
 Current trip variables: ${JSON.stringify(updatedContext.input)}
 
 Delegation Guidelines:
-1. If any critical variables (destination, origin, start_date, end_date, budget_inr, travelers) are missing or 0, you MUST delegate to "validate_trip_inputs".
-2. If destination is empty/missing, you can call "recommend_destination".
+1. If the destination parameter is missing, empty, or not concrete (e.g. general description), you MUST delegate to "recommend_destination" so the Destination Recommendation Agent can suggest top spots.
+2. If the destination is present, but any other critical variables (origin, start_date, end_date, budget_inr, travelers) are missing or 0, you MUST delegate to "validate_trip_inputs".
 3. If all trip parameters (destination, origin, start_date, end_date, budget_inr, travelers) are present and complete, delegate to "orchestrate_and_generate_trip_plan" to build the travel itinerary.
 
 You must invoke exactly one tool.`;
@@ -225,17 +258,27 @@ You must invoke exactly one tool.`;
     const recommendation = await runDestinationRecAgent(updatedContext, longTermMemory);
     updatedContext.input.destination = recommendation.selectedDestination;
 
+    const recommendedListStr = recommendation.recommendedDestinations
+      .map((dest, i) => `${i + 1}. **${dest}**${dest === recommendation.selectedDestination ? ' (Recommended Top Pick)' : ''}`)
+      .join('\n');
+
+    const recommendationMessage = `🌴 **Destination Recommendations**:\n${recommendedListStr}\n\n*Why these?* ${recommendation.reasoning}\n\nI've selected **${recommendation.selectedDestination}** as your temporary destination.`;
+
     // Validate parameters again after completing destination recommend list
     const checkResult = await runMissingInfoAgent(updatedContext);
     if (!checkResult.complete) {
       updatedContext.status = 'DRAFT';
-      const question = checkResult.clarifyingQuestion || 'Could you please provide the missing travel details?';
-      updatedContext.conversationHistory.push({ role: 'assistant', content: question });
+      const clarifyingQ = checkResult.clarifyingQuestion || 'Could you please provide the missing travel details?';
+      const fullResponse = `${recommendationMessage}\n\nTo move forward, **${clarifyingQ}**`;
+      
+      updatedContext.conversationHistory.push({ role: 'assistant', content: fullResponse });
       return {
         context: updatedContext,
         status: 'NEEDS_INFO',
-        clarifyingQuestion: question
+        clarifyingQuestion: fullResponse
       };
+    } else {
+      updatedContext.conversationHistory.push({ role: 'assistant', content: recommendationMessage });
     }
   }
 

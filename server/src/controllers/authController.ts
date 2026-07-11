@@ -1,8 +1,20 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
+import { google } from 'googleapis';
+import crypto from 'crypto';
 import User from '../models/User';
 import logger from '../utils/logger';
+
+// ======================================================
+// Google OAuth2 Client (shared across auth controllers)
+// Redirect URI is the server-side callback endpoint
+// ======================================================
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CALENDAR_CLIENT_ID,
+  process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+  process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:5000/api/auth/google/callback'
+);
 
 // Helper: Signs Access & Refresh tokens
 const generateTokens = (userId: string, role: string) => {
@@ -33,7 +45,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
+
+    // Validate name is non-empty string
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      res.status(400).json({ success: false, message: 'Name must be at least 2 characters.' });
+      return;
+    }
 
     const emailNormalization = email.toLowerCase().trim();
 
@@ -44,12 +62,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create user. Mongoose will automatically trigger password hashing hook
+    // SECURITY: Role is NEVER accepted from the request body.
+    // All self-registered users are always 'traveler'. Admin accounts must be
+    // seeded directly in the database by a system administrator.
     const user = await User.create({
-      name,
+      name: name.trim(),
       email: emailNormalization,
       password,
-      role: role === 'admin' ? 'admin' : 'traveler',
+      role: 'traveler',
     });
 
     const { accessToken, refreshToken } = generateTokens(user.id, user.role);
@@ -192,5 +212,183 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     logger.error(`Logout error: ${error.message}`);
     res.status(500).json({ success: false, message: 'Logout failed.' });
+  }
+};
+
+/**
+ * Google Sign-In Init (PUBLIC) — Generates a Google OAuth2 URL for user authentication.
+ * Scopes: openid + email + profile (NOT calendar — that's a separate flow).
+ * State carries JSON so the callback knows this is a sign-in attempt.
+ */
+export const googleAuthLogin = (_req: Request, res: Response): void => {
+  if (!process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CALENDAR_CLIENT_ID.includes('REPLACE_WITH')) {
+    res.status(503).json({
+      success: false,
+      message: 'Google Sign-In is not configured on this server. Ask the admin to add GOOGLE_CALENDAR_CLIENT_ID to .env.',
+    });
+    return;
+  }
+
+  const state = Buffer.from(JSON.stringify({ type: 'login' })).toString('base64');
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'openid',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ],
+    prompt: 'select_account', // Show account chooser so users can pick their Google account
+    state,
+  });
+
+  logger.info('Google Sign-In URL generated');
+  res.json({ success: true, authUrl });
+};
+
+/**
+ * Google Calendar OAuth Init (PROTECTED) — Links an authenticated user's Google Calendar.
+ * Requires the user to already be logged in (authenticate middleware).
+ */
+export const googleOAuthInit = (req: Request, res: Response): void => {
+  if (!process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CALENDAR_CLIENT_ID.includes('REPLACE_WITH')) {
+    res.status(503).json({ success: false, message: 'Google Calendar integration is not configured. Add GOOGLE_CALENDAR_CLIENT_ID to .env.' });
+    return;
+  }
+
+  const state = Buffer.from(JSON.stringify({ type: 'calendar', userId: req.user?.userId })).toString('base64');
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: ['https://www.googleapis.com/auth/calendar.events'],
+    prompt: 'consent',
+    state,
+  });
+
+  logger.info('Google Calendar OAuth redirect initiated', { userId: req.user?.userId });
+  res.json({ success: true, authUrl });
+};
+
+/**
+ * Google OAuth Unified Callback (PUBLIC) — Handles redirect from Google.
+ * Reads the `state` param to determine the flow:
+ *   • type="login"    → Find or create user, issue JWT, redirect to /auth/callback on client
+ *   • type="calendar" → Store tokens on the user record, redirect to /dashboard
+ */
+export const googleOAuthCallback = async (req: Request, res: Response): Promise<void> => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const { code, state: rawState, error } = req.query;
+
+  // Decode the state JSON blob
+  let statePayload: { type: 'login' | 'calendar'; userId?: string } = { type: 'login' };
+  try {
+    statePayload = JSON.parse(Buffer.from(rawState as string, 'base64').toString());
+  } catch {
+    logger.warn('Google OAuth callback received invalid state param');
+  }
+
+  const { type, userId } = statePayload;
+
+  // Handle user denial
+  if (error) {
+    logger.warn('Google OAuth denied by user', { error, type });
+    if (type === 'login') {
+      res.redirect(`${clientUrl}/login?google_auth=denied`);
+    } else {
+      res.redirect(`${clientUrl}/dashboard?google_auth=denied`);
+    }
+    return;
+  }
+
+  if (!code) {
+    res.redirect(`${clientUrl}/login?google_auth=error`);
+    return;
+  }
+
+  try {
+    // Exchange authorization code for tokens
+    const { tokens } = await oauth2Client.getToken(code as string);
+    oauth2Client.setCredentials(tokens);
+
+    // ============================================================
+    // FLOW A: Google Sign-In — authenticate user
+    // ============================================================
+    if (type === 'login') {
+      // Fetch verified profile from Google
+      const oauth2Service = google.oauth2({ version: 'v2', auth: oauth2Client });
+      const { data: profile } = await oauth2Service.userinfo.get();
+
+      if (!profile.email || !profile.id) {
+        logger.error('Google Sign-In returned incomplete profile', { profile });
+        res.redirect(`${clientUrl}/login?google_auth=error`);
+        return;
+      }
+
+      // Find existing user by Google ID or email (link account if user registered manually before)
+      let user = await User.findOne({
+        $or: [{ googleId: profile.id }, { email: profile.email.toLowerCase() }],
+      });
+
+      if (!user) {
+        // First-time Google Sign-In: create a new user account
+        // Use a cryptographically random password hash — the user can never know this password
+        const randomPassword = crypto.randomBytes(32).toString('hex');
+        user = await User.create({
+          name: profile.name || profile.email.split('@')[0],
+          email: profile.email.toLowerCase(),
+          password: randomPassword,
+          role: 'traveler',
+          googleId: profile.id,
+          googleAccessToken: tokens.access_token || '',
+          googleRefreshToken: tokens.refresh_token || '',
+        });
+        logger.info('New user created via Google Sign-In', { email: profile.email });
+      } else {
+        // Existing user: link Google ID if not already linked
+        if (!user.googleId) user.googleId = profile.id;
+        user.googleAccessToken = tokens.access_token || '';
+        if (tokens.refresh_token) user.googleRefreshToken = tokens.refresh_token;
+      }
+
+      // Issue JWT session tokens
+      const { accessToken, refreshToken } = generateTokens(user.id, user.role);
+      user.refreshToken = refreshToken;
+      await user.save();
+
+      logger.info('Google Sign-In successful', { userId: user.id, email: user.email });
+
+      // Redirect to a client-side callback page that will store the token
+      const params = new URLSearchParams({
+        accessToken,
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+      res.redirect(`${clientUrl}/auth/callback?${params.toString()}`);
+      return;
+    }
+
+    // ============================================================
+    // FLOW B: Google Calendar Link — store tokens on existing user
+    // ============================================================
+    if (!userId) {
+      res.redirect(`${clientUrl}/dashboard?google_auth=error`);
+      return;
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      googleAccessToken: tokens.access_token || '',
+      googleRefreshToken: tokens.refresh_token || '',
+    });
+
+    logger.info('Google Calendar tokens stored successfully', { userId });
+    res.redirect(`${clientUrl}/dashboard?google_auth=success`);
+
+  } catch (err: any) {
+    logger.error('Google OAuth callback failed', { error: err.message, type });
+    if (type === 'login') {
+      res.redirect(`${clientUrl}/login?google_auth=error`);
+    } else {
+      res.redirect(`${clientUrl}/dashboard?google_auth=error`);
+    }
   }
 };

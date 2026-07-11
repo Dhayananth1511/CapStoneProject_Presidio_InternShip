@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { register, login, refresh, logout } from '../controllers/authController';
+import { register, login, refresh, logout, googleOAuthInit, googleOAuthCallback, googleAuthLogin } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -37,5 +37,13 @@ router.post('/register', registerValidator, register);
 router.post('/login', loginValidator, login);
 router.post('/refresh', refresh);
 router.post('/logout', authenticate, logout);
+
+// Google Sign-In Init — Public endpoint to start Google OAuth flow
+router.get('/google-login', googleAuthLogin);
+
+// Google Calendar OAuth — init requires auth (to know which user to link)
+// Callback is public (Google redirects here with code)
+router.get('/google', authenticate, googleOAuthInit);
+router.get('/google/callback', googleOAuthCallback);
 
 export default router;

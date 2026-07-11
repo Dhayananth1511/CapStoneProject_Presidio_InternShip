@@ -8,9 +8,10 @@ export interface IUser extends Document {
   password: string;
   role: 'traveler' | 'admin';
   refreshToken?: string;
+  googleId?: string;          // Google account unique ID — set on Google Sign-In
   googleAccessToken?: string;
   googleRefreshToken?: string;
-  longTermMemory: string; // Plain English summary of user's core travel preferences
+  longTermMemory: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -29,13 +30,15 @@ const UserSchema = new Schema<IUser>(
     },
     // select: false means this field will NOT be returned by default queries.
     // This protects us from accidentally leaks of password hashes to the frontend.
-    password: { type: String, required: true, minlength: 8, select: false },
+    // NOT required: Google Sign-In users receive a random hash and never set a real password.
+    password: { type: String, required: false, minlength: 8, select: false },
     role: {
       type: String,
       enum: ['traveler', 'admin'],
       default: 'traveler',
     },
-    refreshToken: { type: String }, // Session validation key
+    refreshToken: { type: String },
+    googleId: { type: String, sparse: true, index: true }, // sparse: only index documents that have this field
     googleAccessToken: { type: String },
     googleRefreshToken: { type: String },
     longTermMemory: {

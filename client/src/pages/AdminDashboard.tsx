@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -684,8 +685,8 @@ export default function AdminDashboard() {
                     Formatted Travel Itinerary
                   </h3>
                   {selectedTrip.formattedPlan ? (
-                    <div className="prose prose-invert max-w-none text-xs text-slate-350 space-y-3 leading-relaxed">
-                      <ReactMarkdown>{selectedTrip.formattedPlan}</ReactMarkdown>
+                    <div className="prose prose-invert max-w-none text-xs text-slate-350 space-y-3 leading-relaxed animate-fadeIn">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTrip.formattedPlan}</ReactMarkdown>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-505 italic">No formatted plan or itinerary has been generated for this session yet.</p>

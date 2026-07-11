@@ -34,19 +34,23 @@ export async function runDestinationRecAgent(
 
   try {
     const jsonMatch = response.content.toString().match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON');
+    if (!jsonMatch) throw new Error('No JSON in destination recommendation response');
     const data = JSON.parse(jsonMatch[0]);
-    
+
+    if (!data.destinations?.length || !data.top_pick) {
+      throw new Error('Destination recommendation response was incomplete');
+    }
+
     return {
-      recommendedDestinations: data.destinations || [],
+      recommendedDestinations: data.destinations,
       reasoning: data.reasoning || '',
-      selectedDestination: data.top_pick || data.destinations?.[0] || 'Manali',
+      selectedDestination: data.top_pick || data.destinations[0],
     };
-  } catch {
-    return {
-      recommendedDestinations: ['Goa', 'Manali', 'Jaipur'],
-      reasoning: 'Popular destinations based on budget and season',
-      selectedDestination: 'Goa',
-    };
+  } catch (err) {
+    // Do NOT silently fabricate a destination — surface the failure so the
+    // system asks the user to specify one explicitly (brief: "no fabricated responses")
+    throw new Error(
+      `Destination recommendation failed: ${(err as Error).message}. Please specify a destination directly.`
+    );
   }
 }

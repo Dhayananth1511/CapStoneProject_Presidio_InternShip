@@ -6,6 +6,7 @@ import { ChatGroq } from '@langchain/groq';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { TripContext } from './plannerAgent';
 import { withRetry } from '../utils/retry';
+import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -33,7 +34,17 @@ export async function runReplanningAgent(
     const jsonMatch = response.content.toString().match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON');
     const parsed = JSON.parse(jsonMatch[0]);
-    const changes: string[] = parsed.changes || ['itinerary'];
+    
+    // Allowlist: only accept known, pre-defined change types. Any other value from the LLM is ignored.
+    const ALLOWED_CHANGES = new Set(['destination', 'dates', 'budget', 'accommodation', 'itinerary', 'transport', 'activities']);
+    const rawChanges: string[] = Array.isArray(parsed.changes) ? parsed.changes : ['itinerary'];
+    const changes: string[] = rawChanges.filter((c) => ALLOWED_CHANGES.has(c));
+
+    // If LLM returned all garbage values, fall back to safest default (regenerate itinerary)
+    if (changes.length === 0) {
+      logger.warn('ReplanningAgent: LLM returned no valid change types. Defaulting to itinerary regeneration.', { rawChanges });
+      changes.push('itinerary');
+    }
 
     // Build updated context: clear ONLY the agent outputs that need to be re-run
     const updatedContext = { ...context };
@@ -44,7 +55,15 @@ export async function runReplanningAgent(
       updatedContext.itinerary = undefined;
       updatedContext.formattedPlan = undefined;
     }
-    // Weather and transport are preserved — never re-fetched unless dates/destinations change
+    // If dates changed, invalidate weather/transport/accommodation too
+    if (changes.includes('dates')) {
+      updatedContext.weather = undefined;
+      updatedContext.transport = undefined;
+      updatedContext.accommodation = undefined;
+      updatedContext.itinerary = undefined;
+      updatedContext.formattedPlan = undefined;
+    }
+    // Weather and transport are preserved unless dates/destination change
     
     return { updatedContext, whatChanged: changes };
   } catch {

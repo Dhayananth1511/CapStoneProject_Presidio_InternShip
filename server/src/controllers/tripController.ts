@@ -5,6 +5,7 @@ import { runReplanningAgent } from '../agents/replanningAgent';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
+import { isMessageSafe, validateTripDates } from '../utils/inputSanitizer';
 
 // POST /api/trips/plan — User sends a chat message to plan a trip
 export const createOrUpdateTrip = async (req: Request, res: Response): Promise<void> => {
@@ -12,7 +13,34 @@ export const createOrUpdateTrip = async (req: Request, res: Response): Promise<v
     const { message, tripId } = req.body;
     const userId = req.user!.userId;
 
-    const result = await planTrip(message as string, userId, tripId as string | undefined, (req as any).requestId);
+    // Guard 1: message must be a non-empty string
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      res.status(400).json({ message: 'Message cannot be empty.' });
+      return;
+    }
+
+    // Guard 2: message must not be a prompt injection attack
+    if (!isMessageSafe(message)) {
+      res.status(400).json({ message: 'Your message contains disallowed content. Please describe your travel plans naturally.' });
+      return;
+    }
+
+    // Guard 3: if a tripId is provided it must be a non-empty string (UUID format)
+    if (tripId !== undefined && (typeof tripId !== 'string' || tripId.trim().length === 0)) {
+      res.status(400).json({ message: 'Invalid trip session ID.' });
+      return;
+    }
+
+    // Guard 4: if a tripId is provided, the trip must not already be confirmed/booked
+    if (tripId) {
+      const existingTrip = await Trip.findOne({ sessionId: tripId, userId });
+      if (existingTrip && existingTrip.status === 'CONFIRMED') {
+        res.status(400).json({ message: 'This trip has already been confirmed and booked. Modifications are not allowed on confirmed itineraries.' });
+        return;
+      }
+    }
+
+    const result = await planTrip(message.trim(), userId, tripId as string | undefined, (req as any).requestId);
 
     res.json(result);
   } catch (error) {
@@ -63,6 +91,11 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
       return; 
     }
 
+    if (trip.status === 'CONFIRMED') {
+      res.status(400).json({ message: 'This trip has already been confirmed and booked. Modifications are not allowed on confirmed itineraries.' });
+      return;
+    }
+
     const context = trip.toObject() as any;
     const { updatedContext } = await runReplanningAgent(context, reason as string);
 
@@ -96,7 +129,7 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
 export const getUserTrips = async (req: Request, res: Response): Promise<void> => {
   try {
     const trips = await Trip.find({ userId: req.user!.userId })
-      .select('sessionId status input.destination input.start_date input.end_date input.budget_inr createdAt')
+      .select('sessionId status input.destination input.start_date input.end_date input.budget_inr input.travelers createdAt')
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -123,10 +156,16 @@ export const getTripById = async (req: Request, res: Response): Promise<void> =>
 // DELETE /api/trips/:tripId — Cancel a trip
 export const cancelTrip = async (req: Request, res: Response): Promise<void> => {
   try {
-    await Trip.findOneAndUpdate(
+    const result = await Trip.findOneAndUpdate(
       { sessionId: req.params.tripId, userId: req.user!.userId },
-      { status: 'CANCELLED' }
+      { status: 'CANCELLED' },
+      { new: true }
     );
+    // Return 404 if the trip didn't exist or doesn't belong to this user
+    if (!result) {
+      res.status(404).json({ message: 'Trip not found or already removed.' });
+      return;
+    }
     res.json({ message: 'Trip cancelled' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to cancel trip' });

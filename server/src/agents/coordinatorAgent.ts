@@ -130,14 +130,44 @@ Ensure you populate tool arguments using the current context: destination="${inp
 }
 
 export async function synthesizeTripPlan(context: TripContext): Promise<string> {
-  const response = await withRetry(() => llm.invoke([
-    new SystemMessage(
-      `You are a travel content writer. Create a beautiful, structured markdown travel plan.
-       Include: trip overview, weather summary, transport details, hotel, day-by-day schedule, 
-       budget breakdown table, and packing tips. Use emojis and formatting.`
-    ),
-    new HumanMessage(JSON.stringify(context, null, 2)),
-  ]));
+  const systemPrompt = `You are a travel content writer. Create a beautiful, structured markdown travel plan.
+Include: trip overview, weather summary, transport details, hotel, day-by-day schedule, 
+budget breakdown table, and packing tips. Use emojis and formatting.
+IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.`;
 
-  return response.content.toString();
+  // Retry up to 2 times if the LLM output is insufficient
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const response = await withRetry(() => llm.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(JSON.stringify(context, null, 2)),
+    ]));
+
+    const output = response.content.toString();
+
+    // Content validation: must be substantial and contain structured itinerary markers
+    const isSubstantial = output.length >= 200;
+    const hasDateStructure = /day\s*\d+/i.test(output) || /\*\*day/i.test(output);
+
+    if (isSubstantial && hasDateStructure) {
+      return output;
+    }
+
+    logger.warn(`synthesizeTripPlan output failed content validation (attempt ${attempt}/2)`, {
+      length: output.length,
+      hasDateStructure,
+      preview: output.slice(0, 100),
+    });
+  }
+
+  // Safe fallback: return a minimal but correct plan structure
+  const { destination, start_date, end_date, travelers } = context.input;
+  return `## ✈️ Trip to ${destination}
+
+**Dates:** ${start_date} → ${end_date}  
+**Travelers:** ${travelers}  
+
+> ⚠️ The AI was unable to generate a detailed plan for this trip. Your trip parameters have been saved. Please click **Reject & Replan** to try again, or adjust your travel inputs.
+
+### Summary
+Your trip data has been collected and validated. Use the Interactive Timeline tab on the left to view the day-by-day schedule that was generated.`;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Plane, Calendar, Users, IndianRupee, Eye, ArrowRight, Sparkles, Trash2, CalendarRange } from 'lucide-react';
+import { Plus, Plane, Calendar, Users, IndianRupee, Eye, ArrowRight, Sparkles, Trash2, CalendarRange, AlertTriangle } from 'lucide-react';
 import api from '../lib/axios';
 
 interface TripSummary {
@@ -21,6 +21,7 @@ export default function MyTripsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'DRAFTS' | 'CANCELLED'>('ALL');
+  const [tripToCancel, setTripToCancel] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch traveler's trips list
   const { data, isLoading } = useQuery<{ trips: TripSummary[] }>({
@@ -88,9 +89,7 @@ export default function MyTripsPage() {
   });
 
   const handleCancelTrip = (tripId: string, destination: string) => {
-    if (window.confirm(`Are you sure you want to cancel your trip plan to ${destination || 'this destination'}?`)) {
-      cancelMutation.mutate(tripId);
-    }
+    setTripToCancel({ id: tripId, name: destination || 'this destination' });
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -224,7 +223,7 @@ export default function MyTripsPage() {
                     <Calendar className="h-4 w-4 text-primary shrink-0" />
                     <span>
                       {trip.input.start_date
-                        ? `${new Date(trip.input.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                        ? `${new Date(trip.input.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}${trip.input.end_date ? ` - ${new Date(trip.input.end_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
                         : 'Dates pending'}
                     </span>
                   </div>
@@ -283,6 +282,43 @@ export default function MyTripsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {tripToCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="premium-card rounded-2xl max-w-sm w-full p-6 mx-4 border border-card-border/80 bg-card-bg/95 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber-500">
+              <div className="h-10 w-10 bg-amber-500/10 rounded-xl flex items-center justify-center border border-amber-500/20">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Cancel Trip Plan</h3>
+                <p className="text-[10px] text-slate-400">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-350 leading-normal">
+              Are you sure you want to cancel your trip plan to <span className="font-semibold text-white">{tripToCancel.name}</span>?
+            </p>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => setTripToCancel(null)}
+                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition active:scale-95 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  cancelMutation.mutate(tripToCancel.id);
+                  setTripToCancel(null);
+                }}
+                disabled={cancelMutation.isPending}
+                className="px-3.5 py-2 rounded-lg bg-red-650 hover:bg-red-600 text-xs font-bold text-white transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Plan'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
