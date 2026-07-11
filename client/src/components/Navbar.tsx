@@ -75,13 +75,13 @@ export default function Navbar() {
                   </div>
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-medium text-slate-200">{user.name}</p>
-                    <p className="text-xs text-slate-400 capitalize">{user.role}</p>
+                    <p className="text-xs text-slate-405 capitalize">{user.role}</p>
                   </div>
                 </div>
 
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-350 hover:bg-slate-800 hover:text-red-400 hover:border-red-500/20 active:scale-95 transition"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-350 hover:bg-slate-805 hover:text-red-400 hover:border-red-500/20 active:scale-95 transition"
                   title="Sign Out"
                 >
                   <LogOut className="h-4 w-4" />
@@ -100,20 +100,12 @@ export default function Navbar() {
                 Home
               </Link>
               <Link
-                to="/login?role=traveler"
+                to="/login"
                 className={`text-xs font-semibold tracking-wide transition ${
-                  location.search.includes('role=traveler') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
+                  isActive('/login') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Traveler Login
-              </Link>
-              <Link
-                to="/login?role=admin"
-                className={`text-xs font-semibold tracking-wide transition ${
-                  location.search.includes('role=admin') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Admin Login
+                Login
               </Link>
               <Link
                 to="/register"
