@@ -1,303 +1,675 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
+import {
+  Send,
+  Bot,
+  User,
+  Loader2,
+  Sun,
+  MapPin,
+  Users,
+  IndianRupee,
+  Check,
+  X,
+  AlertTriangle,
+  Sparkles,
+  Building2,
+  Car,
+  CalendarDays,
+  CalendarCheck,
+  ArrowLeft,
+  Clock,
+  Navigation,
+} from 'lucide-react';
 import api from '../lib/axios';
-import { useAuthStore } from '../store/authStore';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  type?: 'plan' | 'question' | 'confirm' | 'text';
 }
 
 export default function ChatPage() {
+  const [searchParams] = useSearchParams();
+  const tripIdParam = searchParams.get('tripId');
+
+  const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Welcome! I am your Swarm Travel Assistant 🗺️. Give me a destination, travel dates, and your budget, and I'll route my specialty agents to assemble a complete itinerary!",
-      type: 'text'
-    }
+      content:
+        "Hi! I'm VoyageFlow, your Lead Travel Supervisor Agent. 🗺️\n\nWhere would you like to travel next? Let me know the destination, dates, budget, or number of travelers to begin!",
+    },
   ]);
-  const [input, setInput] = useState('');
-  const [currentTripId, setCurrentTripId] = useState<string | undefined>();
-  const [waitingForApproval, setWaitingForApproval] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const logout = useAuthStore((s) => s.logout);
-  const user = useAuthStore((s) => s.user);
+  const [tripId, setTripId] = useState<string | undefined>(tripIdParam || undefined);
+  const [activeStep, setActiveStep] = useState<string | null>(null);
+  const [context, setContext] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'inspector' | 'itinerary'>('inspector');
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll on new message
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Swarm agent step indicators during loading state
-  const steps = [
-    'Supervisor extracting slots...',
-    'Coordinator allocating parallel MCP tools...',
-    'Transport / Hotel / Weather tools pulling cache data...',
-    'Budget Agent evaluating feasibility...',
-    'Itinerary Agent drafting day-by-day itineraries...',
-    'Coordinator synthesizing final Markdown presentation...'
-  ];
-
-  useEffect(() => {
-    let interval: any;
-    if (activeStep < steps.length - 1) {
-      interval = setInterval(() => {
-        setActiveStep((s) => s + 1);
-      }, 3000);
-    }
-    return () => clearInterval(interval);
-  }, [activeStep]);
-
-  // Fetch previous trips to display in sidebar
-  const { data: previousTrips, refetch: refetchTrips } = useQuery({
-    queryKey: ['my-trips'],
-    queryFn: () => api.get('/trips').then((r) => r.data.trips),
+  // Fetch existing trip on mount if tripId query param is present
+  const { isLoading: isLoadingTrip } = useQuery({
+    queryKey: ['activeTrip', tripIdParam],
+    queryFn: async () => {
+      if (!tripIdParam) return null;
+      try {
+        const res = await api.get(`/trips/${tripIdParam}`);
+        const trip = res.data.trip;
+        if (trip) {
+          setTripId(trip.sessionId);
+          setContext(trip);
+          if (trip.conversationHistory && trip.conversationHistory.length > 0) {
+            setMessages(trip.conversationHistory);
+          }
+          if (trip.status === 'PLANNED' || trip.status === 'CONFIRMED') {
+            setActiveTab('itinerary');
+          }
+        }
+        return trip;
+      } catch (err) {
+        console.error('Failed to load trip', err);
+        return null;
+      }
+    },
+    enabled: !!tripIdParam,
   });
 
-  const planMutation = useMutation({
-    mutationFn: (message: string) => {
-      setActiveStep(0);
-      return api.post('/trips/plan', { message, tripId: currentTripId }).then((r) => r.data);
+  // Scroll to bottom whenever messages update
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, activeStep]);
+
+  // Mutation for sending chat messages to the Planner Agent Swarm
+  const chatMutation = useMutation({
+    mutationFn: async (payload: { message: string; tripId?: string }) => {
+      setActiveStep('Supervisor Routing & Slot Extraction...');
+      await new Promise((r) => setTimeout(r, 600));
+
+      setActiveStep('Running Programmatic Context Validations...');
+      await new Promise((r) => setTimeout(r, 500));
+
+      setActiveStep('Coordinating MCP Parallel Retrieval (Weather, Hotels, Transport)...');
+      await new Promise((r) => setTimeout(r, 900));
+
+      setActiveStep('Performing Budget Calibration & Conflict Checks...');
+      await new Promise((r) => setTimeout(r, 600));
+
+      setActiveStep('Generating Day-by-Day Itinerary Layout...');
+      await new Promise((r) => setTimeout(r, 600));
+
+      const res = await api.post('/trips/plan', payload);
+      return res.data;
     },
     onSuccess: (data) => {
-      refetchTrips();
-      if (data.status === 'NEEDS_INFO') {
-        setCurrentTripId(data.tripId);
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', content: data.clarifyingQuestion, type: 'question' }
+      setActiveStep(null);
+      if (data.tripId) setTripId(data.tripId);
+      if (data.context) {
+        setContext(data.context);
+        if (data.context.status === 'PLANNED') {
+          setActiveTab('itinerary');
+        }
+      }
+
+      if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: data.clarifyingQuestion },
         ]);
-      } else if (data.status === 'PLANNED') {
-        setCurrentTripId(data.tripId);
-        setWaitingForApproval(true);
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', content: data.plan, type: 'plan' },
+      } else if (data.status === 'PLANNED' && data.plan) {
+        setMessages((prev) => [
+          ...prev,
           {
             role: 'assistant',
-            content: '**Would you like to approve and book this plan?** Click Approve to book flights/hotels and log it directly to your Google Calendar, or explain what you want modified.',
-            type: 'confirm'
+            content: `Here is the curated trip plan for your approval:\n\n${data.plan}`,
           },
         ]);
       }
     },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: () => api.post(`/trips/${currentTripId}/approve`).then((r) => r.data),
-    onSuccess: (data) => {
-      refetchTrips();
-      setWaitingForApproval(false);
-      setMessages((m) => [
-        ...m,
+    onError: (err: any) => {
+      setActiveStep(null);
+      setMessages((prev) => [
+        ...prev,
         {
           role: 'assistant',
-          content: `🎉 **Trip Confirmed!** Your hotel reference is: \`${data.bookingRefs?.hotel}\` and transport ref is \`${data.bookingRefs?.transport}\`. Check your Google Calendar for the scheduled event coordinates!`,
-          type: 'text'
+          content: `⚠️ Planning Agent Error: ${
+            err.response?.data?.message || 'Connection to the agent swarm timed out. Please try again.'
+          }`,
         },
       ]);
     },
   });
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages((m) => [...m, { role: 'user', content: input }]);
+  // Mutation for approving / confirming the trip (HITL Gate)
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      if (!tripId) return;
+      const res = await api.post(`/trips/${tripId}/approve`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `🎉 Awesome! The trip has been successfully approved & confirmed.\n\n🔑 **Booking References:**\n* 🏨 **Hotel:** \`${data.bookingRefs?.hotel}\`\n* ✈️ **Transport:** \`${data.bookingRefs?.transport}\`\n* 📅 **Calendar integration:** Created Google Calendar event (\`${data.bookingRefs?.calendar}\`)`,
+        },
+      ]);
+      if (context) setContext({ ...context, status: 'CONFIRMED', booking: { refs: data.bookingRefs } });
+    },
+    onError: (err: any) => {
+      alert(`Approval error: ${err.message}`);
+    },
+  });
 
-    if (waitingForApproval) {
-      setWaitingForApproval(false);
-      // Trigger rejection logic via replanning endpoint, then re-execute route
-      api.post(`/trips/${currentTripId}/reject`, { reason: input });
-    }
+  // Mutation for rejecting / replanning the trip (HITL rejection)
+  const rejectMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      setActiveStep('Replanning Agent: Clearing Selective Stale Contexts...');
+      await new Promise((r) => setTimeout(r, 650));
+      setActiveStep('Recycling Swarm Pipelines & Re-calculating...');
+      const res = await api.post(`/trips/${tripId}/reject`, { reason });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setActiveStep(null);
+      if (data.context) {
+        setContext(data.context);
+        if (data.context.status === 'PLANNED') {
+          setActiveTab('itinerary');
+        }
+      }
+      if (data.plan) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `🔄 I modified your plan based on your feedback:\n\n${data.plan}`,
+          },
+        ]);
+      }
+    },
+    onError: (err: any) => {
+      setActiveStep(null);
+      alert(`Replanning error: ${err.message}`);
+    },
+  });
 
-    planMutation.mutate(input);
-    setInput('');
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim() || chatMutation.isPending || approveMutation.isPending || rejectMutation.isPending) return;
+
+    const userMsg = message;
+    setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
+    setMessage('');
+
+    chatMutation.mutate({ message: userMsg, tripId });
+  };
+
+  const handleAlternativeSelect = (suggestion: string) => {
+    setMessages((prev) => [...prev, { role: 'user', content: `Adjust my plan: ${suggestion}` }]);
+    chatMutation.mutate({ message: `Adjust plan: ${suggestion}`, tripId });
+  };
+
+  // Re-plan with rejection field
+  const [replanReason, setReplanReason] = useState('');
+  const [showReplanInput, setShowReplanInput] = useState(false);
+
+  const handleReplanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replanReason.trim()) return;
+    setMessages((prev) => [...prev, { role: 'user', content: `Re-plan requested: ${replanReason}` }]);
+    rejectMutation.mutate(replanReason);
+    setReplanReason('');
+    setShowReplanInput(false);
   };
 
   return (
-    <div className="flex h-screen bg-[#0b0c10] text-[#c5c6c7] font-sans">
-      {/* Sidebar - History */}
-      <aside className="w-80 bg-[#1f2833]/20 border-r border-white/5 flex flex-col hidden md:flex">
-        <div className="p-6 border-b border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">✈️</span>
-            <div>
-              <h2 className="text-white font-extrabold text-sm tracking-wide">MY TRIPS</h2>
-              <p className="text-xs text-slate-500">Persisted itineraries</p>
+    <div className="flex h-[calc(100vh-4rem)] flex-col bg-dark-bg md:flex-row">
+      {/* LEFT CANVAS: Chat & Conversation */}
+      <div className="flex flex-1 flex-col border-r border-card-border overflow-hidden">
+        {/* Sub Header back button */}
+        <div className="p-3 bg-slate-950/20 border-b border-card-border flex items-center justify-between">
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to My Trips
+          </Link>
+          {context && (
+            <div className="text-xs font-semibold text-slate-450 uppercase">
+              Planning: <span className="text-slate-200">{context.input?.destination || 'Uncharted'}</span>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* List of past trips */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {previousTrips && previousTrips.length > 0 ? (
-            previousTrips.map((trip: any) => (
+        {/* Chat Window */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {isLoadingTrip ? (
+            <div className="flex justify-center items-center py-20">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            </div>
+          ) : (
+            messages.map((msg, index) => (
               <div
-                key={trip.sessionId}
-                onClick={() => {
-                  setCurrentTripId(trip.sessionId);
-                  api.get(`/trips/${trip.sessionId}`).then((r) => {
-                    const savedPlan = r.data.trip.formattedPlan;
-                    if (savedPlan) {
-                      setMessages([
-                        { role: 'assistant', content: savedPlan, type: 'plan' }
-                      ]);
-                      setWaitingForApproval(trip.status === 'PLANNED');
-                    }
-                  });
-                }}
-                className={`p-3.5 rounded-xl border border-white/5 cursor-pointer transition duration-200 ${
-                  currentTripId === trip.sessionId
-                    ? 'bg-indigo-500/10 border-indigo-500/30'
-                    : 'bg-[#151622]/40 hover:bg-[#151622]/80 hover:border-white/10'
+                key={index}
+                className={`flex items-start gap-3 ${
+                  msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400">
-                    {trip.status}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    {new Date(trip.createdAt).toLocaleDateString()}
-                  </span>
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${
+                    msg.role === 'user'
+                      ? 'bg-primary/10 border-primary/20 text-primary'
+                      : 'bg-indigo-950 border-indigo-800 text-indigo-400'
+                  }`}
+                >
+                  {msg.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                 </div>
-                <h3 className="text-white font-bold text-sm truncate">
-                  {trip.input.destination || 'Unresolved Destination'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 truncate">
-                  Budget: ₹{trip.input.budget_inr?.toLocaleString() || 'N/A'}
-                </p>
+
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-md leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-primary text-white font-medium'
+                      : 'bg-card-bg border border-card-border text-slate-200'
+                  }`}
+                >
+                  {msg.role === 'assistant' ? (
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
+                </div>
               </div>
             ))
-          ) : (
-            <div className="text-center py-8 text-xs text-slate-500 bg-[#151622]/20 rounded-xl border border-dashed border-white/5">
-              No saved trips yet.
-            </div>
           )}
-        </div>
 
-        {/* User Card */}
-        <div className="p-4 bg-[#1f2833]/10 border-t border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-white font-extrabold">
-              {user?.name?.[0]?.toUpperCase() || 'T'}
-            </div>
-            <div>
-              <p className="text-white text-sm font-semibold truncate max-w-36">{user?.name}</p>
-              <p className="text-slate-500 text-[10px] truncate max-w-36">{user?.email}</p>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="p-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-lg transition"
-            title="Sign Out"
-          >
-            🔌
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Workspace */}
-      <main className="flex-1 flex flex-col h-full bg-[#0d0e15] relative">
-        {/* Top Navbar */}
-        <header className="px-6 py-4 border-b border-white/5 bg-[#151622]/60 backdrop-blur-xl flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-extrabold text-white tracking-wide">✈️ Swarm Trip Planner</h1>
-            <p className="text-slate-500 text-xs mt-0.5">Multi-Agent Autonomic Orchestrations</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
-            <span className="text-[#a5a6a7] text-xs font-semibold">Active Agent Swarm Connection</span>
-          </div>
-        </header>
-
-        {/* Chat / Messages Panel */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-4xl px-5 py-4 rounded-2xl text-sm leading-relaxed shadow-lg ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-r from-indigo-700 to-indigo-600 text-white rounded-br-sm'
-                    : 'bg-[#151622]/70 border border-white/5 text-slate-200 rounded-bl-sm'
-                }`}
-              >
-                {msg.type === 'plan' ? (
-                  <div className="prose prose-invert max-w-none text-[#d1d5db] font-sans">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <p>{msg.content}</p>
-                )}
+          {/* Active swarm indicator */}
+          {activeStep && (
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-950 border border-indigo-800 text-indigo-400 animate-spin">
+                <Loader2 className="h-4 w-4" />
               </div>
-            </div>
-          ))}
-
-          {/* Active Agent Swarm steps loading overlay */}
-          {planMutation.isPending && (
-            <div className="flex justify-start">
-              <div className="bg-[#151622]/90 border border-indigo-500/20 px-5 py-4 rounded-2xl shadow-xl w-full max-w-md">
-                <div className="flex items-center gap-3 mb-2.5">
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
-                  <span className="text-white font-bold text-xs">Swarm Agents Dispatching</span>
-                </div>
-                <p className="text-indigo-400 text-xs font-semibold transition-all duration-300">
-                  {steps[activeStep]}
-                </p>
-                <div className="w-full bg-[#0a0a0f] h-1.5 rounded-full mt-3 overflow-hidden">
-                  <div
-                    className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
-                    style={{ width: `${((activeStep + 1) / steps.length) * 100}%` }}
-                  ></div>
-                </div>
+              <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-indigo-950/40 border border-indigo-500/20 text-indigo-300">
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
+                  {activeStep}
+                </span>
               </div>
             </div>
           )}
 
-          {/* HITL Approve / Reject overlay */}
-          {waitingForApproval && (
-            <div className="flex gap-3 justify-center pt-4">
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* HITL Choice Panels */}
+        {context && context.status === 'PLANNED' && !activeStep && (
+          <div className="p-4 border-t border-card-border bg-slate-900/40 backdrop-blur-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5 glow-text">
+                <Sparkles className="h-3.5 w-3.5" />
+                Plan Ready for Approval
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => approveMutation.mutate()}
-                disabled={approveMutation.isPending}
-                className="px-6 py-3 bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all duration-200"
+                disabled={approveMutation.isPending || rejectMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-accent-teal hover:bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition active:scale-95 disabled:opacity-50"
               >
-                {approveMutation.isPending ? 'Confirming with Booking API...' : '✅ Approve & Book'}
+                <Check className="h-4 w-4" />
+                Approve & Confirm
               </button>
+
               <button
-                onClick={() => setInput('I want to modify the plan: ')}
-                className="px-6 py-3 bg-[#1f2833]/80 hover:bg-[#1f2833] text-white font-bold rounded-xl border border-white/5 transition"
+                onClick={() => setShowReplanInput(!showReplanInput)}
+                disabled={approveMutation.isPending || rejectMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 px-4 py-2 text-xs font-bold text-slate-200 transition active:scale-95"
               >
-                ✏️ Request Modifications
+                <X className="h-4 w-4 text-red-400" />
+                Modify Plan
               </button>
             </div>
-          )}
 
-          <div ref={bottomRef} />
+            {showReplanInput && (
+              <form onSubmit={handleReplanSubmit} className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  value={replanReason}
+                  onChange={(e) => setReplanReason(e.target.value)}
+                  placeholder="e.g. Find cheaper hotels, add a tour of Ooty lake on Day 2"
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition hover:bg-primary/95"
+                >
+                  Apply
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Input Form */}
+        <form onSubmit={handleSend} className="p-4 border-t border-card-border bg-slate-950/20 flex gap-2">
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            disabled={chatMutation.isPending || approveMutation.isPending}
+            placeholder={
+              context?.status === 'CONFIRMED'
+                ? 'Trip is confirmed! Ask anything else about this trip...'
+                : 'e.g. Schedule a 3 days hike in Ooty next weekend for under 20k'
+            }
+            className="flex-1 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3.5 text-sm text-slate-200 placeholder-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={chatMutation.isPending || !message.trim()}
+            className="flex items-center justify-center h-12 w-12 rounded-xl bg-primary hover:bg-opacity-95 text-white shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            <Send className="h-5 w-5" />
+          </button>
+        </form>
+      </div>
+
+      {/* RIGHT CANVAS: Shared Swarm Trip Context Inspector & Visual Itinerary Timeline */}
+      <div className="w-full md:w-[460px] bg-slate-950/30 overflow-y-auto flex flex-col border-l border-card-border">
+        {/* Toggle Inspector vs. Interactive Timeline Tabs */}
+        <div className="grid grid-cols-2 border-b border-card-border bg-slate-900/30">
+          <button
+            onClick={() => setActiveTab('inspector')}
+            className={`py-3.5 text-xs font-bold uppercase tracking-wider transition ${
+              activeTab === 'inspector'
+                ? 'border-b-2 border-primary text-white bg-slate-900/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Swarm Inspector
+          </button>
+          <button
+            onClick={() => setActiveTab('itinerary')}
+            className={`py-3.5 text-xs font-bold uppercase tracking-wider transition relative ${
+              activeTab === 'itinerary'
+                ? 'border-b-2 border-primary text-white bg-slate-900/50'
+                : 'text-slate-400 hover:text-slate-200'
+            } ${
+              context?.itinerary?.days && context.status !== 'DRAFT'
+                ? 'after:absolute after:top-2 after:right-12 after:h-2 after:w-2 after:rounded-full after:bg-primary'
+                : ''
+            }`}
+          >
+            Interactive Timeline
+          </button>
         </div>
 
-        {/* Input box bottom */}
-        <footer className="p-4 border-t border-white/5 bg-[#151622]/40 backdrop-blur-xl">
-          <div className="max-w-4xl mx-auto flex gap-3.5">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              disabled={planMutation.isPending}
-              placeholder="Describe your trip details (e.g., Ooty for 4 days next week, budget ₹30,000)..."
-              className="flex-1 px-4 py-3.5 rounded-xl bg-[#0f101a] border border-white/5 text-white placeholder-slate-500 focus:border-indigo-500/40 focus:outline-none transition"
-            />
-            <button
-              onClick={handleSend}
-              disabled={planMutation.isPending || !input.trim()}
-              className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/10"
-            >
-              Send Request
-            </button>
-          </div>
-        </footer>
-      </main>
+        <div className="p-6 flex-1 overflow-y-auto">
+          {!context ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center text-slate-500">
+              <Sparkles className="h-10 w-10 mb-3 text-slate-705 animate-pulse" />
+              <p className="text-sm font-medium">No Active Context</p>
+              <p className="text-xs px-6 mt-1 text-slate-600">
+                Introduce travel requirements in the chat to spin up the agent swarm.
+              </p>
+            </div>
+          ) : activeTab === 'inspector' ? (
+            /* TAB 1: SWARM INSPECTOR DETAILS */
+            <div className="space-y-4">
+              {/* STAGE & STATUS CARD */}
+              <div className="premium-card rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-semibold mb-0.5">TRIP STATUS</p>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        context.status === 'CONFIRMED'
+                          ? 'bg-emerald-500 animate-pulse'
+                          : context.status === 'PLANNED'
+                          ? 'bg-indigo-400'
+                          : 'bg-amber-400'
+                      }`}
+                    />
+                    <span className="font-bold text-sm tracking-wide text-white uppercase">{context.status}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-right text-slate-550 mb-0.5 font-semibold">SESSION ID</p>
+                  <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded">
+                    {context.sessionId.substring(0, 8)}
+                  </span>
+                </div>
+              </div>
+
+              {/* EXTRACTED SLOTS */}
+              <div className="premium-card rounded-xl p-5 space-y-3.5">
+                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                  <MapPin className="h-4.5 w-4.5" /> Checked Parameters
+                </h4>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Destination</span>
+                    <span className="text-xs font-semibold text-slate-200">
+                      {context.input.destination || <em className="text-slate-650">Pending...</em>}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Origin</span>
+                    <span className="text-xs font-semibold text-slate-200">
+                      {context.input.origin || <em className="text-slate-600">Not selected</em>}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Travelers</span>
+                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1">
+                      <Users className="h-3.5 w-3.5 text-primary" />
+                      {context.input.travelers || 0}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5 font-sans">Cap Limit</span>
+                    <span className="text-xs font-semibold text-emerald-450 flex items-center gap-0.5">
+                      <IndianRupee className="h-3.5 w-3.5 text-emerald-500" />
+                      {context.input.budget_inr ? context.input.budget_inr.toLocaleString() : 0}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/60 col-span-2 p-2.5 rounded-lg border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Dates</span>
+                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      <CalendarDays className="h-4.5 w-4.5 text-primary" />
+                      {context.input.start_date || 'YYYY-MM-DD'} – {context.input.end_date || 'YYYY-MM-DD'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* DYNAMIC RETRIEVED DATA */}
+              {context.weather && (
+                <div className="premium-card rounded-xl p-4 space-y-2">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                    <Sun className="h-4.5 w-4.5" /> Meto Weather Feed
+                  </h4>
+                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs">
+                    <p className="text-slate-350 font-medium">
+                      ⛅ **Conditions**: {context.weather.forecast || 'Sunny Skies'}
+                    </p>
+                    <p className="text-slate-500 mt-1">Average Temp: {context.weather.average_temp_c || '24°C'}</p>
+                  </div>
+                </div>
+              )}
+
+              {context.accommodation && (
+                <div className="premium-card rounded-xl p-4 space-y-2">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                    <Building2 className="h-4.5 w-4.5" /> Places Accommodation
+                  </h4>
+                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs">
+                    <p className="font-semibold text-slate-200">{context.accommodation.recommended || 'Premium Resort Stay'}</p>
+                    <p className="text-slate-400 mt-1">Estimated Cost: ₹{context.accommodation.cost_per_night?.toLocaleString() || 'N/A'} / night</p>
+                  </div>
+                </div>
+              )}
+
+              {context.transport && (
+                <div className="premium-card rounded-xl p-4 space-y-2">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                    <Car className="h-4.5 w-4.5" /> Amadeus Transport
+                  </h4>
+                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs space-y-1">
+                    <p className="text-slate-200">🛫 **Best Route**: {context.transport.best_option || 'N/A'}</p>
+                    <p className="text-emerald-450 font-semibold">Price: ₹{context.transport.price?.toLocaleString() || 'N/A'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* BUDGET ASSESSMENT */}
+              {context.budget && (
+                <div className="premium-card rounded-xl p-4 space-y-3">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                    <IndianRupee className="h-4.5 w-4.5" /> Swarm Budget Assessment
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-500 block font-bold">Estimated Total</span>
+                      <span className="text-xs font-bold text-slate-200">
+                        ₹{context.budget.total_estimated_cost?.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-500 block font-bold">Status</span>
+                      <span
+                        className={`text-xs font-bold ${
+                          context.budget.is_feasible ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {context.budget.is_feasible ? 'Feasible' : 'Infeasible'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!context.budget.is_feasible && context.budget.alternatives && (
+                    <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2.5">
+                      <div className="flex gap-1.5 text-red-400 text-xs font-semibold">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <span>Plan exceeds your budget constraint!</span>
+                      </div>
+                      <p className="text-[11px] text-slate-450">
+                        Select one of the alternatives computed by the Budget Agent:
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {context.budget.alternatives.map((altOption: string, idx: number) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleAlternativeSelect(altOption)}
+                            className="w-full text-left bg-slate-900 hover:bg-indigo-950 text-indigo-450 hover:text-indigo-400 border border-indigo-900/30 rounded px-2 md:px-2.5 py-1.5 text-xs transition"
+                          >
+                            💸 {altOption}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* TAB 2: INTERACTIVE TIME LINE ITINERARY */
+            <div className="space-y-6">
+              {!context.itinerary?.days || context.status === 'DRAFT' ? (
+                <div className="text-center py-16 text-slate-500 space-y-3">
+                  <CalendarCheck className="h-10 w-10 mx-auto text-slate-700 animate-pulse" />
+                  <p className="text-sm font-semibold">Itinerary Not Generated Yet</p>
+                  <p className="text-xs px-6 text-slate-650">
+                    Complete all parameter slot details in the chat and run full plan generation.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-8 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-indigo-950">
+                  {context.itinerary.days.map((dayItem: any, idx: number) => (
+                    <div key={idx} className="relative pl-8 space-y-4">
+                      {/* Node point */}
+                      <span className="absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary border-4 border-slate-900" />
+
+                      <div className="premium-card rounded-xl p-4 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-0.5">
+                              Day {dayItem.day} – {dayItem.date || ''}
+                            </span>
+                            <h4 className="text-sm font-bold text-slate-100">{dayItem.title || 'Sightseeing'}</h4>
+                          </div>
+                          {dayItem.daily_total_inr > 0 && (
+                            <span className="text-[10px] font-bold bg-slate-900 border border-slate-800 text-emerald-450 px-2 py-0.5 rounded leading-none">
+                              ₹{dayItem.daily_total_inr.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {dayItem.weather_note && (
+                          <div className="text-[11px] text-slate-450 bg-indigo-950/20 px-2.5 py-1.5 rounded border border-indigo-900/10 italic">
+                            ⛅ {dayItem.weather_note}
+                          </div>
+                        )}
+
+                        {/* Activities list */}
+                        {dayItem.schedule && dayItem.schedule.length > 0 ? (
+                          <div className="space-y-3 pt-2">
+                            {dayItem.schedule.map((action: any, aIdx: number) => (
+                              <div
+                                key={aIdx}
+                                className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 space-y-1.5 hover:border-slate-800 transition"
+                              >
+                                <div className="flex justify-between items-center text-[10px]">
+                                  <span className="font-semibold text-slate-400 flex items-center gap-1">
+                                    <Clock className="h-3 w-3 text-primary" />
+                                    {action.time} ({action.duration_min} min)
+                                  </span>
+                                  {action.cost_inr > 0 && (
+                                    <span className="font-bold text-slate-350">
+                                      ₹{action.cost_inr.toLocaleString()}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs font-medium text-slate-200">{action.activity}</p>
+                                {action.location && (
+                                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block flex items-center gap-0.5">
+                                    <Navigation className="h-2.5 w-2.5 text-primary shrink-0" />
+                                    {action.location}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-550 italic">Relax / leisure schedules</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {context.itinerary.notes && (
+                    <div className="pl-8 relative">
+                      <span className="absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-800 border-4 border-slate-900" />
+                      <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-2 text-xs">
+                        <h4 className="font-bold text-slate-300 uppercase tracking-widest text-[10px]">
+                          Supervisor Tips & Tricks
+                        </h4>
+                        <p className="text-slate-400 leading-relaxed italic">{context.itinerary.notes}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

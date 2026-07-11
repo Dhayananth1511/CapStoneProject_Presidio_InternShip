@@ -1,11 +1,7 @@
-// Zustand global state store for authentication.
-// Zustand is simpler than Redux — just functions that update state.
-// useAuthStore() gives any component access to current user + auth actions.
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export interface User {
+interface User {
   id: string;
   name: string;
   email: string;
@@ -35,6 +31,8 @@ export const useAuthStore = create<AuthState>()(
       },
       isAuthenticated: () => !!get().user,
     }),
-    { name: 'auth-storage' } // Persists to localStorage so login survives page refresh
+    {
+      name: 'auth-storage',
+    }
   )
 );

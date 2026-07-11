@@ -220,12 +220,18 @@ You must invoke exactly one tool.`;
   updatedContext.budget = budgetBreakdown;
 
   if (!budgetBreakdown.is_feasible) {
-    updatedContext.status = 'PLANNED';
-    const altMessage = `Your requested budget is too low. Alternatives suggesting: ${(budgetBreakdown.alternatives || []).join(', ')}`;
-    updatedContext.conversationHistory.push({ role: 'assistant', content: altMessage });
+    updatedContext.status = 'DRAFT';
+    const altMessage = `⚠️ **Budget Constraint Exceeded!**\n\nYour defined travel budget of **₹${updatedContext.input.budget_inr?.toLocaleString()}** is exceeded. The AI agents estimated the minimum trip costs to be **₹${budgetBreakdown.total_cost_inr?.toLocaleString()}**.\n\n### Recommended Suggestions:\n${(budgetBreakdown.alternatives || []).map(alt => `* 💸 ${alt}`).join('\n')}\n\n**What would you like to do?** You can select one of the saving suggestions above in the inspector panel, or reply here to adjust parameters (e.g., increase budget, reduce travelers, or shorten dates).`;
+    
+    const lastMsg = updatedContext.conversationHistory[updatedContext.conversationHistory.length - 1];
+    if (!lastMsg || lastMsg.content !== altMessage) {
+      updatedContext.conversationHistory.push({ role: 'assistant', content: altMessage });
+    }
+    
     return {
       context: updatedContext,
-      status: 'PLANNED',
+      status: 'NEEDS_INFO',
+      clarifyingQuestion: altMessage,
       budgetFeasible: false,
       budgetAlternatives: budgetBreakdown.alternatives
     };

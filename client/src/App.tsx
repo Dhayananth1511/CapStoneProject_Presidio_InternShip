@@ -1,67 +1,53 @@
-import type { ReactNode } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAuthStore } from './store/authStore';
+import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
-import AdminPage from './pages/AdminPage';
+import MyTripsPage from './pages/MyTripsPage';
+import AdminDashboard from './pages/AdminDashboard';
+import './App.css';
 
-// Initialize React Query client
+// Initialize React Query Client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
-      staleTime: 5 * 60 * 1000, // Keep responses cached and fresh for 5 mins
       refetchOnWindowFocus: false,
+      retry: 1,
     },
   },
 });
 
-// Guard: Redirect unauthenticated travelers to login page
-const PrivateRoute = ({ children }: { children: ReactNode }) => {
-  const user = useAuthStore((s) => s.user);
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
-};
-
-// Guard: Redirect non-admins to main dashboard workspace
-const AdminRoute = ({ children }: { children: ReactNode }) => {
-  const user = useAuthStore((s) => s.user);
-  return user?.role === 'admin' ? <>{children}</> : <Navigate to="/dashboard" replace />;
-};
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <ChatPage />
-              </PrivateRoute>
-            }
-          />
-          
-          <Route
-            path="/admin"
-            element={
-              <PrivateRoute>
-                <AdminRoute>
-                  <AdminPage />
-                </AdminRoute>
-              </PrivateRoute>
-            }
-          />
+      <BrowserRouter>
+        <div className="min-h-screen flex flex-col bg-dark-bg text-slate-100 selection:bg-primary/30 selection:text-white">
+          <Navbar />
+          <main className="flex-1">
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
 
-          {/* Root redirect to main dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
+              {/* Protected Traveler Routes */}
+              <Route element={<ProtectedRoute allowedRoles={['traveler']} />}>
+                <Route path="/dashboard" element={<MyTripsPage />} />
+                <Route path="/dashboard/plan" element={<ChatPage />} />
+              </Route>
+
+              {/* Protected Admin Routes */}
+              <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+              </Route>
+
+              {/* Fallback Redirection */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </main>
+        </div>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }
