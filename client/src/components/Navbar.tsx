@@ -25,7 +25,7 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {user && (
+          {user ? (
             <div className="flex items-center gap-6">
               <div className="hidden md:flex items-center gap-4">
                 {user.role === 'traveler' ? (
@@ -88,6 +88,39 @@ export default function Navbar() {
                   <span className="hidden sm:inline">Logout</span>
                 </button>
               </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-5">
+              <Link
+                to="/"
+                className={`text-xs font-semibold tracking-wide transition ${
+                  isActive('/') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Home
+              </Link>
+              <Link
+                to="/login?role=traveler"
+                className={`text-xs font-semibold tracking-wide transition ${
+                  location.search.includes('role=traveler') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Traveler Login
+              </Link>
+              <Link
+                to="/login?role=admin"
+                className={`text-xs font-semibold tracking-wide transition ${
+                  location.search.includes('role=admin') ? 'text-primary' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Admin Login
+              </Link>
+              <Link
+                to="/register"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-primary hover:bg-opacity-90 text-white min-w-[70px] justify-center transition active:scale-95 shadow-md shadow-primary/10"
+              >
+                Register
+              </Link>
             </div>
           )}
         </div>

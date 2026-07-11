@@ -251,7 +251,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-dark-bg md:flex-row">
       
-      {/* LEFT CANVAS: Shared Swarm Trip Context Inspector & Visual Itinerary Timeline (Large Panel) */}
+      {/* LEFT CANVAS: Shared Trip Context Inspector & Visual Itinerary Timeline (Large Panel) */}
       <div className="flex flex-1 flex-col overflow-hidden bg-slate-950/10">
         {/* Toggle Inspector vs. Interactive Timeline Tabs */}
         <div className="grid grid-cols-2 border-b border-card-border bg-slate-900/30 shrink-0">
@@ -263,7 +263,7 @@ export default function ChatPage() {
                 : 'text-slate-400 hover:text-slate-205'
             }`}
           >
-            Swarm Inspector
+            Plan Details
           </button>
           <button
             onClick={() => setActiveTab('itinerary')}
@@ -286,12 +286,12 @@ export default function ChatPage() {
             <div className="flex flex-col items-center justify-center py-20 text-center text-slate-500">
               <Sparkles className="h-10 w-10 mb-3 text-slate-700 animate-pulse" />
               <p className="text-sm font-medium">No Active Context</p>
-              <p className="text-xs px-6 mt-1 text-slate-650">
-                Introduce travel requirements in the chat to spin up the agent swarm.
+              <p className="text-xs px-6 mt-1 text-slate-655">
+                Introduce travel requirements in the chat to begin checking details.
               </p>
             </div>
           ) : activeTab === 'inspector' ? (
-            /* TAB 1: SWARM INSPECTOR DETAILS */
+            /* TAB 1: INSPECTOR DETAILS */
             <div className="space-y-4">
               {/* STAGE & STATUS CARD */}
               <div className="premium-card rounded-xl p-4 flex items-center justify-between">
@@ -433,7 +433,7 @@ export default function ChatPage() {
               {context.budget && (
                 <div className="premium-card rounded-xl p-4 space-y-3">
                   <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
-                    <IndianRupee className="h-4.5 w-4.5 text-emerald-450" /> Swarm Budget Assessment
+                    <IndianRupee className="h-4.5 w-4.5 text-emerald-450" /> Cost & Budget Assessment
                   </h4>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -577,7 +577,7 @@ export default function ChatPage() {
                       <span className="absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-800 border-4 border-slate-900" />
                       <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-2 text-xs">
                         <h4 className="font-bold text-slate-300 uppercase tracking-widest text-[10px]">
-                          Supervisor Tips & Tricks
+                          Travel Tips & Recommendations
                         </h4>
                         <p className="text-slate-405 leading-relaxed italic">{context.itinerary.notes}</p>
                       </div>
@@ -740,7 +740,7 @@ export default function ChatPage() {
             placeholder={
               context?.status === 'CONFIRMED'
                 ? 'Trip exists! Add comments...'
-                : 'Send requirements to the swarm...'
+                : 'Send details to your planner...'
             }
             className="flex-1 rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-3 text-xs text-slate-200 placeholder-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition disabled:opacity-50"
           />
