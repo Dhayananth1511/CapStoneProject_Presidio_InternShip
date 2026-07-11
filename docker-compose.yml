@@ -1,0 +1,42 @@
+# Full Stack Docker Compose Configuration
+# Starts Express API server (w/ Redis caching) and React SPA frontend under a shared network.
+# Command to run: docker compose up -d
+
+services:
+  # Redis memory database/cache layer
+  redis:
+    image: redis:7-alpine
+    container_name: travel_planner_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+
+  # Dynamic agent orchestrator backend API
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: travel_planner_api
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - ./server/.env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Static HTML Nginx client container
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: travel_planner_client
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
