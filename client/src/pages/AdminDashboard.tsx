@@ -53,14 +53,12 @@ interface TripItem {
   budget?: {
     total_cost_inr?: number;
     total_estimated_cost?: number;
-    breakdown?: {
-      transport?: number;
-      accommodation?: number;
-      food?: number;
-      activities?: number;
-      local_transport?: number;
-      emergency_fund?: number;
-    };
+    transport?: number;
+    accommodation?: number;
+    food?: number;
+    activities?: number;
+    local_transport?: number;
+    emergency_fund?: number;
   };
   formattedPlan?: string;
 }
@@ -468,8 +466,15 @@ export default function AdminDashboard() {
                     <td className="px-6 py-4.5 font-semibold text-slate-300">
                       {trip.input.destination || 'Not determined'}
                     </td>
-                    <td className="px-6 py-4.5 font-bold text-slate-200">
-                      ₹{trip.input.budget_inr ? trip.input.budget_inr.toLocaleString() : 'N/A'}
+                    <td className="px-6 py-4.5 font-semibold text-slate-200">
+                      <div className="text-slate-200 font-bold">
+                        ₹{trip.input.budget_inr ? trip.input.budget_inr.toLocaleString() : 'N/A'}
+                      </div>
+                      <div className="text-[10px] text-emerald-450 mt-0.5 font-medium">
+                        Est: {trip.budget?.total_cost_inr || trip.budget?.total_estimated_cost
+                          ? `₹${(trip.budget?.total_cost_inr || trip.budget?.total_estimated_cost || 0).toLocaleString()}`
+                          : 'N/A'}
+                      </div>
                     </td>
                     <td className="px-6 py-4.5 text-center">
                       <span
@@ -614,37 +619,59 @@ export default function AdminDashboard() {
                       Cost Breakdown (INR)
                     </h3>
                     
-                    <div className="divide-y divide-slate-850 text-xs text-slate-350">
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Transit</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.transport ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Lodging</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.accommodation ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Food & Meals</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.food ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Activities</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.activities ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Local Transport</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.local_transport ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-slate-550">Emergency Fund</span>
-                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.emergency_fund ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-2.5 font-bold text-slate-200">
-                        <span>Total Cost</span>
-                        <span className="font-mono text-emerald-400">
-                          ₹{(selectedTrip.budget.total_cost_inr ?? selectedTrip.budget.total_estimated_cost ?? 0).toLocaleString()}
-                        </span>
-                      </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-[10px] text-slate-500 uppercase font-bold">
+                            <th className="pb-1.5 font-bold">Category</th>
+                            <th className="pb-1.5 text-right font-bold">Cost (INR)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-850 font-medium">
+                          <tr>
+                            <td className="py-2 text-slate-400">✈️ Transit</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.transport || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-400">🏨 Lodging</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.accommodation || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-400">🍔 Food & Meals</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.food || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-400">🎟️ Sightseeing / Entrance</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.activities || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-400">🚕 Local Transport</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.local_transport || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-400">🚨 Emergency Fund (10%)</td>
+                            <td className="py-2 text-right text-slate-200">
+                              ₹{(selectedTrip.budget.emergency_fund || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                          <tr className="border-t border-slate-800 font-bold text-slate-250">
+                            <td className="py-2.5 text-slate-200 font-semibold">Total Cost</td>
+                            <td className="py-2.5 text-right text-emerald-400 font-bold">
+                              ₹{(selectedTrip.budget.total_cost_inr ?? selectedTrip.budget.total_estimated_cost ?? 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
