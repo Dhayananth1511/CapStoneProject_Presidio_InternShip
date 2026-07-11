@@ -61,8 +61,33 @@ export async function runPlannerAgent(
   logger.info('Supervisor: Extracting slot parameters from user message', { sessionId: context.sessionId });
 
   // Step 1: Parameter Slot Extraction
-  const extractionPrompt = `You are a travel planning assistant. Extract trip parameters from the user's message.
-Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
+  const currentYear = new Date().getFullYear();
+  const currentDateStr = new Date().toISOString().split('T')[0];
+
+  const recentHistory = context.conversationHistory
+    .slice(-4)
+    .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+    .join('\n');
+
+  const extractionPrompt = `You are a travel planning assistant. Analyze the latest user reply and context to extract travel parameters.
+  
+Today's Date: ${currentDateStr}
+Reference Year: ${currentYear}
+
+Slot definitions to extract:
+- destination: The target vacation/visit city (e.g. "Manali").
+- origin: The departure/starting city (e.g. "Coimbatore").
+- start_date: Start date of travel (YYYY-MM-DD format).
+- end_date: End date of travel (YYYY-MM-DD format).
+- travelers: Total count of travelers (integer).
+- budget_inr: Budget limit in INR (integer).
+- interests: User interests (array of strings).
+
+Crucial Rules:
+1. Identify if a location mentioned is the "origin" (departure city) or the "destination". Use the recent chat history to determine this (e.g., if the assistant asked "What is your departure city?" and the user replies "Coimbatore", then "Coimbatore" is the "origin", NOT the "destination"). Do NOT overwrite the existing destination with the origin.
+2. If the user mentions a relative date like "15th july", format it as "${currentYear}-07-15" using the Reference Year ${currentYear}.
+3. If you can determine the trip duration (e.g., "5-day trip") and have the start_date (e.g., "${currentYear}-07-15"), please calculate and populate the end_date accordingly (e.g., 5 days from July 15 is "${currentYear}-07-20").
+4. Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
 {
   "destination": "string or empty",
   "origin": "string or empty",  
@@ -73,8 +98,10 @@ Return ONLY valid JSON with this exact structure (leave fields empty string or 0
   "interests": ["array", "of", "strings"]
 }
 
-User's travel history context: ${longTermMemory || 'No history yet.'}
-Current extracted params: ${JSON.stringify(context.input)}`;
+Current known parameters: ${JSON.stringify(context.input)}
+Recent chat context:
+${recentHistory || '(No history yet)'}
+`;
 
   const extractionResponse = await llm.invoke([
     new SystemMessage(extractionPrompt),
