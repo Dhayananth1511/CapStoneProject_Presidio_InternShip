@@ -48,7 +48,7 @@ Rules:
    - "change hotel" or "find different lodging" -> call ONLY fetch_accommodation
    - "add food spots" or "new interests" -> call ONLY fetch_activities
    - "change dates" -> dates impact transit, accommodation, and weather, so call fetch_weather, fetch_transport, and fetch_accommodation.
-Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || 'Chennai'}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 1}, days=${days}, interests=${JSON.stringify(input.interests || [])}.`;
+Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}.`;
 
   const response = await modelWithTools.invoke([
     new SystemMessage(systemPrompt),
@@ -68,8 +68,8 @@ Ensure you populate tool arguments using the current context: destination="${inp
     logger.warn('LLM chose no tools on empty context. Falling back to executing all tools.');
     toolCalls.push(
       { name: 'fetch_weather', args: { destination: input.destination!, start_date: input.start_date!, end_date: input.end_date! } },
-      { name: 'fetch_transport', args: { origin: input.origin || 'Chennai', destination: input.destination!, travel_date: input.start_date!, travelers: input.travelers || 1 } },
-      { name: 'fetch_accommodation', args: { destination: input.destination!, check_in: input.start_date!, check_out: input.end_date!, travelers: input.travelers || 1 } },
+      { name: 'fetch_transport', args: { origin: input.origin!, destination: input.destination!, travel_date: input.start_date!, travelers: input.travelers } },
+      { name: 'fetch_accommodation', args: { destination: input.destination!, check_in: input.start_date!, check_out: input.end_date!, travelers: input.travelers } },
       { name: 'fetch_activities', args: { destination: input.destination!, interests: input.interests || [], days } }
     );
   }

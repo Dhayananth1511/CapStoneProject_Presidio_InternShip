@@ -24,7 +24,8 @@ export async function runMissingInfoAgent(context: TripContext): Promise<Missing
   const missingFields: string[] = [];
 
   // Check which critical fields are empty
-  if (!input.destination) missingFields.push('destination');
+  if (!input.destination) missingFields.push('destination city');
+  if (!input.origin) missingFields.push('departure city');
   if (!input.start_date || !input.end_date) missingFields.push('travel dates');
   if (!input.budget_inr || input.budget_inr === 0) missingFields.push('budget');
   if (!input.travelers || input.travelers === 0) missingFields.push('number of travelers');
@@ -33,16 +34,16 @@ export async function runMissingInfoAgent(context: TripContext): Promise<Missing
     return { complete: true, missingFields: [] };
   }
 
-  // Use LLM to generate a natural-sounding question (not robotic "MISSING FIELDS: ...")
+  // Use LLM to generate a very short, simple question (maximum 15 words)
   const response = await llm.invoke([
     new SystemMessage(
-      `You are a friendly travel planning assistant. Generate ONE natural conversational question 
-       to ask the user for the missing trip information. Be warm and helpful.`
+      `You are a concise travel assistant. Generate exactly ONE very short, direct question 
+       asking the user for the missing fields: ${missingFields.join(', ')}.
+       Rule: Keep the question simple, friendly, and under 15 words. Do not write a long paragraph.`
     ),
     new HumanMessage(
-      `Missing information: ${missingFields.join(', ')}. 
-       Already know: ${JSON.stringify(input)}. 
-       Generate a friendly question.`
+      `Current details known: ${JSON.stringify(input)}. 
+       Please ask for the missing: ${missingFields.join(', ')}.`
     ),
   ]);
 

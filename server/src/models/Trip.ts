@@ -49,11 +49,11 @@ const TripSchema = new Schema<ITrip>(
     },
     input: {
       destination: { type: String, trim: true },
-      origin: { type: String, trim: true, default: 'Chennai' },
+      origin: { type: String, trim: true },
       start_date: { type: String },
       end_date: { type: String },
-      travelers: { type: Number, default: 1 },
-      budget_inr: { type: Number, default: 0 },
+      travelers: { type: Number },
+      budget_inr: { type: Number },
       interests: [{ type: String }]
     },
     // We use Schema.Types.Mixed (flexible JSON) because sub-agent structural formats
