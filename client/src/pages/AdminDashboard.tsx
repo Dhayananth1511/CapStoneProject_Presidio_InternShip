@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import ReactMarkdown from 'react-markdown';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -42,8 +43,26 @@ interface TripItem {
   };
   input: {
     destination?: string;
+    origin?: string;
+    start_date?: string;
+    end_date?: string;
+    travelers?: number;
     budget_inr?: number;
+    interests?: string[];
   };
+  budget?: {
+    total_cost_inr?: number;
+    total_estimated_cost?: number;
+    breakdown?: {
+      transport?: number;
+      accommodation?: number;
+      food?: number;
+      activities?: number;
+      local_transport?: number;
+      emergency_fund?: number;
+    };
+  };
+  formattedPlan?: string;
 }
 
 export default function AdminDashboard() {
@@ -51,6 +70,7 @@ export default function AdminDashboard() {
   const [searchDestination, setSearchDestination] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const limit = 6;
+  const [selectedTrip, setSelectedTrip] = useState<TripItem | null>(null);
 
   // React Query to fetch analytics dashboard summary data
   const { data: analytics, refetch: refetchAnalytics } = useQuery({
@@ -431,7 +451,11 @@ export default function AdminDashboard() {
             <tbody className="divide-y divide-slate-850 bg-slate-950/10">
               {tripsData?.trips && tripsData.trips.length > 0 ? (
                 tripsData.trips.map((trip: TripItem) => (
-                  <tr key={trip.sessionId} className="hover:bg-slate-800/20 transition cursor-pointer">
+                  <tr 
+                    key={trip.sessionId} 
+                    onClick={() => setSelectedTrip(trip)}
+                    className="hover:bg-slate-800/20 transition cursor-pointer"
+                  >
                     <td className="px-6 py-4.5 font-mono text-slate-400 font-medium">
                       #{trip.sessionId.substring(0, 10)}
                     </td>
@@ -508,6 +532,145 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* DETAILED TRIP PLAN DIALOG/MODAL (READONLY) */}
+      {selectedTrip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl max-h-[85vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+            
+            {/* Modal Close Button */}
+            <button
+              onClick={() => setSelectedTrip(null)}
+              className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition focus:outline-none"
+            >
+              <span className="text-xl font-bold">&times;</span>
+            </button>
+
+            {/* Header */}
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-extrabold text-white">
+                  Trip Plan Detailed View
+                </h2>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                    selectedTrip.status === 'CONFIRMED'
+                      ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/25'
+                      : selectedTrip.status === 'PLANNED'
+                      ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25'
+                      : selectedTrip.status === 'CANCELLED'
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/25'
+                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                  }`}
+                >
+                  {selectedTrip.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Session ID: <strong>{selectedTrip.sessionId}</strong> | Created by: <strong>{selectedTrip.userId?.name || 'Anonymous'}</strong> ({selectedTrip.userId?.email || 'no email'})
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              
+              {/* Left Side: Parameters & Budget Details */}
+              <div className="md:col-span-1 space-y-4">
+                <div className="bg-slate-950/40 p-4 border border-slate-800 rounded-xl space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-400">
+                    Trip Details
+                  </h3>
+                  <div className="space-y-2 text-xs text-slate-350">
+                    <div>
+                      <span className="text-slate-550 block text-[10px] uppercase font-bold">Destination</span>
+                      <span className="font-semibold text-slate-205">{selectedTrip.input.destination || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-550 block text-[10px] uppercase font-bold">Origin</span>
+                      <span className="font-semibold text-slate-205">{selectedTrip.input.origin || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-550 block text-[10px] uppercase font-bold">Dates</span>
+                      <span className="font-semibold text-slate-205">
+                        {selectedTrip.input.start_date || 'YYYY-MM-DD'} – {selectedTrip.input.end_date || 'YYYY-MM-DD'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-550 block text-[10px] uppercase font-bold">Travelers</span>
+                      <span className="font-semibold text-slate-205">{selectedTrip.input.travelers || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-550 block text-[10px] uppercase font-bold">Interests</span>
+                      <span className="font-semibold text-slate-205">
+                        {selectedTrip.input.interests?.join(', ') || 'General'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget assessment */}
+                {selectedTrip.budget && (
+                  <div className="bg-slate-950/40 p-4 border border-slate-800 rounded-xl space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                      Cost Breakdown (INR)
+                    </h3>
+                    
+                    <div className="divide-y divide-slate-850 text-xs text-slate-350">
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Transit</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.transport ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Lodging</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.accommodation ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Food & Meals</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.food ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Activities</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.activities ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Local Transport</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.local_transport ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-slate-550">Emergency Fund</span>
+                        <span className="font-mono text-slate-250">₹{(selectedTrip.budget.breakdown?.emergency_fund ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-2.5 font-bold text-slate-200">
+                        <span>Total Cost</span>
+                        <span className="font-mono text-emerald-400">
+                          ₹{(selectedTrip.budget.total_cost_inr ?? selectedTrip.budget.total_estimated_cost ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Side: Full generated markdown plan */}
+              <div className="md:col-span-2 space-y-4">
+                <div className="bg-slate-950/45 p-5 border border-slate-800 rounded-xl space-y-4 max-h-[55vh] overflow-y-auto">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-400">
+                    Formatted Travel Itinerary
+                  </h3>
+                  {selectedTrip.formattedPlan ? (
+                    <div className="prose prose-invert max-w-none text-xs text-slate-350 space-y-3 leading-relaxed">
+                      <ReactMarkdown>{selectedTrip.formattedPlan}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-505 italic">No formatted plan or itinerary has been generated for this session yet.</p>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
