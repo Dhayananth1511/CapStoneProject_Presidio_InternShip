@@ -84,7 +84,8 @@ Slot definitions to extract:
 - interests: User interests (array of strings).
 
 Crucial Rules:
-1. Identify if a location mentioned is the "origin" (departure city) or the "destination". Use the recent chat history to determine this (e.g., if the assistant asked "What is your departure city?" and the user replies "Coimbatore", then "Coimbatore" is the "origin", NOT the "destination"). Do NOT overwrite the existing destination with the origin.
+0. **Destination Override (HIGHEST PRIORITY):** If the user explicitly states they want to travel TO a specific named city or place — using phrases like "I want to go to X", "take me to X", "plan a trip to X", "destination is X", "X instead", "change to X", "I prefer X" — you MUST extract that place as the "destination", overriding any previously set destination. This applies even if a destination is already set in the current known parameters.
+1. For all OTHER location mentions (not prefixed with destination intent), identify if it is the "origin" (departure city) or the "destination" using recent chat history (e.g., if assistant asked "What is your departure city?" and user replies "Coimbatore", that is the "origin"). Do NOT overwrite the existing destination with the origin.
 2. If the user mentions a relative date like "15th july", format it as "${currentYear}-07-15" using the Reference Year ${currentYear}.
 3. If you can determine the trip duration (e.g., "5-day trip") and have the start_date (e.g., "${currentYear}-07-15"), please calculate and populate the end_date accordingly (e.g., 5 days from July 15 is "${currentYear}-07-20").
 4. If the user asks to adjust the dates, shorten the trip, or reduce the duration (e.g. "Reduce duration of trip by 1 or 2 days" or "shorten dates"), you must compute a new end_date by subtracting the specified number of days from the current end_date (for example, if current end_date is "2026-07-23" and user requests to reduce by 1 day, you must output "2026-07-22").
@@ -219,7 +220,7 @@ ${recentHistory || '(No history yet)'}
       .map((dest, i) => `${i + 1}. **${dest}**${dest === recommendation.selectedDestination ? ' (Recommended Top Pick)' : ''}`)
       .join('\n');
 
-    const recommendationMessage = `🌴 **Destination Recommendations**:\n${recommendedListStr}\n\n*Why these?* ${recommendation.reasoning}\n\nI've selected **${recommendation.selectedDestination}** as your temporary destination.`;
+    const recommendationMessage = `🌴 **Destination Recommendations**:\n${recommendedListStr}\n\n*Why these?* ${recommendation.reasoning}\n\nI've pre-selected **${recommendation.selectedDestination}** as your destination. If you'd like a different place, just tell me — for example: *"I want to go to Chennai instead"* and I'll update it right away. Otherwise, let's fill in the remaining details!`;
 
     // Validate parameters again after completing destination recommend list
     const checkResult = await runMissingInfoAgent(updatedContext);
