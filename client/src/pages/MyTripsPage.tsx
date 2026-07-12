@@ -27,53 +27,11 @@ export default function MyTripsPage() {
   const [tripToCancel, setTripToCancel] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch traveler's trips list
-  const { data, isLoading } = useQuery<{ trips: TripSummary[] }>({
+  const { data, isLoading, isError } = useQuery<{ trips: TripSummary[] }>({
     queryKey: ['userTrips'],
     queryFn: async () => {
-      try {
-        const res = await api.get('/trips');
-        return res.data;
-      } catch (err) {
-        // Mock fallback if offline / bootstrap phase
-        return {
-          trips: [
-            {
-              sessionId: 'oop-oty-1122',
-              status: 'CONFIRMED',
-              createdAt: new Date(Date.now() - 86400000).toISOString(),
-              input: {
-                destination: 'Ooty',
-                start_date: '2026-10-15',
-                end_date: '2026-10-18',
-                budget_inr: 25000,
-                travelers: 2,
-              },
-            },
-            {
-              sessionId: 'mun-mnr-3344',
-              status: 'PLANNED',
-              createdAt: new Date(Date.now() - 172800000).toISOString(),
-              input: {
-                destination: 'Munnar',
-                start_date: '2026-11-20',
-                end_date: '2026-11-23',
-                budget_inr: 18000,
-                travelers: 1,
-              },
-            },
-            {
-              sessionId: 'goa-goa-5566',
-              status: 'DRAFT',
-              createdAt: new Date(Date.now() - 259200000).toISOString(),
-              input: {
-                destination: 'Goa',
-                budget_inr: 50000,
-                travelers: 4,
-              },
-            },
-          ],
-        };
-      }
+      const res = await api.get('/trips');
+      return res.data;
     },
   });
 
@@ -197,6 +155,16 @@ export default function MyTripsPage() {
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
           <Compass className="h-10 w-10 text-primary animate-spin" />
+        </div>
+      ) : isError ? (
+        <div className={`premium-card rounded-2xl p-12 text-center max-w-xl mx-auto flex flex-col items-center border border-red-500/20`}>
+          <div className="h-16 w-16 bg-red-550/10 rounded-2xl flex items-center justify-center mb-4 border border-red-500/20 text-red-400">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-800'}`}>Failed to load itineraries</h3>
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Please verify the server is reachable and your session is still valid.
+          </p>
         </div>
       ) : filteredTrips.length === 0 ? (
         <div className={`premium-card rounded-2xl p-12 text-center max-w-xl mx-auto flex flex-col items-center border ${isDark ? 'border-indigo-500/10' : 'border-slate-200'}`}>
