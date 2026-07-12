@@ -23,7 +23,7 @@ export default function RegisterPage() {
 
   const handleGoogleLogin = async () => {
     try {
-      const res = await api.get('/auth/google-login');
+      const res = await api.get('/auth/google-login?mode=register');
       if (res.data.authUrl) {
         window.location.href = res.data.authUrl;
       }

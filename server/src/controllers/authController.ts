@@ -230,7 +230,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
  * Scopes: openid + email + profile (NOT calendar — that's a separate flow).
  * State carries JSON so the callback knows this is a sign-in attempt.
  */
-export const googleAuthLogin = (_req: Request, res: Response): void => {
+export const googleAuthLogin = (req: Request, res: Response): void => {
   if (!process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CALENDAR_CLIENT_ID.includes('REPLACE_WITH')) {
     res.status(503).json({
       success: false,
@@ -239,7 +239,8 @@ export const googleAuthLogin = (_req: Request, res: Response): void => {
     return;
   }
 
-  const state = Buffer.from(JSON.stringify({ type: 'login' })).toString('base64');
+  const mode = req.query.mode === 'register' ? 'register' : 'login';
+  const state = Buffer.from(JSON.stringify({ type: mode })).toString('base64');
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: [
@@ -288,7 +289,7 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
   const { code, state: rawState, error } = req.query;
 
   // Decode the state JSON blob
-  let statePayload: { type: 'login' | 'calendar'; userId?: string } = { type: 'login' };
+  let statePayload: { type: 'login' | 'register' | 'calendar'; userId?: string } = { type: 'login' };
   try {
     statePayload = JSON.parse(Buffer.from(rawState as string, 'base64').toString());
   } catch {
@@ -302,6 +303,8 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
     logger.warn('Google OAuth denied by user', { error, type });
     if (type === 'login') {
       res.redirect(`${clientUrl}/login?google_auth=denied`);
+    } else if (type === 'register') {
+      res.redirect(`${clientUrl}/register?google_auth=denied`);
     } else {
       res.redirect(`${clientUrl}/dashboard?google_auth=denied`);
     }
@@ -309,7 +312,8 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
   }
 
   if (!code) {
-    res.redirect(`${clientUrl}/login?google_auth=error`);
+    const dest = type === 'register' ? 'register' : 'login';
+    res.redirect(`${clientUrl}/${dest}?google_auth=error`);
     return;
   }
 
@@ -321,14 +325,15 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
     // ============================================================
     // FLOW A: Google Sign-In — authenticate user
     // ============================================================
-    if (type === 'login') {
+    if (type === 'login' || type === 'register') {
       // Fetch verified profile from Google
       const oauth2Service = google.oauth2({ version: 'v2', auth: oauth2Client });
       const { data: profile } = await oauth2Service.userinfo.get();
 
       if (!profile.email || !profile.id) {
         logger.error('Google Sign-In returned incomplete profile', { profile });
-        res.redirect(`${clientUrl}/login?google_auth=error`);
+        const dest = type === 'register' ? 'register' : 'login';
+        res.redirect(`${clientUrl}/${dest}?google_auth=error`);
         return;
       }
 
@@ -339,11 +344,18 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
 
       if (user && user.role === 'admin') {
         logger.warn('Admin attempted to log in via Google OAuth', { email: user.email });
-        res.redirect(`${clientUrl}/login?google_auth=error&message=Admins+must+login+manually+using+manual+login.`);
+        const dest = type === 'register' ? 'register' : 'login';
+        res.redirect(`${clientUrl}/${dest}?google_auth=error&message=Admins+must+login+manually+using+manual+login.`);
         return;
       }
 
       if (!user) {
+        if (type === 'login') {
+          logger.info('Google Sign-In blocked: Account not found in database', { email: profile.email });
+          res.redirect(`${clientUrl}/login?google_auth=error&message=No+account+found+with+this+Google+email.+Please+register+first.`);
+          return;
+        }
+
         // First-time Google Sign-In: create a new user account
         // Use a cryptographically random password hash — the user can never know this password
         const randomPassword = crypto.randomBytes(32).toString('hex');
