@@ -4,6 +4,8 @@
 
 import { ChatGroq } from '@langchain/groq';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { runMissingInfoAgent } from './missingInfoAgent';
 import { runDestinationRecAgent } from './destinationRecAgent';
 import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
@@ -164,10 +166,9 @@ ${recentHistory || '(No history yet)'}
     }
   }
 
-  // Step 2: Deterministic supervisor routing — no LLM needed here.
-  // Rule 1: If no destination is set, always recommend one first.
-  // Rule 2: If destination exists but other critical fields are missing, ask for them.
-  // Rule 3: If all fields are present, generate the full plan.
+  // Step 2: LLM Supervisor — true agentic tool-calling routing.
+  // The supervisor LLM reads the current context and decides which child agent to invoke.
+  // Defensive guards below prevent hallucination-induced crashes.
   const hasDestination = !!(updatedContext.input.destination && updatedContext.input.destination.trim() !== '');
 
   const criticalFields = [
@@ -181,20 +182,78 @@ ${recentHistory || '(No history yet)'}
     (field) => field === undefined || field === '' || field === 0
   );
 
-  let selectedTool: string;
-  if (!hasDestination) {
-    selectedTool = 'recommend_destination';
-  } else if (hasMissingCriticalFields) {
-    selectedTool = 'validate_trip_inputs';
-  } else {
-    selectedTool = 'orchestrate_and_generate_trip_plan';
-  }
+  const supervisorPrompt = `You are the lead travel coordinator supervisor. Examine the current trip input parameters and choose the appropriate child agent tool to invoke next.
 
-  logger.info(`Supervisor: Deterministic routing → ${selectedTool}`, {
-    hasDestination,
-    hasMissingCriticalFields,
-    destination: updatedContext.input.destination,
+Current trip parameters: ${JSON.stringify(updatedContext.input)}
+
+Delegation Rules:
+1. If "destination" is missing, empty, or not a concrete city/place → invoke "recommend_destination".
+2. If "destination" is set but any of: origin, start_date, end_date, budget_inr, travelers are missing or 0 → invoke "validate_trip_inputs".
+3. If ALL parameters (destination, origin, start_date, end_date, budget_inr, travelers) are present and non-zero → invoke "orchestrate_and_generate_trip_plan".
+
+You MUST invoke exactly one tool.`;
+
+  const supervisorArgsSchema = z.object({
+    destination: z.string().optional().nullable(),
+    origin: z.string().optional().nullable(),
+    start_date: z.string().optional().nullable(),
+    end_date: z.string().optional().nullable(),
+    travelers: z.number().optional().nullable(),
+    budget_inr: z.number().optional().nullable(),
+    interests: z.array(z.string()).optional().nullable(),
   });
+
+  const validateTripInputsTool = tool(async () => {}, {
+    name: 'validate_trip_inputs',
+    description: 'Identifies missing trip fields (origin, dates, budget, travelers) and asks the user for them.',
+    schema: supervisorArgsSchema,
+  });
+
+  const recommendDestinationTool = tool(async () => {}, {
+    name: 'recommend_destination',
+    description: 'Triggers when no destination is set — suggests top destinations based on interests and budget.',
+    schema: supervisorArgsSchema,
+  });
+
+  const orchestrateAndGenerateTripPlanTool = tool(async () => {}, {
+    name: 'orchestrate_and_generate_trip_plan',
+    description: 'Triggers when all trip parameters are complete — runs the full agent swarm to generate the itinerary.',
+    schema: supervisorArgsSchema,
+  });
+
+  const supervisorLlm = new ChatGroq({
+    apiKey: process.env.GROQ_API_KEY,
+    model: 'llama-3.1-8b-instant',
+    temperature: 0.1,
+  });
+
+  const supervisorWithTools = supervisorLlm.bindTools([
+    validateTripInputsTool,
+    recommendDestinationTool,
+    orchestrateAndGenerateTripPlanTool,
+  ]);
+
+  const supervisorResponse = await withRetry(() => supervisorWithTools.invoke([
+    new SystemMessage(supervisorPrompt),
+    new HumanMessage('Choose the correct tool to invoke now.'),
+  ]));
+
+  const toolCalls = supervisorResponse.tool_calls || [];
+  let selectedTool = toolCalls[0]?.name || 'validate_trip_inputs';
+
+  logger.info(`Supervisor LLM selected tool: ${selectedTool}`, { destination: updatedContext.input.destination });
+
+  // --- Defensive Hallucination Guards ---
+  // Guard 1: LLM must not skip destination recommendation when destination is missing.
+  if (selectedTool !== 'recommend_destination' && !hasDestination) {
+    logger.warn('Supervisor hallucinated — destination missing but LLM skipped recommend_destination. Overriding.');
+    selectedTool = 'recommend_destination';
+  }
+  // Guard 2: LLM must not trigger plan generation when critical fields are still missing.
+  if (selectedTool === 'orchestrate_and_generate_trip_plan' && hasMissingCriticalFields) {
+    logger.warn('Supervisor hallucinated — critical fields missing but LLM chose plan generation. Overriding to validate.');
+    selectedTool = 'validate_trip_inputs';
+  }
 
   // Flow A: Check for missing info
   if (selectedTool === 'validate_trip_inputs') {
