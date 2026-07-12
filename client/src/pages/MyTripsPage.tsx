@@ -23,7 +23,7 @@ export default function MyTripsPage() {
   const queryClient = useQueryClient();
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
-  const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'DRAFTS' | 'CANCELLED'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PLANNED' | 'CONFIRMED' | 'DRAFTS' | 'CANCELLED'>('ALL');
   const [tripToCancel, setTripToCancel] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch traveler's trips list
@@ -111,7 +111,8 @@ export default function MyTripsPage() {
   // Filter trips based on active UI tabs
   const filteredTrips = data?.trips?.filter((trip) => {
     if (activeTab === 'ALL') return true;
-    if (activeTab === 'ACTIVE') return trip.status === 'CONFIRMED' || trip.status === 'PLANNED';
+    if (activeTab === 'PLANNED') return trip.status === 'PLANNED';
+    if (activeTab === 'CONFIRMED') return trip.status === 'CONFIRMED';
     if (activeTab === 'DRAFTS') return trip.status === 'DRAFT';
     if (activeTab === 'CANCELLED') return trip.status === 'CANCELLED';
     return true;
@@ -140,7 +141,7 @@ export default function MyTripsPage() {
       </div>
 
       {/* FILTER TABS */}
-      <div className={`flex border rounded-lg p-1 max-w-lg transition-colors ${isDark ? 'border-card-border bg-slate-950/20' : 'border-slate-205 bg-slate-100'}`}>
+      <div className={`flex border rounded-lg p-1 max-w-2xl transition-colors ${isDark ? 'border-card-border bg-slate-950/20' : 'border-slate-205 bg-slate-100'}`}>
         <button
           onClick={() => setActiveTab('ALL')}
           className={`flex-1 py-2 text-xs font-bold rounded-md transition cursor-pointer ${
@@ -152,20 +153,30 @@ export default function MyTripsPage() {
           All ({data?.trips?.length || 0})
         </button>
         <button
-          onClick={() => setActiveTab('ACTIVE')}
+          onClick={() => setActiveTab('PLANNED')}
           className={`flex-1 py-2 text-xs font-bold rounded-md transition cursor-pointer ${
-            activeTab === 'ACTIVE'
-              ? 'bg-primary text-white shadow'
+            activeTab === 'PLANNED'
+              ? 'bg-indigo-500 text-white shadow'
               : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800'
           }`}
         >
-          Active ({data?.trips?.filter((t) => t.status === 'CONFIRMED' || t.status === 'PLANNED').length || 0})
+          Planned ({data?.trips?.filter((t) => t.status === 'PLANNED').length || 0})
+        </button>
+        <button
+          onClick={() => setActiveTab('CONFIRMED')}
+          className={`flex-1 py-2 text-xs font-bold rounded-md transition cursor-pointer ${
+            activeTab === 'CONFIRMED'
+              ? 'bg-emerald-500 text-white shadow'
+              : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          Confirmed ({data?.trips?.filter((t) => t.status === 'CONFIRMED').length || 0})
         </button>
         <button
           onClick={() => setActiveTab('DRAFTS')}
           className={`flex-1 py-2 text-xs font-bold rounded-md transition cursor-pointer ${
             activeTab === 'DRAFTS'
-              ? 'bg-primary text-white shadow'
+              ? 'bg-amber-500 text-white shadow'
               : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800'
           }`}
         >
@@ -175,7 +186,7 @@ export default function MyTripsPage() {
           onClick={() => setActiveTab('CANCELLED')}
           className={`flex-1 py-2 text-xs font-bold rounded-md transition cursor-pointer ${
             activeTab === 'CANCELLED'
-              ? 'bg-primary text-white shadow'
+              ? 'bg-red-500 text-white shadow'
               : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800'
           }`}
         >

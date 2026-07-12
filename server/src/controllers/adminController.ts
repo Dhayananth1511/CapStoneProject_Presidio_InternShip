@@ -50,8 +50,8 @@ export const getAnalytics = async (_req: Request, res: Response): Promise<void> 
       // Average trip budget
       Trip.aggregate([{ $group: { _id: null, avg: { $avg: '$input.budget_inr' } } }]),
 
-      // Total registered users
-      User.countDocuments(),
+      // Total registered users (traveler role only — excludes admin accounts)
+      User.countDocuments({ role: 'traveler' }),
 
       // Total trips across all users
       Trip.countDocuments(),

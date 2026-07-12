@@ -280,7 +280,12 @@ export default function AdminDashboard() {
   // Stats calculation
   const totalTripsCount = analytics?.totalTrips || 0;
   const confirmedTripsCount = analytics?.statusCounts?.find((s: any) => s._id === 'CONFIRMED')?.count || 0;
-  const conversionRate = totalTripsCount > 0 ? ((confirmedTripsCount / totalTripsCount) * 100).toFixed(1) : '0';
+  const cancelledTripsCount = analytics?.statusCounts?.find((s: any) => s._id === 'CANCELLED')?.count || 0;
+  // Plan Completion Rate = Confirmed ÷ (Total − Cancelled) × 100
+  // Excludes cancelled trips from the denominator so the metric reflects
+  // how many active plans were successfully confirmed.
+  const activeTripsCount = totalTripsCount - cancelledTripsCount;
+  const completionRate = activeTripsCount > 0 ? ((confirmedTripsCount / activeTripsCount) * 100).toFixed(1) : '0';
 
   const totalPages = Math.ceil((tripsData?.total || 0) / limit);
 
@@ -347,8 +352,9 @@ export default function AdminDashboard() {
             <TrendingUp className="h-6 w-6" />
           </div>
           <div>
-            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Conversion rate</span>
-            <span className={`text-2xl font-extrabold transition-colors ${isDark ? 'text-white' : 'text-slate-900'}`}>{conversionRate}%</span>
+            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Plan Completion Rate</span>
+            <span className={`text-2xl font-extrabold transition-colors ${isDark ? 'text-white' : 'text-slate-900'}`}>{completionRate}%</span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">Confirmed / Active trips</span>
           </div>
         </div>
       </div>
