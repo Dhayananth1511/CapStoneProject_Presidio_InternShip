@@ -63,6 +63,11 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => sessionStorage),
       // Only persist the user profile, NOT the token or initializing state
       partialize: (state) => ({ user: state.user }),
+      onRehydrateStorage: () => (state, error) => {
+        if (!error && state) {
+          state.restoreSession();
+        }
+      },
     }
   )
 );
