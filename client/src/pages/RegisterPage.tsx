@@ -1,16 +1,18 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, User, Plane, AlertCircle } from 'lucide-react';
 import { registerSchema } from '../schemas/authSchemas';
 import type { RegisterFormData } from '../schemas/authSchemas';
 import { useAuthStore } from '../store/authStore';
+import { useEffect } from 'react';
 import toast from 'react-hot-toast';
 import api from '../lib/axios';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     register,
@@ -20,6 +22,25 @@ export default function RegisterPage() {
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
+
+  // Handle Google auth redirects
+  useEffect(() => {
+    const googleAuth = searchParams.get('google_auth');
+    const msg = searchParams.get('message');
+    if (googleAuth) {
+      if (googleAuth === 'denied') {
+        toast('Google Sign-In was cancelled.', { icon: '🔕' });
+      } else if (googleAuth === 'error') {
+        toast.error(msg || 'Google Sign-In failed. Please try again.');
+      }
+
+      // Clear params to avoid double toasts inside StrictMode or on page refresh
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('google_auth');
+      newParams.delete('message');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleGoogleLogin = async () => {
     try {

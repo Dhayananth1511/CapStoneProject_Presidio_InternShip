@@ -12,7 +12,7 @@ import api from '../lib/axios';
 export default function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const roleParam = searchParams.get('role');
   
   // Local role state selector
@@ -37,12 +37,20 @@ export default function LoginPage() {
 
     const googleAuth = searchParams.get('google_auth');
     const msg = searchParams.get('message');
-    if (googleAuth === 'denied') {
-      toast('Google Sign-In was cancelled.', { icon: '🔕' });
-    } else if (googleAuth === 'error') {
-      toast.error(msg || 'Google Sign-In failed. Please try again.');
+    if (googleAuth) {
+      if (googleAuth === 'denied') {
+        toast('Google Sign-In was cancelled.', { icon: '🔕' });
+      } else if (googleAuth === 'error') {
+        toast.error(msg || 'Google Sign-In failed. Please try again.');
+      }
+      
+      // Clean up parameters to prevent double toast on StrictMode/refresh
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('google_auth');
+      newParams.delete('message');
+      setSearchParams(newParams, { replace: true });
     }
-  }, [roleParam, searchParams]);
+  }, [roleParam, searchParams, setSearchParams]);
 
   const handleGoogleLogin = async () => {
     try {
