@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mail, Lock, Plane, AlertCircle } from 'lucide-react';
 import { loginSchema } from '../schemas/authSchemas';
 import type { LoginFormData } from '../schemas/authSchemas';
@@ -17,6 +17,7 @@ export default function LoginPage() {
   
   // Local role state selector
   const [selectedRole, setSelectedRole] = useState<'traveler' | 'admin'>('traveler');
+  const lastStateRef = useRef('');
 
   const {
     register,
@@ -38,12 +39,18 @@ export default function LoginPage() {
     const googleAuth = searchParams.get('google_auth');
     const msg = searchParams.get('message');
     if (googleAuth) {
-      if (googleAuth === 'denied') {
-        toast('Google Sign-In was cancelled.', { icon: '🔕' });
-      } else if (googleAuth === 'error') {
-        toast.error(msg || 'Google Sign-In failed. Please try again.');
+      const currentStateStr = `${googleAuth}:${msg || ''}`;
+      if (lastStateRef.current !== currentStateStr) {
+        lastStateRef.current = currentStateStr;
+        if (googleAuth === 'denied') {
+          toast('Google Sign-In was cancelled.', { icon: '🔕' });
+        } else if (googleAuth === 'error') {
+          toast.error(msg || 'Google Sign-In failed. Please try again.');
+        }
+        setSearchParams({}, { replace: true });
       }
-      setSearchParams({}, { replace: true });
+    } else {
+      lastStateRef.current = '';
     }
   }, [roleParam, searchParams, setSearchParams]);
 

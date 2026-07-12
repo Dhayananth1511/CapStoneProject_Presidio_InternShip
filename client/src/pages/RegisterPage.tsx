@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [searchParams, setSearchParams] = useSearchParams();
+  const lastStateRef = useRef('');
 
   const {
     register,
@@ -28,12 +29,18 @@ export default function RegisterPage() {
     const googleAuth = searchParams.get('google_auth');
     const msg = searchParams.get('message');
     if (googleAuth) {
-      if (googleAuth === 'denied') {
-        toast('Google Sign-In was cancelled.', { icon: '🔕' });
-      } else if (googleAuth === 'error') {
-        toast.error(msg || 'Google Sign-In failed. Please try again.');
+      const currentStateStr = `${googleAuth}:${msg || ''}`;
+      if (lastStateRef.current !== currentStateStr) {
+        lastStateRef.current = currentStateStr;
+        if (googleAuth === 'denied') {
+          toast('Google Sign-In was cancelled.', { icon: '🔕' });
+        } else if (googleAuth === 'error') {
+          toast.error(msg || 'Google Sign-In failed. Please try again.');
+        }
+        setSearchParams({}, { replace: true });
       }
-      setSearchParams({}, { replace: true });
+    } else {
+      lastStateRef.current = '';
     }
   }, [searchParams, setSearchParams]);
 
