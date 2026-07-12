@@ -426,15 +426,15 @@ export default function ChatPage() {
         <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Header bar */}
-        <div className="z-10 px-6 py-4 bg-slate-950/40 border-b border-card-border/80 flex items-center justify-between shrink-0">
+        <div className={`z-10 px-6 py-4 border-b flex items-center justify-between shrink-0 ${isDark ? 'bg-slate-950/40 border-card-border/80' : 'bg-white/80 border-slate-200'}`}>
           <Link
             to="/dashboard"
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-205 transition"
+            className={`flex items-center gap-1.5 text-xs transition ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <ArrowLeft className="h-4 w-4 text-slate-400" />
+            <ArrowLeft className={`h-4 w-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
             Back to Trips
           </Link>
-          <span className="text-xs font-bold text-slate-400 bg-slate-900/60 px-3 py-1 border border-slate-800 rounded-lg">
+          <span className={`text-xs font-bold px-3 py-1 border rounded-lg ${isDark ? 'text-slate-400 bg-slate-900/60 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'}`}>
             🧭 TripPlanner AI Swarm
           </span>
         </div>
@@ -450,7 +450,7 @@ export default function ChatPage() {
               <h2 className={`text-2xl md:text-3xl font-extrabold tracking-tight glow-text ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Design Your Next Journey
               </h2>
-              <p className="text-slate-400 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
+              <p className={`text-xs md:text-sm max-w-md mx-auto leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Provide your destination, budget constraints, dates, or travelers. Our AI agent swarm will check flights, lodging, local climate, and draft an itinerary.
               </p>
             </div>
@@ -478,11 +478,13 @@ export default function ChatPage() {
                     className={`max-w-[80%] rounded-2xl px-4 py-3 text-xs md:text-sm shadow-md leading-relaxed ${
                       msg.role === 'user'
                         ? 'bg-primary text-white font-medium shadow-primary/10'
-                        : 'bg-card-bg border border-card-border/80 text-slate-205'
+                        : isDark
+                        ? 'bg-card-bg border border-card-border/80 text-slate-200'
+                        : 'bg-white border border-slate-200 text-slate-700'
                     }`}
                   >
                     {msg.role === 'assistant' ? (
-                      <div className="prose prose-invert prose-sm max-w-none text-xs md:text-sm">
+                      <div className={`prose prose-sm max-w-none text-xs md:text-sm ${isDark ? 'prose-invert' : 'prose-slate'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
@@ -511,7 +513,7 @@ export default function ChatPage() {
             {/* suggestion cards (only shows when user has not messages yet) */}
             {messages.length === 1 && !activeStep && (
               <div className="pt-4 space-y-3">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
+                <p className={`text-[10px] font-bold uppercase tracking-widest text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   Quick Proposal Starters
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl mx-auto">
@@ -526,7 +528,11 @@ export default function ChatPage() {
                       onClick={() => {
                         setMessage(s.prompt);
                       }}
-                      className="p-3 bg-slate-900/40 hover:bg-slate-905/30 border border-slate-800 hover:border-indigo-500/30 rounded-xl text-left text-xs text-slate-350 hover:text-white transition active:scale-[98%] shadow-sm hover:shadow-indigo-500/5 cursor-pointer"
+                      className={`p-3 border rounded-xl text-left text-xs transition active:scale-[98%] shadow-sm cursor-pointer ${
+                        isDark
+                          ? 'bg-slate-900/40 hover:bg-slate-800/60 border-slate-800 hover:border-indigo-500/30 text-slate-300 hover:text-white hover:shadow-indigo-500/5'
+                          : 'bg-white hover:bg-indigo-50/60 border-slate-200 hover:border-indigo-300/50 text-slate-600 hover:text-slate-800'
+                      }`}
                     >
                       {s.label}
                     </button>
@@ -539,7 +545,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input box */}
-        <div className="bg-slate-950/40 border-t border-card-border/60 p-4 shrink-0 z-10">
+        <div className={`border-t p-4 shrink-0 z-10 ${isDark ? 'bg-slate-950/40 border-card-border/60' : 'bg-white/90 border-slate-200'}`}>
           <div className="max-w-2xl mx-auto space-y-3">
             {!context?.input?.interests?.length && (
               <div className="px-1">
@@ -561,7 +567,9 @@ export default function ChatPage() {
                         className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition select-none cursor-pointer ${
                           selectedInterests.includes(tag.value)
                             ? 'bg-primary/20 border-primary/50 text-primary'
-                            : 'bg-slate-900/60 border-slate-800 text-slate-405 hover:border-slate-700 hover:text-slate-300'
+                            : isDark
+                            ? 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                            : 'bg-slate-100 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-slate-700'
                         }`}
                       >
                         {tag.label}
@@ -585,7 +593,11 @@ export default function ChatPage() {
                   onChange={(e) => setMessage(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
                   disabled={chatMutation.isPending}
                   placeholder="Enter details to start planning e.g. Shimla trip, budget 20000, 3 travelers"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-905/60 px-4 py-3 text-xs md:text-sm text-slate-200 placeholder-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25 transition disabled:opacity-50 pr-12"
+                  className={`w-full rounded-xl border px-4 py-3 text-xs md:text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25 transition disabled:opacity-50 pr-12 ${
+                    isDark
+                      ? 'border-slate-800 bg-slate-900/60 text-slate-200 placeholder-slate-500'
+                      : 'border-slate-300 bg-white text-slate-800 placeholder-slate-400'
+                  }`}
                 />
                 {message.length > 300 && (
                   <span className={`absolute right-3.5 bottom-3.5 text-[10px] font-mono ${
@@ -613,16 +625,16 @@ export default function ChatPage() {
     <div className={`flex h-[calc(100vh-4rem)] flex-col md:flex-row relative transition-colors duration-300 ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
       
       {/* LEFT CANVAS: Shared Trip Context Inspector & Visual Itinerary Timeline (Large Panel) */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-slate-950/10">
+      <div className={`flex flex-1 flex-col overflow-hidden ${isDark ? 'bg-slate-950/10' : 'bg-slate-50/80'}`}>
         {/* Toggle Inspector vs. Interactive Timeline Tabs with Chat Toggle on right */}
-        <div className="flex border-b border-card-border bg-slate-950/40 shrink-0 px-4 items-center justify-between">
+        <div className={`flex border-b shrink-0 px-4 items-center justify-between ${isDark ? 'border-card-border bg-slate-950/40' : 'border-slate-200 bg-white/90'}`}>
           <div className="flex gap-4">
             <button
               onClick={() => setActiveTab('inspector')}
               className={`py-3.5 px-2 text-xs font-bold uppercase tracking-wider transition ${
                 activeTab === 'inspector'
-                  ? 'border-b-2 border-primary text-white bg-slate-900/50'
-                  : 'text-slate-400 hover:text-slate-205'
+                  ? `border-b-2 border-primary ${isDark ? 'text-white bg-slate-900/50' : 'text-indigo-700 bg-indigo-50/60'}`
+                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Plan Details
@@ -631,8 +643,8 @@ export default function ChatPage() {
               onClick={() => setActiveTab('itinerary')}
               className={`py-3.5 px-2 text-xs font-bold uppercase tracking-wider transition relative ${
                 activeTab === 'itinerary'
-                  ? 'border-b-2 border-primary text-white bg-slate-900/50'
-                  : 'text-slate-400 hover:text-slate-205'
+                  ? `border-b-2 border-primary ${isDark ? 'text-white bg-slate-900/50' : 'text-indigo-700 bg-indigo-50/60'}`
+                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
               } ${
                 context?.itinerary?.days && context.status !== 'DRAFT'
                   ? 'after:absolute after:top-2 after:right-0 after:h-2 after:w-2 after:rounded-full after:bg-primary'
@@ -645,7 +657,9 @@ export default function ChatPage() {
           
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-305 font-bold px-3 py-1.5 bg-slate-900/55 hover:bg-slate-800/80 border border-slate-800 rounded-lg transition active:scale-95 cursor-pointer select-none"
+            className={`flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-bold px-3 py-1.5 border rounded-lg transition active:scale-95 cursor-pointer select-none ${
+              isDark ? 'bg-slate-900/55 hover:bg-slate-800/80 border-slate-800' : 'bg-slate-100 hover:bg-indigo-50 border-slate-200'
+            }`}
           >
             {isChatOpen ? (
               <>
@@ -668,7 +682,7 @@ export default function ChatPage() {
               {/* STAGE & STATUS CARD */}
               <div className="premium-card rounded-xl p-4 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs text-slate-500 font-semibold mb-0.5">TRIP STATUS</p>
+                  <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>TRIP STATUS</p>
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`h-2 w-2 rounded-full ${
@@ -679,7 +693,7 @@ export default function ChatPage() {
                           : 'bg-amber-400'
                       }`}
                     />
-                    <span className="font-bold text-sm tracking-wide text-white uppercase">{context.status}</span>
+                    <span className={`font-bold text-sm tracking-wide uppercase ${isDark ? 'text-white' : 'text-slate-800'}`}>{context.status}</span>
                   </div>
                 </div>
 
@@ -695,8 +709,8 @@ export default function ChatPage() {
                 )}
 
                 <div>
-                  <p className="text-xs text-right text-slate-500 mb-0.5 font-semibold">SESSION ID</p>
-                  <span className="font-mono text-xs text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded">
+                  <p className={`text-xs text-right mb-0.5 font-semibold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>SESSION ID</p>
+                  <span className={`font-mono text-xs px-2 py-1 rounded border ${isDark ? 'text-slate-400 bg-slate-900 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'}`}>
                     {context.sessionId.substring(0, 8)}
                   </span>
                 </div>
@@ -708,35 +722,35 @@ export default function ChatPage() {
                   <MapPin className="h-2.5 w-2.5 text-primary" /> Checked Parameters
                 </h4>
                 <div className="grid grid-cols-2 gap-3.5">
-                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Destination</span>
-                    <span className="text-xs font-semibold text-slate-200">
-                      {context.input.destination || <em className="text-slate-650">Pending...</em>}
+                  <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Destination</span>
+                    <span className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {context.input.destination || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Pending...</em>}
                     </span>
                   </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Origin</span>
-                    <span className="text-xs font-semibold text-slate-205">
-                      {context.input.origin || <em className="text-slate-650">Not selected</em>}
+                  <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Origin</span>
+                    <span className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {context.input.origin || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Not selected</em>}
                     </span>
                   </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Travelers</span>
-                    <span className="text-xs font-semibold text-slate-205 flex items-center gap-1">
+                  <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Travelers</span>
+                    <span className={`text-xs font-semibold flex items-center gap-1 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                       <Users className="h-3.5 w-3.5 text-primary" />
                       {context.input.travelers || 0}
                     </span>
                   </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5">Cap Limit</span>
-                    <span className="text-xs font-semibold text-emerald-400 flex items-center gap-0.5">
+                  <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Cap Limit</span>
+                    <span className="text-xs font-semibold text-emerald-500 flex items-center gap-0.5">
                       <IndianRupee className="h-3.5 w-3.5 text-emerald-500" />
                       {context.input.budget_inr ? context.input.budget_inr.toLocaleString() : 0}
                     </span>
                   </div>
-                  <div className="bg-slate-900/60 col-span-2 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase mb-0.5 font-sans">Dates</span>
-                    <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <div className={`col-span-2 p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className={`text-[10px] block font-bold uppercase mb-0.5 font-sans ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Dates</span>
+                    <span className={`text-xs font-semibold flex items-center gap-1.5 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                       <CalendarDays className="h-4.5 w-4.5 text-primary" />
                       {context.input.start_date || 'YYYY-MM-DD'} – {context.input.end_date || 'YYYY-MM-DD'}
                     </span>
@@ -752,17 +766,17 @@ export default function ChatPage() {
                   </h4>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 block font-bold">Estimated Total</span>
-                      <span className="text-xs font-bold text-slate-200">
+                    <div className={`p-2 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                      <span className={`text-[10px] block font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Estimated Total</span>
+                      <span className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                         ₹{(context.budget.total_cost_inr ?? context.budget.total_estimated_cost)?.toLocaleString()}
                       </span>
                     </div>
-                    <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
-                      <span className="text-[10px] text-slate-500 block font-bold">Status</span>
+                    <div className={`p-2 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                      <span className={`text-[10px] block font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Status</span>
                       <span
                         className={`text-xs font-bold ${
-                          context.budget.is_feasible ? 'text-emerald-450' : 'text-red-405'
+                          context.budget.is_feasible ? 'text-emerald-500' : 'text-red-500'
                         }`}
                       >
                         {context.budget.is_feasible ? 'Feasible' : 'Infeasible'}
@@ -776,7 +790,11 @@ export default function ChatPage() {
                       <button
                         type="button"
                         onClick={() => setShowBudgetBreakdown(!showBudgetBreakdown)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-xs font-bold text-indigo-305 hover:text-indigo-200 transition select-none cursor-pointer"
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition select-none cursor-pointer ${
+                          isDark
+                            ? 'bg-slate-900/60 hover:bg-slate-900 border-slate-800 text-indigo-300 hover:text-indigo-200'
+                            : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-indigo-600 hover:text-indigo-700'
+                        }`}
                       >
                         <span className="flex items-center gap-1">
                           📊 {showBudgetBreakdown ? 'Hide Details' : 'View Cost Breakdown'}
@@ -789,54 +807,54 @@ export default function ChatPage() {
                       </button>
 
                       {showBudgetBreakdown && (
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 mt-2 overflow-x-auto animate-fadeIn">
+                        <div className={`rounded-lg border p-3 mt-2 overflow-x-auto animate-fadeIn ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
                           <table className="w-full text-left text-xs border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-800 text-[10px] text-slate-500 uppercase font-bold">
+                              <tr className={`border-b text-[10px] uppercase font-bold ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
                                 <th className="pb-1.5 font-bold">Category</th>
                                 <th className="pb-1.5 text-right font-bold">Cost (INR)</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-900 font-medium">
+                            <tbody className={`divide-y font-medium ${isDark ? 'divide-slate-900' : 'divide-slate-100'}`}>
                               <tr>
-                                <td className="py-2 text-slate-405">✈️ Transit</td>
-                                <td className="py-2 text-right text-slate-200">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>✈️ Transit</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.transport || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>
-                                <td className="py-2 text-slate-405">🏨 Lodging</td>
-                                <td className="py-2 text-right text-slate-200">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🏨 Lodging</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.accommodation || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>
-                                <td className="py-2 text-slate-405">🍔 Food & Meals</td>
-                                <td className="py-2 text-right text-slate-200">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🍔 Food & Meals</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.food || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>
-                                <td className="py-2 text-slate-405">🎟️ Sightseeing / Entrance</td>
-                                <td className="py-2 text-right text-slate-205">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🎟️ Sightseeing / Entrance</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.activities || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>
-                                <td className="py-2 text-slate-405">🚕 Local Transport</td>
-                                <td className="py-2 text-right text-slate-200">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🚕 Local Transport</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.local_transport || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>
-                                <td className="py-2 text-slate-405">🚨 Emergency Fund (10%)</td>
-                                <td className="py-2 text-right text-slate-200">
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🚨 Emergency Fund (10%)</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.emergency_fund || 0).toLocaleString()}
                                 </td>
                               </tr>
-                              <tr className="border-t border-slate-850 font-bold">
+                              <tr className={`border-t font-bold ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                                 <td className="pt-2 text-primary font-bold">💰 Total Cost</td>
-                                <td className="pt-2 text-right text-emerald-450 font-bold">
+                                <td className="pt-2 text-right text-emerald-500 font-bold">
                                   ₹{(context.budget.total_cost_inr ?? context.budget.total_estimated_cost)?.toLocaleString()}
                                 </td>
                               </tr>
@@ -853,7 +871,7 @@ export default function ChatPage() {
                         <AlertTriangle className="h-4 w-4 shrink-0" />
                         <span>Plan exceeds your budget constraint!</span>
                       </div>
-                      <p className="text-[11px] text-slate-405">
+                      <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Select one of the alternatives computed by the Budget Agent:
                       </p>
                       <div className="flex flex-col gap-1.5">
@@ -861,7 +879,11 @@ export default function ChatPage() {
                           <button
                             key={idx}
                             onClick={() => handleAlternativeSelect(altOption)}
-                            className="w-full text-left bg-slate-900 hover:bg-indigo-950 text-indigo-305 hover:text-indigo-405 border border-indigo-900/30 rounded px-2.5 py-1.5 text-xs transition animate-fadeIn cursor-pointer"
+                            className={`w-full text-left border rounded px-2.5 py-1.5 text-xs transition animate-fadeIn cursor-pointer ${
+                              isDark
+                                ? 'bg-slate-900 hover:bg-indigo-950 text-indigo-300 hover:text-indigo-400 border-indigo-900/30'
+                                : 'bg-white hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 border-indigo-200/50'
+                            }`}
                           >
                             💸 {altOption}
                           </button>
@@ -874,11 +896,15 @@ export default function ChatPage() {
 
               {context.weather && (
                 <div className="premium-card rounded-xl p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-indigo-405 uppercase tracking-widest flex items-center gap-1">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+                    isDark ? 'text-indigo-400' : 'text-indigo-705'
+                  }`}>
                     <Sun className="h-4.5 w-4.5 text-amber-500" /> Climate Specialist Agent
                   </h4>
-                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs space-y-2.5">
-                    <p className="text-slate-300 font-medium">
+                  <div className={`p-3 rounded-lg border text-xs space-y-2.5 transition-colors ${
+                    isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <p className={`font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                       ⛅ **Conditions**: {
                         Array.isArray(context.weather.forecast)
                           ? context.weather.forecast.map((f: any) => f.condition || 'Clear').filter((v: string, i: number, a: string[]) => a.indexOf(v) === i).join(', ')
@@ -886,10 +912,14 @@ export default function ChatPage() {
                       } {context.weather.average_temp_c ? `(Avg Temp: ${context.weather.average_temp_c}°C)` : ''}
                     </p>
                     {context.weather.reasoning && (
-                      <div className="text-indigo-300 mt-2 bg-indigo-950/45 p-2.5 rounded border border-indigo-900/40 text-[11px] leading-relaxed">
+                      <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${
+                        isDark ? 'text-indigo-300 bg-indigo-950/45 border-indigo-900/40' : 'text-indigo-900 bg-indigo-50 border-indigo-120/40'
+                      }`}>
                         <div className="flex items-start gap-1">
                           <span className="text-[12px] shrink-0 mt-0.5">🧠</span>
-                          <div className="prose prose-invert max-w-none text-[11px] text-indigo-300 space-y-1">
+                          <div className={`prose max-w-none text-[11px] space-y-1 ${
+                            isDark ? 'prose-invert text-indigo-300' : 'text-indigo-900 prose-slate'
+                          }`}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{context.weather.reasoning}</ReactMarkdown>
                           </div>
                         </div>
@@ -901,17 +931,29 @@ export default function ChatPage() {
 
               {context.accommodation && (
                 <div className="premium-card rounded-xl p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-indigo-405 uppercase tracking-widest flex items-center gap-1">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+                    isDark ? 'text-indigo-400' : 'text-indigo-705'
+                  }`}>
                     <Building2 className="h-4.5 w-4.5 text-primary" /> Lodging Specialist Agent
                   </h4>
-                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs space-y-2.5">
-                    <p className="font-semibold text-slate-200">{context.accommodation.recommended || 'Hotel Options matched'}</p>
-                    {context.accommodation.cost_per_night && <p className="text-slate-405">Estimated Cost: ₹{context.accommodation.cost_per_night.toLocaleString()} / night</p>}
+                  <div className={`p-3 rounded-lg border text-xs space-y-2.5 transition-colors ${
+                    isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <p className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{context.accommodation.recommended || 'Hotel Options matched'}</p>
+                    {context.accommodation.cost_per_night && (
+                      <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                        Estimated Cost: ₹{context.accommodation.cost_per_night.toLocaleString()} / night
+                      </p>
+                    )}
                     {context.accommodation.reasoning && (
-                      <div className="text-indigo-300 mt-2 bg-indigo-950/45 p-2.5 rounded border border-indigo-900/40 text-[11px] leading-relaxed">
+                      <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${
+                        isDark ? 'text-indigo-300 bg-indigo-950/45 border-indigo-900/40' : 'text-indigo-900 bg-indigo-50 border-indigo-120/40'
+                      }`}>
                         <div className="flex items-start gap-1">
                           <span className="text-[12px] shrink-0 mt-0.5">🧠</span>
-                          <div className="prose prose-invert max-w-none text-[11px] text-indigo-300 space-y-1">
+                          <div className={`prose max-w-none text-[11px] space-y-1 ${
+                            isDark ? 'prose-invert text-indigo-300' : 'text-indigo-900 prose-slate'
+                          }`}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{context.accommodation.reasoning}</ReactMarkdown>
                           </div>
                         </div>
@@ -923,17 +965,33 @@ export default function ChatPage() {
 
               {context.transport && (
                 <div className="premium-card rounded-xl p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-indigo-405 uppercase tracking-widest flex items-center gap-1">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+                    isDark ? 'text-indigo-400' : 'text-indigo-705'
+                  }`}>
                     <Car className="h-4.5 w-4.5 text-emerald-450" /> Transit Specialist Agent
                   </h4>
-                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs space-y-2.5">
-                    {context.transport.best_option && <p className="text-slate-300">🛫 **Best Option**: {context.transport.best_option}</p>}
-                    {context.transport.price && <p className="text-emerald-400 font-semibold">Total Price: ₹{context.transport.price.toLocaleString()}</p>}
+                  <div className={`p-3 rounded-lg border text-xs space-y-2.5 transition-colors ${
+                    isDark ? 'bg-indigo-955/20 border-slate-800' : 'bg-slate-50 border-slate-205'
+                  }`}>
+                    {context.transport.best_option && (
+                      <p className={isDark ? 'text-slate-300' : 'text-slate-700'}>
+                        🛫 **Best Option**: {context.transport.best_option}
+                      </p>
+                    )}
+                    {context.transport.price && (
+                      <p className={isDark ? 'text-emerald-400 font-semibold' : 'text-emerald-700 font-bold'}>
+                        Total Price: ₹{context.transport.price.toLocaleString()}
+                      </p>
+                    )}
                     {context.transport.reasoning && (
-                      <div className="text-indigo-305 mt-2 bg-indigo-950/45 p-2.5 rounded border border-indigo-900/40 text-[11px] leading-relaxed">
+                      <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${
+                        isDark ? 'text-indigo-305 bg-indigo-955/45 border-indigo-900/40' : 'text-indigo-900 bg-indigo-50 border-indigo-120/40'
+                      }`}>
                         <div className="flex items-start gap-1">
                           <span className="text-[12px] shrink-0 mt-0.5">🧠</span>
-                          <div className="prose prose-invert max-w-none text-[11px] text-indigo-300 space-y-1">
+                          <div className={`prose max-w-none text-[11px] space-y-1 ${
+                            isDark ? 'prose-invert text-indigo-305' : 'text-indigo-900 prose-slate'
+                          }`}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{context.transport.reasoning}</ReactMarkdown>
                           </div>
                         </div>
@@ -945,16 +1003,24 @@ export default function ChatPage() {
 
               {context.activities && (
                 <div className="premium-card rounded-xl p-4 space-y-2">
-                  <h4 className="text-xs font-bold text-indigo-405 uppercase tracking-widest flex items-center gap-1">
+                  <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+                    isDark ? 'text-indigo-400' : 'text-indigo-705'
+                  }`}>
                     <MapPin className="h-4.5 w-4.5 text-primary" /> Sightseeing Specialist Agent
                   </h4>
-                  <div className="bg-indigo-950/20 p-3 rounded-lg border border-slate-800 text-xs space-y-2.5">
-                    <p className="text-slate-350 font-medium">🗺️ **Matched Interests**: {(context.input.interests || []).join(', ') || 'General Sightseeing'}</p>
+                  <div className={`p-3 rounded-lg border text-xs space-y-2.5 transition-colors ${
+                    isDark ? 'bg-indigo-955/20 border-slate-800' : 'bg-slate-50 border-slate-205'
+                  }`}>
+                    <p className={`font-medium ${isDark ? 'text-slate-350' : 'text-slate-700'}`}>🗺️ **Matched Interests**: {(context.input.interests || []).join(', ') || 'General Sightseeing'}</p>
                     {context.activities.reasoning && (
-                      <div className="text-indigo-305 mt-2 bg-indigo-950/45 p-2.5 rounded border border-indigo-900/40 text-[11px] leading-relaxed">
+                      <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${
+                        isDark ? 'text-indigo-305 bg-indigo-955/45 border-indigo-900/40' : 'text-indigo-900 bg-indigo-50 border-indigo-120/40'
+                      }`}>
                         <div className="flex items-start gap-1">
                           <span className="text-[12px] shrink-0 mt-0.5">🧠</span>
-                          <div className="prose prose-invert max-w-none text-[11px] text-indigo-300 space-y-1">
+                          <div className={`prose max-w-none text-[11px] space-y-1 ${
+                            isDark ? 'prose-invert text-indigo-305' : 'text-indigo-900 prose-slate'
+                          }`}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{context.activities.reasoning}</ReactMarkdown>
                           </div>
                         </div>
@@ -976,13 +1042,17 @@ export default function ChatPage() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-indigo-950">
+                <div className={`space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 ${
+                  isDark ? 'before:bg-indigo-950' : 'before:bg-indigo-100'
+                }`}>
                   {context.itinerary.days.map((dayItem: any, idx: number) => {
                     const isDayExpanded = expandedDays[dayItem.day] === undefined ? dayItem.day === 1 : expandedDays[dayItem.day];
                     return (
                       <div key={idx} className="relative pl-8 space-y-3">
                         {/* Node point */}
-                        <span className="absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary border-4 border-slate-900" />
+                        <span className={`absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary border-4 ${
+                          isDark ? 'border-slate-900' : 'border-white shadow-sm'
+                        }`} />
 
                         <div className="premium-card rounded-xl p-4 space-y-2.5">
                           <div
@@ -993,7 +1063,9 @@ export default function ChatPage() {
                               <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-0.5">
                                 Day {dayItem.day} – {dayItem.date || ''}
                               </span>
-                              <h4 className="text-sm font-bold text-slate-105 group-hover:text-primary transition flex items-center gap-1.5">
+                              <h4 className={`text-sm font-bold transition flex items-center gap-1.5 ${
+                                isDark ? 'text-slate-100 group-hover:text-primary' : 'text-slate-800 group-hover:text-indigo-650'
+                              }`}>
                                 {dayItem.title || 'Sightseeing'}
                                 {isDayExpanded ? (
                                   <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" />
@@ -1003,7 +1075,9 @@ export default function ChatPage() {
                               </h4>
                             </div>
                             {dayItem.daily_total_inr > 0 && (
-                              <span className="text-[10px] font-bold bg-slate-900 border border-slate-800 text-emerald-450 px-2 py-0.5 rounded leading-none">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded leading-none border transition-colors ${
+                                isDark ? 'bg-slate-900 border-slate-800 text-emerald-450' : 'bg-emerald-50 border-emerald-100/50 text-emerald-700'
+                              }`}>
                                 ₹{dayItem.daily_total_inr.toLocaleString()}
                               </span>
                             )}
@@ -1012,7 +1086,9 @@ export default function ChatPage() {
                           {isDayExpanded && (
                             <div className="space-y-3 pt-2.5 border-t border-card-border/40 animate-fadeIn">
                               {dayItem.weather_note && (
-                                <div className="text-[11px] text-slate-405 bg-indigo-955/20 px-2.5 py-1.5 rounded border border-indigo-900/10 italic">
+                                <div className={`text-[11px] px-2.5 py-1.5 rounded border italic transition-colors ${
+                                  isDark ? 'text-slate-400 bg-indigo-955/20 border-indigo-900/10' : 'text-slate-655 bg-indigo-50/50 border-indigo-120/40'
+                                }`}>
                                   ⛅ {dayItem.weather_note}
                                 </div>
                               )}
@@ -1023,20 +1099,24 @@ export default function ChatPage() {
                                   {dayItem.schedule.map((action: any, aIdx: number) => (
                                     <div
                                       key={aIdx}
-                                      className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 space-y-1.5 hover:border-slate-800 transition"
+                                      className={`p-2.5 rounded-lg border space-y-1.5 transition ${
+                                        isDark ? 'bg-slate-900/50 border-slate-850 hover:border-slate-800' : 'bg-slate-50 border-slate-205 hover:border-slate-300'
+                                      }`}
                                     >
                                       <div className="flex justify-between items-center text-[10px]">
-                                        <span className="font-semibold text-slate-400 flex items-center gap-1">
+                                        <span className={`font-semibold flex items-center gap-1 ${
+                                          isDark ? 'text-slate-400' : 'text-slate-550'
+                                        }`}>
                                           <Clock className="h-3 w-3 text-primary" />
                                           {action.time} ({action.duration_min} min)
                                         </span>
                                         {action.cost_inr > 0 && (
-                                          <span className="font-bold text-slate-350">
+                                          <span className={`font-bold ${isDark ? 'text-slate-350' : 'text-slate-650'}`}>
                                             ₹{action.cost_inr.toLocaleString()}
                                           </span>
                                         )}
                                       </div>
-                                      <p className="text-xs font-medium text-slate-200">{action.activity}</p>
+                                      <p className={`text-xs font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{action.activity}</p>
                                       {action.location && (
                                         <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block flex items-center gap-0.5">
                                           <Navigation className="h-2.5 w-2.5 text-primary shrink-0" />
@@ -1058,12 +1138,18 @@ export default function ChatPage() {
 
                   {context.itinerary.notes && (
                     <div className="pl-8 relative">
-                      <span className="absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-800 border-4 border-slate-900" />
-                      <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-2 text-xs">
-                        <h4 className="font-bold text-slate-300 uppercase tracking-widest text-[10px]">
+                      <span className={`absolute left-1.5 top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-4 ${
+                        isDark ? 'bg-slate-800 border-slate-900' : 'bg-slate-300 border-white shadow-sm'
+                      }`} />
+                      <div className={`border p-4 rounded-xl space-y-2 text-xs transition-colors ${
+                        isDark ? 'bg-slate-950/50 border-slate-850' : 'bg-slate-50 border-slate-205'
+                      }`}>
+                        <h4 className={`font-bold uppercase tracking-widest text-[10px] ${
+                          isDark ? 'text-slate-300' : 'text-slate-705'
+                        }`}>
                           Travel Tips & Recommendations
                         </h4>
-                        <p className="text-slate-405 leading-relaxed italic">{context.itinerary.notes}</p>
+                        <p className={`leading-relaxed italic ${isDark ? 'text-slate-405' : 'text-slate-600'}`}>{context.itinerary.notes}</p>
                       </div>
                     </div>
                   )}
@@ -1076,31 +1162,41 @@ export default function ChatPage() {
 
       {/* RIGHT CANVAS: Chat & Conversation (Narrow sidebar layout on the right) */}
       {isChatOpen && (
-        <div className="w-full md:w-[440px] bg-slate-950/20 flex flex-col border-l border-card-border overflow-hidden shrink-0 animate-fadeIn">
+        <div className={`w-full md:w-[440px] flex flex-col border-l overflow-hidden shrink-0 animate-fadeIn ${isDark ? 'bg-slate-950/20 border-card-border' : 'bg-white/80 border-slate-200'}`}>
           
           {/* Sub Header back button with Discard option + Google Calendar connect */}
-          <div className="p-3 bg-slate-950/25 border-b border-card-border flex items-center justify-between shrink-0">
+          <div className={`p-3 border-b flex items-center justify-between shrink-0 ${isDark ? 'bg-slate-950/25 border-card-border' : 'bg-white/90 border-slate-200'}`}>
             <Link
               to="/dashboard"
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-205 transition"
+              className={`flex items-center gap-1.5 text-xs transition ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              <ArrowLeft className="h-4 w-4 text-slate-400" />
+              <ArrowLeft className={`h-4 w-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
               Back to Trips
             </Link>
             {context && (
               <div className="flex items-center gap-2">
-                {/* Sync to Google Calendar */}
-                {context.status === 'PLANNED' && (
+                {/* Sync to Google Calendar — visible on PLANNED and CONFIRMED */}
+                {(context.status === 'PLANNED' || context.status === 'CONFIRMED') && (
                   <button
                     onClick={handleConnectCalendar}
                     title="Sync to Google Calendar"
-                    className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-indigo-300 transition px-2 py-1 bg-slate-900/50 hover:bg-indigo-950/50 border border-slate-800 hover:border-indigo-700/40 rounded cursor-pointer"
+                    className={`flex items-center gap-1 text-[11px] font-semibold transition px-2 py-1 border rounded cursor-pointer ${
+                      context.status === 'CONFIRMED'
+                        ? isDark
+                          ? 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20 hover:border-emerald-500/40'
+                          : 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200 hover:border-emerald-300'
+                        : isDark
+                        ? 'text-slate-400 hover:text-indigo-300 bg-slate-900/50 hover:bg-indigo-950/50 border-slate-800 hover:border-indigo-700/40'
+                        : 'text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border-slate-200 hover:border-indigo-300'
+                    }`}
                   >
                     <Calendar className="h-3 w-3 shrink-0" />
-                    Sync Calendar
+                    {context.status === 'CONFIRMED' ? '📅 Re-sync Calendar' : 'Sync Calendar'}
                   </button>
                 )}
-                <span className="text-xs font-semibold text-slate-450 bg-slate-900/80 px-2 py-0.5 border border-slate-800 rounded">
+                <span className={`text-xs font-semibold px-2 py-0.5 border rounded ${
+                  isDark ? 'text-slate-400 bg-slate-900/80 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'
+                }`}>
                   ✈️ {context.input?.destination || 'Options'}
                 </span>
                 <button
@@ -1143,11 +1239,13 @@ export default function ChatPage() {
                     className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs shadow-md leading-relaxed ${
                       msg.role === 'user'
                         ? 'bg-primary text-white font-medium'
-                        : 'bg-card-bg border border-card-border text-slate-205'
+                        : isDark
+                        ? 'bg-card-bg border border-card-border text-slate-200'
+                        : 'bg-slate-100 border border-slate-200 text-slate-700'
                     }`}
                   >
                     {msg.role === 'assistant' ? (
-                      <div className="prose prose-invert prose-sm max-w-none text-xs">
+                      <div className={`prose prose-sm max-w-none text-xs ${isDark ? 'prose-invert' : 'prose-slate'}`}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
@@ -1178,7 +1276,7 @@ export default function ChatPage() {
 
           {/* HITL approval panels */}
           {context && context.status === 'PLANNED' && !activeStep && (
-            <div className="p-4 border-t border-card-border bg-slate-900/40 backdrop-blur-sm space-y-3 shrink-0">
+            <div className={`p-4 border-t backdrop-blur-sm space-y-3 shrink-0 ${isDark ? 'border-card-border bg-slate-900/40' : 'border-slate-200 bg-white/90'}`}>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1 glow-text">
                   <Sparkles className="h-3 w-3" />
@@ -1199,7 +1297,9 @@ export default function ChatPage() {
                 <button
                   onClick={() => setShowReplanInput(!showReplanInput)}
                   disabled={approveMutation.isPending || rejectMutation.isPending}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-705 text-xs font-bold text-slate-205 transition active:scale-95 cursor-pointer"
+                  className={`flex items-center gap-1 px-3 py-2 rounded-lg border text-xs font-bold transition active:scale-95 cursor-pointer ${
+                    isDark ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700'
+                  }`}
                 >
                   <X className="h-3.5 w-3.5 text-red-400" />
                   Modify Plan
@@ -1213,7 +1313,9 @@ export default function ChatPage() {
                     value={replanReason}
                     onChange={(e) => setReplanReason(e.target.value)}
                     placeholder="e.g. Find cheaper hotels, add tour to database"
-                    className="flex-1 rounded-lg border border-slate-705 bg-slate-800/80 px-2.5 py-2 text-xs text-white focus:border-primary focus:outline-none"
+                    className={`flex-1 rounded-lg border px-2.5 py-2 text-xs focus:border-primary focus:outline-none ${
+                      isDark ? 'border-slate-700 bg-slate-800/80 text-white' : 'border-slate-300 bg-white text-slate-800'
+                    }`}
                   />
                   <button
                     type="submit"
@@ -1227,7 +1329,7 @@ export default function ChatPage() {
           )}
 
           {/* Form input controls */}
-          <div className="border-t border-card-border bg-slate-950/20 shrink-0">
+          <div className={`border-t shrink-0 ${isDark ? 'border-card-border bg-slate-950/20' : 'border-slate-200 bg-white/90'}`}>
             
             {/* Interests panel */}
             {!context?.input?.interests?.length && context?.status !== 'CONFIRMED' && (
@@ -1250,7 +1352,9 @@ export default function ChatPage() {
                         className={`px-2 py-1 rounded-full text-[11px] font-semibold border transition select-none cursor-pointer ${
                           selectedInterests.includes(tag.value)
                             ? 'bg-primary/20 border-primary/50 text-primary'
-                            : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                            : isDark
+                            ? 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                            : 'bg-slate-100 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-slate-700'
                         }`}
                       >
                         {tag.label}
@@ -1259,7 +1363,7 @@ export default function ChatPage() {
                   </div>
                 )}
                 {selectedInterests.length > 0 && (
-                  <p className="text-[10px] text-indigo-455 pb-1">
+                  <p className="text-[10px] text-indigo-400 pb-1">
                     Selected: {selectedInterests.join(', ')} — will be appended
                   </p>
                 )}
@@ -1278,7 +1382,11 @@ export default function ChatPage() {
                       ? 'This trip is confirmed and locked from modifications.'
                       : 'Send details to your planner...'
                   }
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-3 text-xs text-slate-200 placeholder-slate-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition disabled:opacity-50 pr-12"
+                  className={`w-full rounded-xl border px-3.5 py-3 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition disabled:opacity-50 pr-12 ${
+                    isDark
+                      ? 'border-slate-800 bg-slate-900/60 text-slate-200 placeholder-slate-500'
+                      : 'border-slate-300 bg-white text-slate-800 placeholder-slate-400'
+                  }`}
                 />
                 {message.length > 300 && (
                   <span className={`absolute right-2.5 bottom-2.5 text-[10px] font-mono ${
@@ -1302,23 +1410,27 @@ export default function ChatPage() {
 
       {showDiscardConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="premium-card rounded-2xl max-w-sm w-full p-6 mx-4 border border-card-border/80 bg-card-bg/95 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-red-505">
+          <div className={`premium-card rounded-2xl max-w-sm w-full p-6 mx-4 border shadow-2xl space-y-4 ${
+            isDark ? 'border-card-border/80 bg-card-bg/95' : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex items-center gap-3">
               <div className="h-10 w-10 bg-red-500/10 rounded-xl flex items-center justify-center border border-red-500/20">
                 <Trash2 className="h-5 w-5 text-red-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Discard Trip</h3>
-                <p className="text-[10px] text-slate-400">This action cannot be undone.</p>
+                <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Discard Trip</h3>
+                <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>This action cannot be undone.</p>
               </div>
             </div>
-            <p className="text-xs text-slate-350 leading-normal">
-              Are you sure you want to discard and cancel your trip plan to (or design for) <span className="font-semibold text-white">{context?.input?.destination || 'this destination'}</span>?
+            <p className={`text-xs leading-normal ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Are you sure you want to discard and cancel your trip plan to (or design for) <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{context?.input?.destination || 'this destination'}</span>?
             </p>
             <div className="flex gap-2 justify-end pt-2">
               <button
                 onClick={() => setShowDiscardConfirm(false)}
-                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition active:scale-95 cursor-pointer"
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                  isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
               >
                 Cancel
               </button>
@@ -1333,7 +1445,7 @@ export default function ChatPage() {
                     toast.error('Failed to cancel trip: ' + (err.response?.data?.message || err.message));
                   }
                 }}
-                className="px-3.5 py-2 rounded-lg bg-red-650 hover:bg-red-600 text-xs font-bold text-white transition active:scale-95 cursor-pointer"
+                className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-bold text-white transition active:scale-95 cursor-pointer"
               >
                 Discard
               </button>

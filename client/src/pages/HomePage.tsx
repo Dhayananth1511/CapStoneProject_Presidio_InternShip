@@ -160,10 +160,10 @@ export default function HomePage() {
       <div className="max-w-7xl mx-auto w-full px-6 py-12 lg:py-20 flex-1 flex flex-col justify-center space-y-16 relative z-10">
         
         {/* Banner Headers */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div className="flex flex-col items-center text-center space-y-6 pt-4">
           
-          {/* LEFT: TITLE & CALL-TO-ACTIONS */}
-          <div className="lg:col-span-7 space-y-6">
+          {/* CENTER: TITLE & CALL-TO-ACTIONS */}
+          <div className="max-w-3xl w-full space-y-6">
             <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary">
               <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
               <span>Smart Travel Planning, Made Easy</span>
@@ -176,22 +176,22 @@ export default function HomePage() {
               </span>
             </h1>
             
-            <p className="text-base sm:text-lg text-slate-400 max-w-xl leading-relaxed">
+            <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
               Tell us where you want to go in simple text. Our AI assistants look up weather forecast reports, check transport options, map out hotels under your budget limit, and plan a custom day-by-day plan instantly.
             </p>
 
             {/* Entry Workspace Portals */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-4 max-w-2xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-4 max-w-2xl mx-auto">
               {/* Traveler Card */}
-              <div className="premium-card rounded-2xl p-5 border border-slate-800/80 hover:border-primary/45 transition-all duration-300 group flex flex-col justify-between shadow-lg hover:shadow-primary/5 bg-slate-900/40 backdrop-blur-sm">
+              <div className={`rounded-2xl p-5 border hover:border-primary/45 transition-all duration-300 group flex flex-col justify-between shadow-lg backdrop-blur-sm ${isDark ? 'bg-slate-900/40 border-slate-800/80 hover:shadow-primary/5' : 'bg-white border-slate-200 hover:shadow-primary/10 shadow-slate-100'}`}>
                 <div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary mb-4 group-hover:scale-105 transition-transform duration-300">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary mb-4 group-hover:scale-105 transition-transform duration-300 mx-auto sm:mx-0">
                     <Compass className="h-5 w-5" />
                   </div>
-                  <h3 className="text-base font-bold text-white mb-1.5">
+                  <h3 className={`text-base font-bold mb-1.5 ${isDark ? 'text-white' : 'text-slate-800'}`}>
                     Plan a New Trip
                   </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                  <p className={`text-xs leading-relaxed mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     Chat with TripPlanner assistant, review day schedules, inspect hotel prices, and auto-sync itineraries.
                   </p>
                 </div>
@@ -204,49 +204,24 @@ export default function HomePage() {
               </div>
 
               {/* Admin Card */}
-              <div className="premium-card rounded-2xl p-5 border border-slate-800/80 hover:border-indigo-400/45 transition-all duration-300 group flex flex-col justify-between shadow-lg hover:shadow-indigo-500/5 bg-slate-900/40 backdrop-blur-sm">
+              <div className={`rounded-2xl p-5 border hover:border-indigo-400/45 transition-all duration-300 group flex flex-col justify-between shadow-lg backdrop-blur-sm ${isDark ? 'bg-slate-900/40 border-slate-800/80 hover:shadow-indigo-500/5' : 'bg-white border-slate-200 hover:shadow-indigo-500/10 shadow-slate-100'}`}>
                 <div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-405 mb-4 group-hover:scale-105 transition-transform duration-300">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 mb-4 group-hover:scale-105 transition-transform duration-300 mx-auto sm:mx-0">
                     <Shield className="h-5 w-5" />
                   </div>
-                  <h3 className="text-base font-bold text-white mb-1.5">
+                  <h3 className={`text-base font-bold mb-1.5 ${isDark ? 'text-white' : 'text-slate-800'}`}>
                     Admin Dashboard
                   </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                  <p className={`text-xs leading-relaxed mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     Analyze trip statistics, view user metrics charts, monitor API costs, and inspect debug agent log details.
                   </p>
                 </div>
                 <Link
                   to="/login?role=admin"
-                  className="inline-flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-700 text-slate-205 border border-slate-700 hover:border-slate-600 font-bold py-2.5 px-4 rounded-xl text-xs transition active:scale-98 cursor-pointer"
+                  className={`inline-flex items-center justify-center gap-2 w-full font-bold py-2.5 px-4 rounded-xl text-xs transition active:scale-98 cursor-pointer border ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 hover:border-slate-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'}`}
                 >
                   Admin Console Control <ArrowRight className="h-4 w-4" />
                 </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT: INTERACTIVE STEP GRAPHIC EXHIBIT */}
-          <div className="lg:col-span-5 flex flex-col justify-center items-center">
-            <div className="w-full max-w-md premium-card rounded-3xl p-6 relative overflow-hidden shadow-2xl space-y-4 bg-slate-900/30 border border-slate-850 backdrop-blur-md">
-              <span className="text-[10px] font-bold text-primary tracking-widest uppercase block border-b border-card-border/60 pb-3 text-center">
-                💻 HOW TRIPPLANNER PLANNER WORKS
-              </span>
-
-              {/* Live Preview Display Pane */}
-              <div className="p-4 bg-slate-950/40 rounded-2xl border border-slate-900 flex flex-col justify-center min-h-[160px] transition-all duration-300">
-                {currentStep.screenshotMock}
-              </div>
-
-              {/* Step indicator bar */}
-              <div className="flex items-center justify-between pt-2">
-                <span className="bg-slate-950 font-mono text-[10px] text-slate-500 border border-slate-900 rounded px-2.5 py-1">
-                  💻 PREVIEWING STEP {currentStep.id} OF 4
-                </span>
-                
-                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">
-                  {currentStep.badge}
-                </span>
               </div>
             </div>
           </div>
@@ -261,7 +236,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-4">
             {steps.map((step) => {
               const StepIcon = step.icon;
               const isActive = activeStep === step.id;
@@ -270,15 +245,21 @@ export default function HomePage() {
                 <button
                   key={step.id}
                   onClick={() => setActiveStep(step.id)}
-                  className={`premium-card rounded-2xl p-5 border text-left flex flex-col justify-between h-48 transition-all duration-350 cursor-pointer ${
+                  className={`rounded-2xl p-5 border text-left flex flex-col justify-between h-48 transition-all duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-primary ${
                     isActive
-                      ? 'border-primary bg-primary/10 shadow-lg text-white scale-102 ring-1 ring-primary/20'
-                      : 'border-slate-800/80 bg-slate-900/25 hover:border-slate-705 text-slate-400'
+                      ? isDark
+                        ? 'border-primary bg-primary/10 shadow-lg scale-[1.02] ring-1 ring-primary/20'
+                        : 'border-primary bg-primary/5 shadow-lg scale-[1.02] ring-1 ring-primary/20'
+                      : isDark
+                        ? 'border-slate-800/80 bg-slate-900/25 hover:border-slate-600'
+                        : 'border-slate-200 bg-white hover:border-primary/40 shadow-sm'
                   }`}
                 >
                   <div className="flex justify-between items-start w-full">
                     <div className={`p-2.5 rounded-xl border ${
-                      isActive ? 'bg-primary/25 border-primary/40 text-primary' : 'bg-slate-900 border-slate-800'
+                      isActive
+                        ? 'bg-primary/20 border-primary/40 text-primary'
+                        : isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
                     }`}>
                       <StepIcon className="h-5 w-5" />
                     </div>
@@ -288,11 +269,19 @@ export default function HomePage() {
                   </div>
 
                   <div className="space-y-1 mt-4">
-                    <h4 className="text-sm font-bold text-slate-100 flex items-center justify-between">
+                    <h4 className={`text-sm font-bold flex items-center justify-between ${
+                      isActive
+                        ? isDark ? 'text-white' : 'text-slate-900'
+                        : isDark ? 'text-slate-200' : 'text-slate-700'
+                    }`}>
                       {step.title}
                       {isActive && <ChevronRight className="h-4 w-4 text-primary animate-pulse" />}
                     </h4>
-                    <p className={`text-xs leading-relaxed ${isActive ? 'text-slate-300' : 'text-slate-455'}`}>
+                    <p className={`text-xs leading-relaxed ${
+                      isActive
+                        ? isDark ? 'text-slate-300' : 'text-slate-600'
+                        : isDark ? 'text-slate-400' : 'text-slate-500'
+                    }`}>
                       {step.shortDesc}
                     </p>
                   </div>
@@ -302,30 +291,30 @@ export default function HomePage() {
           </div>
 
           {/* ACTIVE STEP DETAILED PARAGRAPH INFO */}
-          <div className="p-5 rounded-2xl bg-slate-900/30 border border-slate-850/80 font-sans max-w-4xl mx-auto mt-4 text-center">
-            <p className="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto">
-              💡 <strong className="text-slate-202">{currentStep.title} Details:</strong> {currentStep.detailedDesc}
+          <div className={`p-5 rounded-2xl border font-sans max-w-4xl mx-auto mt-4 text-center ${isDark ? 'bg-slate-900/30 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <p className={`text-xs leading-relaxed max-w-2xl mx-auto ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              💡 <strong className={isDark ? 'text-slate-200' : 'text-slate-800'}>{currentStep.title} Details:</strong> {currentStep.detailedDesc}
             </p>
           </div>
         </div>
 
         {/* High level trust badges */}
-        <div className="border-t border-slate-805 pt-8 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto w-full text-center">
+        <div className={`border-t pt-8 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto w-full text-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="space-y-1 font-sans">
-            <span className="text-[11px] font-bold tracking-widest text-[#7a80b0] uppercase">⚡ Easy Chat</span>
-            <p className="text-[11px] font-semibold text-slate-400">Describe your travel ideas in natural text</p>
+            <span className={`text-[11px] font-bold tracking-widest uppercase ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>⚡ Easy Chat</span>
+            <p className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Describe your travel ideas in natural text</p>
           </div>
           <div className="space-y-1 font-sans">
-            <span className="text-[11px] font-bold tracking-widest text-[#7a80b0] uppercase">⚖️ Safe Stays</span>
-            <p className="text-[11px] font-semibold text-slate-400">Automatic hotel and flight cap compliance</p>
+            <span className={`text-[11px] font-bold tracking-widest uppercase ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>⚖️ Safe Stays</span>
+            <p className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Automatic hotel and flight cap compliance</p>
           </div>
           <div className="space-y-1 font-sans">
-            <span className="text-[11px] font-bold tracking-widest text-[#7a80b0] uppercase">⛅ Weather Checked</span>
-            <p className="text-[11px] font-semibold text-slate-400">Weather alerts and forecast checks</p>
+            <span className={`text-[11px] font-bold tracking-widest uppercase ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>⛅ Weather Checked</span>
+            <p className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Weather alerts and forecast checks</p>
           </div>
           <div className="space-y-1 font-sans">
-            <span className="text-[11px] font-bold tracking-widest text-[#7a80b0] uppercase">📅 Calendar Synced</span>
-            <p className="text-[11px] font-semibold text-slate-400">Add schedule to your phone automatically</p>
+            <span className={`text-[11px] font-bold tracking-widest uppercase ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>📅 Calendar Synced</span>
+            <p className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Add schedule to your phone automatically</p>
           </div>
         </div>
 

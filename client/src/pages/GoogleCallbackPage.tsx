@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
@@ -11,8 +11,13 @@ export default function GoogleCallbackPage() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
+  const hasRun = useRef(false);
 
   useEffect(() => {
+    // Guard against React StrictMode double-invoke (runs effect twice in dev)
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     const accessToken = searchParams.get('accessToken');
     const id = searchParams.get('userId');
     const name = searchParams.get('name');
