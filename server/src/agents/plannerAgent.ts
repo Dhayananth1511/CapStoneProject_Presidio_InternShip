@@ -4,8 +4,6 @@
 
 import { ChatGroq } from '@langchain/groq';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
 import { runMissingInfoAgent } from './missingInfoAgent';
 import { runDestinationRecAgent } from './destinationRecAgent';
 import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
@@ -165,78 +163,37 @@ ${recentHistory || '(No history yet)'}
     }
   }
 
-  // Step 2: Supervisor delegation using Tool Binding
-  const supervisorPrompt = `You are the lead travel coordinator supervisor. Examine the current trip input parameters and choose the appropriate child agent tool.
+  // Step 2: Deterministic supervisor routing — no LLM needed here.
+  // Rule 1: If no destination is set, always recommend one first.
+  // Rule 2: If destination exists but other critical fields are missing, ask for them.
+  // Rule 3: If all fields are present, generate the full plan.
+  const hasDestination = !!(updatedContext.input.destination && updatedContext.input.destination.trim() !== '');
 
-Current trip variables: ${JSON.stringify(updatedContext.input)}
-
-Delegation Guidelines:
-1. If the destination parameter is missing, empty, or not concrete (e.g. general description), you MUST delegate to "recommend_destination" so the Destination Recommendation Agent can suggest top spots.
-2. If the destination is present, but any other critical variables (origin, start_date, end_date, budget_inr, travelers) are missing or 0, you MUST delegate to "validate_trip_inputs".
-3. If all trip parameters (destination, origin, start_date, end_date, budget_inr, travelers) are present and complete, delegate to "orchestrate_and_generate_trip_plan" to build the travel itinerary.
-
-You must invoke exactly one tool.`;
-
-  const supervisorArgsSchema = z.object({
-    destination: z.string().optional().nullable(),
-    origin: z.string().optional().nullable(),
-    start_date: z.string().optional().nullable(),
-    end_date: z.string().optional().nullable(),
-    travelers: z.number().optional().nullable(),
-    budget_inr: z.number().optional().nullable(),
-    interests: z.array(z.string()).optional().nullable(),
-  });
-
-  const validateTripInputsTool = tool(async () => {}, {
-    name: 'validate_trip_inputs',
-    description: 'Analyzes inputs, identifies missing slots, and generates helpful questions for missing origin/dates/budget/travelers.',
-    schema: supervisorArgsSchema,
-  });
-
-  const recommendDestinationTool = tool(async () => {}, {
-    name: 'recommend_destination',
-    description: 'Triggers when no destination is chosen, presenting selection lists to the user.',
-    schema: supervisorArgsSchema,
-  });
-
-  const orchestrateAndGenerateTripPlanTool = tool(async () => {}, {
-    name: 'orchestrate_and_generate_trip_plan',
-    description: 'Triggers when all parameters are ready, coordinating concurrent API requests, safety checks, and printing the itinerary.',
-    schema: supervisorArgsSchema,
-  });
-
-  const supervisorWithTools = llm.bindTools([
-    validateTripInputsTool,
-    recommendDestinationTool,
-    orchestrateAndGenerateTripPlanTool,
-  ]);
-
-  const supervisorResponse = await withRetry(() => supervisorWithTools.invoke([
-    new SystemMessage(supervisorPrompt),
-    new HumanMessage('Delegate the next workflow executor tool call.')
-  ]));
-
-  const toolCalls = supervisorResponse.tool_calls || [];
-  let selectedTool = toolCalls[0]?.name || 'validate_trip_inputs';
-
-  // Defensive validation guard: Ensure critical fields exist before executing plan coordination.
-  // This prevents LLM tool-calling hallucinations from crashing the downstream MCP APIs.
-  const fieldsToCheck = [
-    updatedContext.input.destination,
+  const criticalFields = [
     updatedContext.input.origin,
     updatedContext.input.start_date,
     updatedContext.input.end_date,
     updatedContext.input.budget_inr,
-    updatedContext.input.travelers
+    updatedContext.input.travelers,
   ];
-  const hasMissingCriticalFields = fieldsToCheck.some(field => field === undefined || field === '' || field === 0);
+  const hasMissingCriticalFields = criticalFields.some(
+    (field) => field === undefined || field === '' || field === 0
+  );
 
-  if (selectedTool === 'orchestrate_and_generate_trip_plan' && hasMissingCriticalFields) {
-    logger.warn('Supervisor hallucinated plan generation but critical fields are missing. Overriding selection to validation.');
+  let selectedTool: string;
+  if (!hasDestination) {
+    selectedTool = 'recommend_destination';
+  } else if (hasMissingCriticalFields) {
     selectedTool = 'validate_trip_inputs';
+  } else {
+    selectedTool = 'orchestrate_and_generate_trip_plan';
   }
 
-  logger.info(`Supervisor: Delegating task execution to tool: ${selectedTool}`);
+  logger.info(`Supervisor: Deterministic routing → ${selectedTool}`, {
+    hasDestination,
+    hasMissingCriticalFields,
+    destination: updatedContext.input.destination,
+  });
 
   // Flow A: Check for missing info
   if (selectedTool === 'validate_trip_inputs') {
