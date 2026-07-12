@@ -21,6 +21,28 @@ const llm = new ChatGroq({
   temperature: 0.1,
 });
 
+function extractJson(text: string): any {
+  // Try to find all blocks starting with { and ending with } using non-greedy global search
+  const regex = /\{[\s\S]*?\}/g;
+  let match;
+  let lastParsed = null;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      lastParsed = JSON.parse(match[0]);
+    } catch (e) {
+      // ignore invalid json fragments
+    }
+  }
+  if (lastParsed) return lastParsed;
+
+  // Fallback: try greedy matching if non-greedy didn't yield a valid object
+  const greedyMatch = text.match(/\{[\s\S]*\}/);
+  if (greedyMatch) {
+    return JSON.parse(greedyMatch[0]);
+  }
+  throw new Error("No valid JSON found in response");
+}
+
 export interface TripContext {
   sessionId: string;
   userId: string;
@@ -33,6 +55,7 @@ export interface TripContext {
     travelers?: number;
     budget_inr?: number;
     interests?: string[];
+    duration_days?: number;
   };
   weather?: any;
   transport?: any;
@@ -66,8 +89,10 @@ export async function runPlannerAgent(
   const currentYear = new Date().getFullYear();
   const currentDateStr = new Date().toISOString().split('T')[0];
 
+  // We slice context history up to 12 turns so that earlier requirements (e.g. "5-day trip")
+  // are not lost while slot gathering proceeds.
   const recentHistory = context.conversationHistory
-    .slice(-4)
+    .slice(-12)
     .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
     .join('\n');
 
@@ -82,17 +107,23 @@ Slot definitions to extract:
 - start_date: Start date of travel (YYYY-MM-DD format).
 - end_date: End date of travel (YYYY-MM-DD format).
 - travelers: Total count of travelers (integer).
-- budget_inr: Budget limit in INR (integer).
+- budget_inr: Overall total budget limit/cap in INR (integer). MUST be the absolute budget ceiling. Do NOT extract savings estimates, cost reductions, or difference values. Only extract when a new overall absolute limit is explicitly set, such as "increase limit to ₹35000" or "my total budget is ₹25000".
 - interests: User interests (array of strings).
+- duration_days: The number of days of the trip (integer). E.g. a "5-day trip" is 5 days.
 
 Crucial Rules:
 0. **Destination Override (HIGHEST PRIORITY):** If the user explicitly states they want to travel TO a specific named city or place — using phrases like "I want to go to X", "take me to X", "plan a trip to X", "destination is X", "X instead", "change to X", "I prefer X" — you MUST extract that place as the "destination", overriding any previously set destination. This applies even if a destination is already set in the current known parameters.
 1. For all OTHER location mentions (not prefixed with destination intent), identify if it is the "origin" (departure city) or the "destination" using recent chat history (e.g., if assistant asked "What is your departure city?" and user replies "Coimbatore", that is the "origin"). Do NOT overwrite the existing destination with the origin.
 2. If the user mentions a relative date like "15th july", format it as "${currentYear}-07-15" using the Reference Year ${currentYear}.
-3. If you can determine the trip duration (e.g., "5-day trip") and have the start_date (e.g., "${currentYear}-07-15"), please calculate and populate the end_date accordingly (e.g., 5 days from July 15 is "${currentYear}-07-20").
-4. If the user asks to adjust the dates, shorten the trip, or reduce the duration (e.g. "Reduce duration of trip by 1 or 2 days" or "shorten dates"), you must compute a new end_date by subtracting the specified number of days from the current end_date (for example, if current end_date is "2026-07-23" and user requests to reduce by 1 day, you must output "2026-07-22").
+3. Relative Date Resolution:
+   - If the user says "next week" or "from next week", calculate the target start date. If today is Sunday, "next week" starts on the upcoming Monday (eight days from now or next calendar week's Monday).
+   - If you can determine the trip duration (either from the "duration_days" or from details in chat history like a "5-day trip"), and you resolve the start_date, calculate and populate the end_date accordingly. For example, if start_date is "2026-07-20" and duration is 5 days, end_date must be calculated as "2026-07-25" (5 days after the start date).
+4. If the user asks to adjust the dates, shorten the trip, or reduce the duration (e.g. "Reduce duration of trip by 1 or 2 days" or "shorten dates"), you must compute a new end_date by subtracting the specified number of days from the current end_date.
 5. The "destination" must be a concrete, specific city, town, or tourist spot (like "Manali", "Shimla", "Gulmarg", "Ooty", "Goa"). If the user specifies a general region, category, environment, or description (like "snow hill station", "beach side", "mountains", "desert"), do NOT put it in destination. Instead, add it to the "interests" array (e.g., ["snow hill station"]) and leave "destination" as an empty string ("").
-6. Return ONLY valid JSON with this exact structure (leave fields empty string or 0 if missing):
+6. Output Instructions:
+   - Return ONLY a single merged JSON block containing all current known parameters updated with the latest extracted parameters.
+   - Do NOT output any explanations, conversation text, or multiple separate JSON blocks.
+   - Return valid JSON with this exact structure (leave fields empty string or 0 if missing):
 {
   "destination": "string or empty",
   "origin": "string or empty",  
@@ -100,7 +131,8 @@ Crucial Rules:
   "end_date": "YYYY-MM-DD or empty",
   "travelers": number or 0,
   "budget_inr": number or 0,
-  "interests": ["array", "of", "strings"]
+  "interests": ["array", "of", "strings"],
+  "duration_days": number or 0
 }
 
 Current known parameters: ${JSON.stringify(context.input)}
@@ -115,19 +147,18 @@ ${recentHistory || '(No history yet)'}
 
   let updatedInput = { ...context.input };
   try {
-    const jsonMatch = extractionResponse.content.toString().match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const extracted = JSON.parse(jsonMatch[0]);
-      // Merge values (do not overwrite with empty values)
-      updatedInput = {
-        ...context.input,
-        ...Object.fromEntries(
-          Object.entries(extracted).filter(([_, v]) => v !== '' && v !== 0 && (Array.isArray(v) ? v.length > 0 : true))
-        )
-      };
-    }
-  } catch (err) {
-    logger.warn('Failed to parse json slots inside Supervisor extractor');
+    const rawContent = extractionResponse.content.toString();
+    const extracted = extractJson(rawContent);
+    logger.info('Supervisor extracted slots successfully', { extracted, rawLength: rawContent.length });
+    // Merge values (do not overwrite with empty values)
+    updatedInput = {
+      ...context.input,
+      ...Object.fromEntries(
+        Object.entries(extracted).filter(([_, v]) => v !== '' && v !== 0 && (Array.isArray(v) ? v.length > 0 : true))
+      )
+    };
+  } catch (err: any) {
+    logger.warn('Failed to parse json slots inside Supervisor extractor', { error: err.message, rawContent: extractionResponse.content.toString() });
   }
 
   let updatedContext: TripContext = {

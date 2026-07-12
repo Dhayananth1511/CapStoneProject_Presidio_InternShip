@@ -19,6 +19,7 @@ export interface ITrip extends Document {
     travelers?: number;
     budget_inr?: number;
     interests?: string[];
+    duration_days?: number;
   };
   weather?: any;         // Structured weather data cache
   transport?: any;       // Selected travel route options
@@ -54,7 +55,8 @@ const TripSchema = new Schema<ITrip>(
       end_date: { type: String },
       travelers: { type: Number },
       budget_inr: { type: Number },
-      interests: [{ type: String }]
+      interests: [{ type: String }],
+      duration_days: { type: Number }
     },
     // We use Schema.Types.Mixed (flexible JSON) because sub-agent structural formats
     // can evolve, allowing loose, scalable payloads.
