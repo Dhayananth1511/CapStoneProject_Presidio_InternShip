@@ -29,7 +29,7 @@ export interface MissingInfoResult {
 
 const questionSchema = z.object({
   question: z.string().describe('A short, friendly question to ask the user (under 20 words).'),
-  missingFields: z.array(z.string()).describe('Which fields this question is asking about.'),
+  missingFields: z.array(z.string()).optional().describe('Which fields this question is asking about.'),
 });
 
 const askForOriginTool = tool(async () => {}, {

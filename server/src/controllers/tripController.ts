@@ -109,14 +109,14 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
       { sessionId: tripId },
       { 
         status: 'DRAFT',
-        weather: updatedContext.weather || {},
-        transport: updatedContext.transport || {},
-        accommodation: updatedContext.accommodation || {},
-        activities: updatedContext.activities || {},
-        local_transport: updatedContext.local_transport || {},
-        budget: updatedContext.budget || {},
-        itinerary: updatedContext.itinerary || {},
-        formattedPlan: ''
+        weather: updatedContext.weather,
+        transport: updatedContext.transport,
+        accommodation: updatedContext.accommodation,
+        activities: updatedContext.activities,
+        local_transport: updatedContext.local_transport,
+        budget: updatedContext.budget,
+        itinerary: updatedContext.itinerary,
+        formattedPlan: undefined
       }
     );
 
