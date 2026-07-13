@@ -77,7 +77,7 @@ async function searchHotelbedsHotels(
 ): Promise<HotelOption[] | null> {
   if (!isHotelbedsConfigured()) return null;
 
-  const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const timestamp = Math.floor(Date.now() / 1000).toString();
   const signature = buildHotelbedsSignature(timestamp);
   const headers = {
     'Api-key': HOTELBEDS_API_KEY as string,
@@ -85,35 +85,65 @@ async function searchHotelbedsHotels(
     'Content-Type': 'application/json',
   };
 
-  // Best-effort destination lookup via the Content API.
-  const locationCandidates = [
-    `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations?language=ENG&name=${encodeURIComponent(destination)}`,
-    `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations?language=ENG&term=${encodeURIComponent(destination)}`,
-  ];
+  const HOTELBEDS_DEST_MAP: Record<string, string> = {
+    'ooty': 'OOT',
+    'delhi': 'DEL',
+    'mumbai': 'MUM',
+    'bangalore': 'BLR',
+    'bengaluru': 'BLR',
+    'chennai': 'MAA',
+    'kolkata': 'CCU',
+    'hyderabad': 'HYD',
+    'goa': 'GOA',
+    'jaipur': 'JAI',
+    'agra': 'AGR',
+    'shimla': 'SHI',
+    'manali': 'MAN',
+    'kochi': 'COK',
+    'cochin': 'COK',
+    'pune': 'PUN',
+    'pondy': 'PON',
+    'pondicherry': 'PON',
+    'alleppey': 'ALL',
+  };
 
-  let destinationCode: string | undefined;
-  for (const locationUrl of locationCandidates) {
-    try {
-      const locationRes = await fetch(locationUrl, { headers });
-      if (!locationRes.ok) continue;
+  const normDest = destination.trim().toLowerCase();
+  let destinationCode: string | undefined = HOTELBEDS_DEST_MAP[normDest];
 
-      const locationData: any = await locationRes.json();
-      const locations = locationData?.locations || locationData?.data || locationData?.response || [];
-      const flattened = Array.isArray(locations) ? locations : Object.values(locations || {});
+  if (!destinationCode) {
+    // Best-effort destination lookup via the Content API.
+    const locationCandidates = [
+      `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations/destinations?language=ENG&countryCodes=IN&from=1&to=100`,
+      `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations/destinations?language=ENG&from=1&to=100`,
+    ];
 
-      const firstMatch = flattened.find((item: any) => {
-        const name = String(item?.name || item?.description || item?.destinationName || '').toLowerCase();
-        return name.includes(destination.toLowerCase()) && (item?.code || item?.destinationCode);
-      });
+    for (const locationUrl of locationCandidates) {
+      try {
+        const locationRes = await fetch(locationUrl, { headers });
+        if (!locationRes.ok) continue;
 
-      destinationCode = firstMatch?.code || firstMatch?.destinationCode;
-      if (destinationCode) break;
-    } catch {
-      // Try the next candidate or fall back to Google Places.
+        const locationData: any = await locationRes.json();
+        const locations = locationData?.destinations || locationData?.locations || locationData?.data || [];
+        const flattened = Array.isArray(locations) ? locations : Object.values(locations || {});
+
+        const firstMatch = flattened.find((item: any) => {
+          const nameContent = typeof item?.name === 'string' ? item.name : (item?.name?.content || '');
+          const label = String(nameContent || item?.description || item?.destinationName || '').toLowerCase();
+          return label.includes(normDest) && (item?.code || item?.destinationCode);
+        });
+
+        destinationCode = firstMatch?.code || firstMatch?.destinationCode;
+        if (destinationCode) break;
+      } catch {
+        // Try the next candidate or fall back to Google Places.
+      }
     }
   }
 
-  if (!destinationCode) return null;
+  // Safe fallback if not matched
+  if (!destinationCode) {
+    destinationCode = normDest.substring(0, 3).toUpperCase();
+  }
 
   const availabilityUrl = `${HOTELBEDS_BASE_URL}/hotel-api/1.0/hotels`;
   const availabilityRes = await fetch(availabilityUrl, {
@@ -125,7 +155,7 @@ async function searchHotelbedsHotels(
       destination: { code: destinationCode },
       currency: 'INR',
       filter: {
-        maxHotels: 5,
+        maxHotels: 15,
         maxRatesPerHotel: 1,
       },
     }),
@@ -139,7 +169,7 @@ async function searchHotelbedsHotels(
   const rawHotels = availabilityData?.hotels?.hotels || availabilityData?.hotels || availabilityData?.data?.hotels || [];
   const hotelList = Array.isArray(rawHotels) ? rawHotels : [];
 
-  return hotelList.slice(0, 5).map((rawHotel: any) => {
+  return hotelList.slice(0, 15).map((rawHotel: any) => {
     const rooms = Array.isArray(rawHotel?.rooms) ? rawHotel.rooms : [];
     const rates = rooms.flatMap((room: any) => Array.isArray(room?.rates) ? room.rates : []);
     const chosenRate = rates.find((rate: any) => parseFirstNumber(rate?.net || rate?.price || rate?.totalNet || rate?.sellingRate) > 0) || rates[0] || {};
@@ -201,7 +231,7 @@ async function searchGooglePlacesHotels(
     (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  const hotels: HotelOption[] = results.slice(0, 5).map((h: any) => {
+  const hotels: HotelOption[] = results.slice(0, 15).map((h: any) => {
     const priceLevelFactor = h.price_level ? h.price_level * 1500 : 1000;
     const basePrice = Math.round(1500 + (h.rating || 4.0) * 800 + priceLevelFactor);
     const rawTypes = h.types || [];
@@ -247,10 +277,19 @@ export async function searchHotels(
 
     let hotels: HotelOption[] = [];
     try {
-      const hotelbedsHotels = await searchHotelbedsHotels(destination, check_in, check_out, travelers, nights).catch(() => null);
+      let hotelbedsError: Error | null = null;
+      const hotelbedsHotels = await searchHotelbedsHotels(destination, check_in, check_out, travelers, nights)
+        .catch(err => {
+          hotelbedsError = err;
+          return null;
+        });
+
       if (hotelbedsHotels && hotelbedsHotels.length > 0) {
         hotels = hotelbedsHotels;
       } else {
+        if (hotelbedsError) {
+          console.warn(`Hotelbeds search failed: ${(hotelbedsError as Error).message}`);
+        }
         hotels = await searchGooglePlacesHotels(destination, check_in, check_out);
       }
     } catch (err: any) {
@@ -264,6 +303,20 @@ export async function searchHotels(
           total_cost_inr: 1800 * nights,
         },
         {
+          name: `${destination} Backpackers Hostel`,
+          price_per_night_inr: 850,
+          rating: 4.1,
+          amenities: ['WiFi', 'AC', 'Locker Room'],
+          total_cost_inr: 850 * nights,
+        },
+        {
+          name: `${destination} Tourist House`,
+          price_per_night_inr: 1200,
+          rating: 4.0,
+          amenities: ['WiFi', 'Breakfast'],
+          total_cost_inr: 1200 * nights,
+        },
+        {
           name: `${destination} Premium Inn & Suites`,
           price_per_night_inr: 3500,
           rating: 4.7,
@@ -271,11 +324,39 @@ export async function searchHotels(
           total_cost_inr: 3500 * nights,
         },
         {
+          name: `${destination} Heritage Hotel`,
+          price_per_night_inr: 2600,
+          rating: 4.5,
+          amenities: ['WiFi', 'AC', 'Heritage Courtyard', 'Restaurant'],
+          total_cost_inr: 2600 * nights,
+        },
+        {
+          name: `${destination} City Center Vista`,
+          price_per_night_inr: 4300,
+          rating: 4.6,
+          amenities: ['WiFi', 'AC', 'Gym', 'Restaurant', 'Bar'],
+          total_cost_inr: 4300 * nights,
+        },
+        {
           name: `${destination} Grand Resort & Spa`,
           price_per_night_inr: 7200,
           rating: 4.9,
           amenities: ['WiFi', 'AC', 'Pool', 'Spa', 'Restaurant', 'Bar', 'Breakfast'],
           total_cost_inr: 7200 * nights,
+        },
+        {
+          name: `${destination} Royal Palace Retreat`,
+          price_per_night_inr: 12500,
+          rating: 4.9,
+          amenities: ['WiFi', 'AC', 'Infinity Pool', 'Royalty Gardens', 'Fine Dining', 'Butler Service'],
+          total_cost_inr: 12500 * nights,
+        },
+        {
+          name: `${destination} Pavilion Heights Resort`,
+          price_per_night_inr: 9500,
+          rating: 4.8,
+          amenities: ['WiFi', 'AC', 'Pool', 'Health Club', 'Rooftop Bar', 'Breakfast Buffet'],
+          total_cost_inr: 9500 * nights,
         }
       ];
     }

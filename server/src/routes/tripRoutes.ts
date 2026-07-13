@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import {
   createOrUpdateTrip, approveTrip, rejectTrip,
-  getUserTrips, getTripById, cancelTrip
+  getUserTrips, getTripById, cancelTrip, selectHotel
 } from '../controllers/tripController';
 
 const router = Router();
@@ -17,6 +17,7 @@ router.get('/', getUserTrips);
 router.get('/:tripId', getTripById);
 router.post('/:tripId/approve', approveTrip);
 router.post('/:tripId/reject', rejectTrip);
+router.post('/:tripId/select-hotel', selectHotel);
 router.delete('/:tripId', cancelTrip);
 
 export default router;

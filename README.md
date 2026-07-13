@@ -602,6 +602,16 @@ sequenceDiagram
         Coord-->>Supervisor: Returns formatted Markdown plan
     end
 
+    critical Stage 2b: Interactive Hotel Selection
+        Traveler->>FE: Select a hotel (Budget / Mid-Range / Luxury)
+        FE->>Express: POST /api/trips/:tripId/select-hotel { hotelName, category }
+        Express->>PlannerSvc: updateHotelSelection(tripId, hotelName, category)
+        Express->>Supervisor: runBudgetAgent(context) [Live cost calculations]
+        Express->>DB: Persists chosen lodging & new budget values
+        Express-->>FE: Return updated Trip payload
+        FE-->>Traveler: Render updated plan text and budget constraints in real-time
+    end
+
     Supervisor-->>PlannerSvc: Returns complete plan & context (Status: PLANNED)
     PlannerSvc->>DB: Saves completed Trip (Status: PLANNED)
     PlannerSvc-->>FE: Return Plan Payload
@@ -647,6 +657,11 @@ sequenceDiagram
 ### 8. HITL (Human-in-the-Loop) Control Gate
 * **Approving (Happy Path)**: The user clicks "Approve". It triggers the mocked **Booking Agent** (status changes to `CONFIRMED`) and triggers the **Calendar MCP** to write events directly into the user's OAuth2 Google Calendar.
 * **Rejecting (Replanning)**: The user requests tweaks (e.g. *"change hotel to luxury"*). The **Replanning Agent** identifies which context keys to clear (accommodation), preserves other elements (weather, transit, activities), and restarts the flow from Stage 3.
+
+### 9. Multi-Tiered Accommodation Compare & Select (Interactive Recalculation)
+* **Tiered Categorization**: During Stage 1, the **Accommodation Agent** fetches up to 15 lodging choices and sorts them into **Budget**, **Mid-Range**, and **Luxury** tiers based on pricing, returning a structured category block rather than a single choice.
+* **Interactive UI Selection**: The React Client displays these categorized options using clean tab headers. The user can switch tabs and click **Choose Hotel** to update their preference.
+* **Non-LLM Live Recalculation**: Clicking a hotel fires `POST /api/trips/:tripId/select-hotel` back to the Express controller. The server saves the chosen hotel, runs the **Budget Agent** to calculate final costs and emergency fund, programmatically updates the Markdown plan string to reflect the selected hotel's details, and returns the state without triggering an expensive LLM regeneration.
 
 ---
 
@@ -864,8 +879,37 @@ Every agent receives and returns data conforming to this shared context object. 
   },
   "accommodation": {
     "recommended": "Ooty Vista Inn",
-    "price_per_night_inr": 2125,
-    "total_cost_inr": 8500
+    "selected_hotel": "Ooty Vista Inn",
+    "selected_category": "mid_range",
+    "categories": {
+      "budget": [
+        {
+          "name": "Neemrana's Wallwood Garden",
+          "rating": 3.0,
+          "price_per_night_inr": 86,
+          "total_cost_inr": 344,
+          "amenities": ["WiFi", "AC"]
+        }
+      ],
+      "mid_range": [
+        {
+          "name": "Ooty Vista Inn",
+          "rating": 4.0,
+          "price_per_night_inr": 2125,
+          "total_cost_inr": 8500,
+          "amenities": ["WiFi", "AC", "Restaurant"]
+        }
+      ],
+      "luxury": [
+        {
+          "name": "The Frame Resorts Ooty",
+          "rating": 5.0,
+          "price_per_night_inr": 88473,
+          "total_cost_inr": 353892,
+          "amenities": ["WiFi", "AC", "Spa", "Pool"]
+        }
+      ]
+    }
   },
   "activities": {
     "attractions": ["Botanical Garden", "Ooty Tea Factory", "Doddabetta Peak"],

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { planTrip } from '../services/plannerService';
 import { runBookingAgent } from '../agents/bookingAgent';
 import { runReplanningAgent } from '../agents/replanningAgent';
+import { runBudgetAgent } from '../agents/budgetAgent';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
@@ -173,5 +174,115 @@ export const cancelTrip = async (req: Request, res: Response): Promise<void> => 
     res.json({ message: 'Trip cancelled' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to cancel trip' });
+  }
+};
+
+// POST /api/trips/:tripId/select-hotel — Choose preferred hotel tier and specific property
+export const selectHotel = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { tripId } = req.params;
+    const { hotelName, category } = req.body;
+    const userId = req.user!.userId;
+
+    const trip = await Trip.findOne({ sessionId: tripId, userId });
+    if (!trip) {
+      res.status(404).json({ message: 'Trip not found' });
+      return;
+    }
+
+    if (trip.status === 'CONFIRMED') {
+      res.status(400).json({ message: 'This trip has already been confirmed and booked. Modifications are not allowed on confirmed itineraries.' });
+      return;
+    }
+
+    if (!hotelName || typeof hotelName !== 'string') {
+      res.status(400).json({ message: 'Hotel name is required and must be a string.' });
+      return;
+    }
+
+    if (!category || !['budget', 'mid_range', 'luxury'].includes(category)) {
+      res.status(400).json({ message: 'Valid hotel category is required (budget, mid_range, luxury).' });
+      return;
+    }
+
+    const accommodation = trip.accommodation || {};
+    const hotels = Array.isArray(accommodation.hotels) ? accommodation.hotels : [];
+    const selectedHotel = hotels.find((h: any) => h.name === hotelName);
+
+    if (!selectedHotel) {
+      res.status(400).json({ message: `Hotel "${hotelName}" was not found in the search options for this trip.` });
+      return;
+    }
+
+    const oldHotelName = accommodation.recommended || '';
+
+    // Update accommodation values
+    accommodation.selected_category = category;
+    accommodation.selected_hotel = selectedHotel;
+    accommodation.recommended = selectedHotel.name;
+    accommodation.price_per_night = selectedHotel.price_per_night_inr || selectedHotel.price_per_night;
+
+    // Shift selected hotel to the front of hotels list for compatibility with other agents
+    const originalIdx = hotels.findIndex((h: any) => h.name === selectedHotel.name);
+    if (originalIdx > -1) {
+      const [removed] = hotels.splice(originalIdx, 1);
+      hotels.unshift(removed);
+    }
+    accommodation.hotels = hotels;
+    trip.accommodation = accommodation;
+
+    // Re-run budget agent on the updated context
+    const contextObj = trip.toObject() as any;
+    const newBudget = await runBudgetAgent(contextObj);
+    trip.budget = newBudget;
+
+    // Check if new budget exceeds/is feasible. Even if infeasible, we save the selection so they see it
+    if (!newBudget.is_feasible) {
+      trip.status = 'DRAFT';
+      const altMessage = `⚠️ **Budget Constraint Exceeded with hotel selection!**\n\nYour selected hotel **${selectedHotel.name}** exceeds your budget limit of **₹${trip.input.budget_inr?.toLocaleString()}**. The updated total estimated cost is now **₹${newBudget.total_cost_inr?.toLocaleString()}**.\n\nYou can select a cheaper option or adjust your budget ceiling.`;
+      trip.conversationHistory.push({ role: 'assistant', content: altMessage });
+    } else {
+      trip.status = 'PLANNED';
+      const successMessage = `🏨 Selected **${selectedHotel.name}** (${category.toUpperCase()} tier). The updated total trip cost is **₹${newBudget.total_cost_inr.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`;
+      trip.conversationHistory.push({ role: 'assistant', content: successMessage });
+    }
+
+    // Programmatically update the itinerary and formattedPlan text, avoiding full LLM regeneration
+    if (oldHotelName && oldHotelName !== hotelName) {
+      try {
+        let itineraryStr = JSON.stringify(trip.itinerary);
+        itineraryStr = itineraryStr.split(oldHotelName).join(hotelName);
+        trip.itinerary = JSON.parse(itineraryStr);
+      } catch (e) {
+        logger.error('Failed to update itinerary hotel name programmatically', e);
+      }
+
+      if (trip.formattedPlan) {
+        trip.formattedPlan = trip.formattedPlan.split(oldHotelName).join(hotelName);
+      }
+    }
+
+    // Save changes to database
+    await Trip.findOneAndUpdate(
+      { sessionId: tripId },
+      {
+        status: trip.status,
+        accommodation: trip.accommodation,
+        budget: trip.budget,
+        itinerary: trip.itinerary,
+        formattedPlan: trip.formattedPlan,
+        conversationHistory: trip.conversationHistory
+      }
+    );
+
+    const updatedTrip = await Trip.findOne({ sessionId: tripId });
+
+    res.json({
+      message: 'Hotel selection updated successfully!',
+      trip: updatedTrip
+    });
+  } catch (error: any) {
+    logger.error('Failed to process hotel selection', { error });
+    res.status(500).json({ message: 'Failed to update hotel selection. Please try again.' });
   }
 };

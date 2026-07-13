@@ -74,21 +74,26 @@ function getCheapestTransportCost(transport: TripContext['transport']): { cost: 
 }
 
 function getAccommodationCost(accommodation: TripContext['accommodation'], nights: number): { cost: number; hotel?: string; pricePerNight?: number } {
-  const hotels = Array.isArray(accommodation?.hotels) ? accommodation.hotels : [];
+  const chosenHotel = accommodation?.selected_hotel || 
+    (Array.isArray(accommodation?.hotels) && accommodation.hotels.find((h: any) => h.name === accommodation?.recommended)) ||
+    (Array.isArray(accommodation?.hotels) && accommodation.hotels[0]);
 
-  if (hotels.length > 0) {
-    const selectedHotel = hotels.reduce((lowest: any, current: any) => {
-      const lowestCost = parseFirstNumber(lowest?.total_cost_inr) || parseFirstNumber(lowest?.price_per_night_inr) * nights;
-      const currentCost = parseFirstNumber(current?.total_cost_inr) || parseFirstNumber(current?.price_per_night_inr) * nights;
-      return currentCost < lowestCost ? current : lowest;
-    });
-
-    const pricePerNight = parseFirstNumber(selectedHotel?.price_per_night_inr);
-    const totalCost = parseFirstNumber(selectedHotel?.total_cost_inr) || pricePerNight * nights;
+  if (chosenHotel) {
+    const pricePerNight = parseFirstNumber(chosenHotel?.price_per_night_inr || chosenHotel?.price_per_night);
+    const totalCost = parseFirstNumber(chosenHotel?.total_cost_inr) || pricePerNight * nights;
 
     return {
       cost: totalCost,
-      hotel: selectedHotel?.name,
+      hotel: chosenHotel?.name,
+      pricePerNight,
+    };
+  }
+
+  if (accommodation?.price_per_night) {
+    const pricePerNight = parseFirstNumber(accommodation.price_per_night);
+    return {
+      cost: pricePerNight * nights,
+      hotel: accommodation.recommended,
       pricePerNight,
     };
   }

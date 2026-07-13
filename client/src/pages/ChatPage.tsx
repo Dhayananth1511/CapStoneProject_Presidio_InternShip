@@ -74,6 +74,7 @@ export default function ChatPage() {
   const [tripId, setTripId] = useState<string | undefined>(tripIdParam || undefined);
   const [activeStep, setActiveStep] = useState<string | null>(null);
   const [context, setContext] = useState<any>(null);
+  const [lodgingCategoryTab, setLodgingCategoryTab] = useState<'budget' | 'mid_range' | 'luxury'>('mid_range');
   const [activeTab, setActiveTab] = useState<'inspector' | 'itinerary'>('inspector');
   const [showBudgetBreakdown, setShowBudgetBreakdown] = useState(false);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -150,6 +151,12 @@ export default function ChatPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeStep]);
 
+  useEffect(() => {
+    if (context?.accommodation?.selected_category) {
+      setLodgingCategoryTab(context.accommodation.selected_category);
+    }
+  }, [context]);
+
   // Mutation for sending chat messages to the Planner Agent Swarm
   const chatMutation = useMutation({
     mutationFn: async (payload: { message: string; tripId?: string }) => {
@@ -224,6 +231,30 @@ export default function ChatPage() {
       if (isOffline) toast.error('You appear to be offline.');
     },
   });
+
+  // Mutation for choosing a hotel option
+  const selectHotelMutation = useMutation({
+    mutationFn: async (payload: { hotelName: string; category: string }) => {
+      const res = await api.post(`/trips/${tripId}/select-hotel`, payload);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      if (data.trip) {
+        setContext(data.trip);
+        if (data.trip.conversationHistory) {
+          setMessages(data.trip.conversationHistory);
+        }
+      }
+      toast.success('🏨 Lodging preference updated!');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update lodging selection.');
+    }
+  });
+
+  const handleSelectHotel = (hotelName: string, category: string) => {
+    selectHotelMutation.mutate({ hotelName, category });
+  };
 
   // Mutation for approving / confirming the trip (HITL Gate)
   const approveMutation = useMutation({
@@ -1056,117 +1087,173 @@ export default function ChatPage() {
                   <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
                     isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
                   }`}>
-                    {Array.isArray(context.accommodation.hotels) && context.accommodation.hotels.length > 0 ? (
-                      <div className="space-y-3">
-                        <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          🏨 Compare Lodging Choices
-                        </p>
-                        <div className="flex flex-col gap-2.5">
-                          {context.accommodation.hotels.map((hotel: any, idx: number) => {
-                            const isRecommended = hotel.name === context.accommodation.recommended;
-                            const sortedHotels = [...context.accommodation.hotels].sort((a, b) => a.price_per_night_inr - b.price_per_night_inr);
-                            const isCheapest = hotel.name === sortedHotels[0]?.name;
-                            const isLuxury = hotel.name === sortedHotels[sortedHotels.length - 1]?.name && sortedHotels.length > 1;
+                    {(() => {
+                      const hasCategories = context.accommodation.categories && typeof context.accommodation.categories === 'object';
+                      const hotelsList = hasCategories
+                        ? (context.accommodation.categories[lodgingCategoryTab] || [])
+                        : (context.accommodation.hotels || []);
 
-                            // Generate stars
-                            const ratingCount = Math.round(hotel.rating || 4.0);
-                            const stars = Array.from({ length: 5 }, (_, i) => i < ratingCount);
+                      if (Array.isArray(hotelsList) && hotelsList.length > 0) {
+                        return (
+                          <div className="space-y-3.5">
+                            <div className="flex items-center justify-between">
+                              <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                🏨 {hasCategories ? 'Compare Hotel Tiers' : 'Compare Lodging Choices'}
+                              </p>
+                              {context.accommodation.selected_category && (
+                                <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                  isDark ? 'bg-indigo-950 text-indigo-400 border border-indigo-900/60' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                }`}>
+                                  Active: {context.accommodation.selected_category.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
 
-                            return (
-                              <div
-                                key={idx}
-                                className={`p-3 rounded-xl border transition ${
-                                  isRecommended
-                                    ? isDark
-                                      ? 'bg-indigo-955/20 border-primary shadow-md shadow-primary/5'
-                                      : 'bg-indigo-50/40 border-indigo-400 shadow-md shadow-indigo-100/30'
-                                    : isDark
-                                    ? 'bg-slate-900/40 border-slate-850 hover:border-slate-700'
-                                    : 'bg-white border-slate-205 hover:border-slate-300'
-                                }`}
-                              >
-                                <div className="flex justify-between items-start">
-                                  <div className="space-y-1">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                                        {hotel.name}
-                                      </span>
-                                      
-                                      {/* Badges */}
-                                      {isRecommended && (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500 text-white leading-none">
-                                          Recommended
-                                        </span>
-                                      )}
-                                      {isCheapest && !isRecommended && (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-white leading-none">
-                                          Cheapest
-                                        </span>
-                                      )}
-                                      {isLuxury && !isRecommended && (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500 text-white leading-none">
-                                          Premium
-                                        </span>
-                                      )}
+                            {/* Tiers Tab Bar */}
+                            {hasCategories && (
+                              <div className="flex rounded-lg p-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                {(['budget', 'mid_range', 'luxury'] as const).map((tab) => {
+                                  const optionsCount = (context.accommodation.categories[tab] || []).length;
+                                  if (optionsCount === 0) return null;
+                                  const tabLabel = tab === 'budget' ? 'Budget' : tab === 'mid_range' ? 'Mid-Range' : 'Luxury';
+                                  const isActive = lodgingCategoryTab === tab;
+                                  return (
+                                    <button
+                                      key={tab}
+                                      type="button"
+                                      onClick={() => setLodgingCategoryTab(tab)}
+                                      className={`flex-1 text-center py-1.5 text-[10.5px] font-bold rounded-md transition select-none cursor-pointer ${
+                                        isActive
+                                          ? isDark
+                                            ? 'bg-slate-850 text-indigo-400 shadow-sm border border-slate-750'
+                                            : 'bg-white text-indigo-600 shadow-sm border border-slate-205'
+                                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                                      }`}
+                                    >
+                                      {tabLabel} ({optionsCount})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Hotels List */}
+                            <div className="flex flex-col gap-2.5">
+                              {hotelsList.map((hotel: any, idx: number) => {
+                                const isRecommended = hotel.name === context.accommodation.recommended;
+                                const ratingCount = Math.round(hotel.rating || 4.0);
+                                const stars = Array.from({ length: 5 }, (_, i) => i < ratingCount);
+                                const isSaving = selectHotelMutation.isPending;
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`p-3 rounded-xl border transition flex flex-col gap-2.5 ${
+                                      isRecommended
+                                        ? isDark
+                                          ? 'bg-indigo-955/20 border-primary shadow-md shadow-primary/5'
+                                          : 'bg-indigo-50/40 border-indigo-400 shadow-md shadow-indigo-100/30'
+                                        : isDark
+                                        ? 'bg-slate-900/40 border-slate-850 hover:border-slate-700'
+                                        : 'bg-white border-slate-205 hover:border-slate-350'
+                                    }`}
+                                  >
+                                    <div className="flex justify-between items-start">
+                                      <div className="space-y-1 max-w-[70%]">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                                            {hotel.name}
+                                          </span>
+                                          {isRecommended && (
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-white leading-none flex items-center gap-0.5 animate-fadeIn">
+                                              <Check className="h-2.5 w-2.5" /> Selected
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Star Ratings */}
+                                        <div className="flex items-center gap-1">
+                                          <span className="flex text-amber-500 text-[10px]">
+                                            {stars.map((filled, sIdx) => (
+                                              <span key={sIdx}>{filled ? '★' : '☆'}</span>
+                                            ))}
+                                          </span>
+                                          <span className={`text-[9.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                            ({hotel.rating || 4.0}/5 rating)
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="text-right">
+                                        <p className="text-xs font-bold text-emerald-500">
+                                          ₹{hotel.price_per_night_inr ? hotel.price_per_night_inr.toLocaleString() : 0} <span className={`text-[8.5px] font-normal ${isDark ? 'text-slate-450' : 'text-slate-500'}`}>/ night</span>
+                                        </p>
+                                        {hotel.total_cost_inr && (
+                                          <p className={`text-[9.5px] font-semibold mt-0.5 ${isDark ? 'text-slate-450' : 'text-slate-550'}`}>
+                                            ₹{hotel.total_cost_inr.toLocaleString()} total
+                                          </p>
+                                        )}
+                                      </div>
                                     </div>
 
-                                    {/* Star Ratings */}
-                                    <div className="flex items-center gap-1">
-                                      <span className="flex text-amber-500 text-[10px]">
-                                        {stars.map((filled, sIdx) => (
-                                          <span key={sIdx}>{filled ? '★' : '☆'}</span>
+                                    {/* Amenities list */}
+                                    {Array.isArray(hotel.amenities) && hotel.amenities.length > 0 && (
+                                      <div className="flex flex-wrap gap-1">
+                                        {hotel.amenities.slice(0, 4).map((amenity: string, aIdx: number) => (
+                                          <span
+                                            key={aIdx}
+                                            className={`text-[8.5px] font-semibold px-2 py-0.5 rounded-full border ${
+                                              isDark
+                                                ? 'bg-slate-950/50 border-slate-800 text-slate-400'
+                                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                                            }`}
+                                          >
+                                            {amenity}
+                                          </span>
                                         ))}
-                                      </span>
-                                      <span className={`text-[9.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-505'}`}>
-                                        ({hotel.rating || 4.0}/5 rating)
-                                      </span>
-                                    </div>
-                                  </div>
+                                      </div>
+                                    )}
 
-                                  <div className="text-right">
-                                    <p className="text-xs font-bold text-emerald-500">
-                                      ₹{hotel.price_per_night_inr ? hotel.price_per_night_inr.toLocaleString() : 0} <span className={`text-[8.5px] font-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>/ night</span>
-                                    </p>
-                                    {hotel.total_cost_inr && (
-                                      <p className={`text-[9.5px] font-semibold mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-550'}`}>
-                                        ₹{hotel.total_cost_inr.toLocaleString()} total
-                                      </p>
+                                    {/* Select Button */}
+                                    {!isRecommended && context.status !== 'CONFIRMED' && (
+                                      <button
+                                        type="button"
+                                        disabled={isSaving || context.status === 'CONFIRMED'}
+                                        onClick={() => handleSelectHotel(hotel.name, lodgingCategoryTab)}
+                                        className={`w-full py-1.5 rounded-lg text-xs font-bold border transition text-center flex items-center justify-center gap-1 cursor-pointer select-none ${
+                                          isDark
+                                            ? 'bg-indigo-950/40 hover:bg-primary/20 border-indigo-900/40 text-indigo-300 hover:text-white'
+                                            : 'bg-indigo-50/50 hover:bg-primary/10 border-indigo-200 text-indigo-700 hover:text-indigo-805'
+                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                      >
+                                        {isSaving ? (
+                                          <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Selecting Hotel...
+                                          </>
+                                        ) : (
+                                          'Choose Hotel'
+                                        )}
+                                      </button>
                                     )}
                                   </div>
-                                </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
 
-                                {/* Amenities list */}
-                                {Array.isArray(hotel.amenities) && hotel.amenities.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {hotel.amenities.slice(0, 5).map((amenity: string, aIdx: number) => (
-                                      <span
-                                        key={aIdx}
-                                        className={`text-[8.5px] font-semibold px-2 py-0.5 rounded-full border ${
-                                          isDark
-                                            ? 'bg-slate-950/50 border-slate-800 text-slate-400'
-                                            : 'bg-slate-50 border-slate-200 text-slate-500'
-                                        }`}
-                                      >
-                                        {amenity}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{context.accommodation.recommended || 'Hotel Options matched'}</p>
-                        {context.accommodation.price_per_night && (
-                          <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                            Estimated Cost: ₹{context.accommodation.price_per_night.toLocaleString()} / night
-                          </p>
-                        )}
-                      </>
-                    )}
+                      return (
+                        <>
+                          <p className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{context.accommodation.recommended || 'Hotel Options matched'}</p>
+                          {context.accommodation.price_per_night && (
+                            <p className={isDark ? 'text-slate-400' : 'text-slate-655'}>
+                              Estimated Cost: ₹{context.accommodation.price_per_night.toLocaleString()} / night
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {context.accommodation.reasoning && (
                       <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${

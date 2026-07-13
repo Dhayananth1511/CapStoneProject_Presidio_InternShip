@@ -50,23 +50,55 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
 
     // Sort hotels by price to select the appropriate tier
     const hotelsList = [...(data.hotels || [])];
+    const categories = {
+      budget: [] as any[],
+      mid_range: [] as any[],
+      luxury: [] as any[],
+    };
+
     if (hotelsList.length > 0) {
       // Sort ascending by price
       hotelsList.sort((a, b) => a.price_per_night_inr - b.price_per_night_inr);
-      
-      let selectedHotel = hotelsList[Math.floor(hotelsList.length / 2)]; // default to mid-range
-      if (tier === 'budget') {
-        selectedHotel = hotelsList[0]; // cheapest
-      } else if (tier === 'luxury') {
-        selectedHotel = hotelsList[hotelsList.length - 1]; // most expensive
-      } else if (tier === 'mid-range') {
-        selectedHotel = hotelsList[Math.floor(hotelsList.length / 2)];
+
+      // Divide into three tiers as evenly as possible
+      const totalCount = hotelsList.length;
+      if (totalCount >= 3) {
+        const size = Math.floor(totalCount / 3);
+        categories.budget = hotelsList.slice(0, size);
+        categories.mid_range = hotelsList.slice(size, 2 * size);
+        categories.luxury = hotelsList.slice(2 * size);
+      } else if (totalCount === 2) {
+        categories.budget = [hotelsList[0]];
+        categories.mid_range = [hotelsList[0]];
+        categories.luxury = [hotelsList[1]];
       } else {
-        // Default to first hotel returned originally by searchHotels
-        const defaultRec = data.hotels.find((h: any) => h.name === data.recommended);
-        if (defaultRec) selectedHotel = defaultRec;
+        categories.budget = [hotelsList[0]];
+        categories.mid_range = [hotelsList[0]];
+        categories.luxury = [hotelsList[0]];
       }
 
+      // Limit each category to a maximum of 3 recommended hotels
+      categories.budget = categories.budget.slice(0, 3);
+      categories.mid_range = categories.mid_range.slice(0, 3);
+      categories.luxury = categories.luxury.slice(0, 3);
+    }
+
+    // Pre-select hotel based on the requested tier. Default to mid-range.
+    let selectedCategory: 'budget' | 'mid_range' | 'luxury' = 'mid_range';
+    if (tier === 'budget' || tier === 'luxury') {
+      selectedCategory = tier;
+    }
+
+    // Fallback if the selected category is empty, find the first non-empty category
+    if (categories[selectedCategory].length === 0) {
+      if (categories.mid_range.length > 0) selectedCategory = 'mid_range';
+      else if (categories.budget.length > 0) selectedCategory = 'budget';
+      else if (categories.luxury.length > 0) selectedCategory = 'luxury';
+    }
+
+    const selectedHotel = categories[selectedCategory][0] || null;
+
+    if (selectedHotel) {
       // Re-order data.hotels so selectedHotel is at index 0 for the budgetAgent
       const originalIdx = data.hotels.findIndex((h: any) => h.name === selectedHotel.name);
       if (originalIdx > -1) {
@@ -80,6 +112,9 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
 
     const finalResult = {
       ...data,
+      categories,
+      selected_category: selectedCategory,
+      selected_hotel: selectedHotel,
       reasoning,
     };
 
