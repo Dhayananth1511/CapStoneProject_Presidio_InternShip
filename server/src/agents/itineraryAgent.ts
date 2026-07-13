@@ -14,7 +14,7 @@ import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant',
+  model: 'llama-3.3-70b-versatile', // Better reasoning for complex day-by-day JSON schedules
   temperature: 0.3, // Lower temp = more deterministic JSON
   maxTokens: 4096,  // Explicit cap per call to prevent runaway responses
 });

@@ -13,13 +13,13 @@ import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant',
+  model: 'llama-3.3-70b-versatile', // Quality synthesis model for Markdown plan generation
   temperature: 0.5,
 });
 
 const routerLlm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant', // Fast model used for dynamic tool routing
+  model: 'gemma2-9b-it', // Different model pool — avoids llama-3.1-8b-instant RPM contention
   temperature: 0.1,
 });
 

@@ -14,7 +14,7 @@ import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant',
+  model: 'llama-3.3-70b-versatile', // Smarter tool-routing for replan decisions
   temperature: 0.1,
 });
 

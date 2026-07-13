@@ -9,7 +9,7 @@ import { withRetry } from '../utils/retry';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant',
+  model: 'gemma2-9b-it', // Separate RPM pool from llama models
   temperature: 0.7, // Higher temperature = more creative recommendations
 });
 

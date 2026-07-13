@@ -12,7 +12,7 @@ import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant', // Fast, low-latency reasoning model for micro-agent tasks
+  model: 'gemma2-9b-it', // Separate RPM pool from llama models
   temperature: 0.3,
 });
 

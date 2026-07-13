@@ -17,7 +17,7 @@ import { validateTripDates, clampTravelers, clampBudget } from '../utils/inputSa
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'llama-3.1-8b-instant', // Fast model for slots and supervisor routing
+  model: 'llama-3.3-70b-versatile', // Versatile model for accurate slot extraction
   temperature: 0.1,
 });
 
@@ -254,7 +254,7 @@ You MUST invoke exactly one tool.`;
 
   const supervisorLlm = new ChatGroq({
     apiKey: process.env.GROQ_API_KEY,
-    model: 'llama-3.1-8b-instant',
+    model: 'gemma2-9b-it', // Different model pool to spread RPM load
     temperature: 0.1,
   });
 
