@@ -112,58 +112,58 @@ You MUST invoke exactly one tool.`;
 
   switch (selectedTool) {
     case 'replan_accommodation':
-      updatedContext.accommodation = undefined;
-      updatedContext.budget = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.accommodation = {};
+      updatedContext.budget = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('accommodation', 'budget');
       break;
 
     case 'replan_dates':
       // Dates impact everything downstream
-      updatedContext.weather = undefined;
-      updatedContext.transport = undefined;
-      updatedContext.accommodation = undefined;
-      updatedContext.budget = undefined;
-      updatedContext.itinerary = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.weather = {};
+      updatedContext.transport = {};
+      updatedContext.accommodation = {};
+      updatedContext.budget = {};
+      updatedContext.itinerary = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('dates', 'weather', 'transport', 'accommodation', 'budget', 'itinerary');
       break;
 
     case 'replan_budget':
-      updatedContext.budget = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.budget = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('budget');
       break;
 
     case 'replan_activities':
-      updatedContext.activities = undefined;
-      updatedContext.itinerary = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.activities = {};
+      updatedContext.itinerary = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('activities', 'itinerary');
       break;
 
     case 'replan_itinerary':
-      updatedContext.itinerary = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.itinerary = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('itinerary');
       break;
 
     case 'replan_full_trip':
       // Full reset — clear all computed agent outputs
-      updatedContext.weather = undefined;
-      updatedContext.transport = undefined;
-      updatedContext.accommodation = undefined;
-      updatedContext.activities = undefined;
-      updatedContext.budget = undefined;
-      updatedContext.itinerary = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.weather = {};
+      updatedContext.transport = {};
+      updatedContext.accommodation = {};
+      updatedContext.activities = {};
+      updatedContext.budget = {};
+      updatedContext.itinerary = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('destination', 'weather', 'transport', 'accommodation', 'activities', 'budget', 'itinerary');
       break;
 
     default:
       // Safe fallback
-      updatedContext.itinerary = undefined;
-      updatedContext.formattedPlan = undefined;
+      updatedContext.itinerary = {};
+      updatedContext.formattedPlan = '';
       whatChanged.push('itinerary');
       logger.warn('ReplanningAgent: Unknown tool selected, defaulting to itinerary replan.', { selectedTool });
   }

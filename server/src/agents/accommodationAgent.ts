@@ -138,6 +138,8 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
     let selectedCategory: 'budget' | 'mid_range' | 'luxury' = 'mid_range';
     if (tier === 'budget' || tier === 'luxury') {
       selectedCategory = tier;
+    } else if (tier === 'mid-range' || tier === 'mid_range') {
+      selectedCategory = 'mid_range';
     }
 
     // Fallback if the selected category is empty, find the first non-empty category
@@ -186,7 +188,7 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
       check_in: z.string().describe('Check-in travel date (YYYY-MM-DD)'),
       check_out: z.string().describe('Check-out travel date (YYYY-MM-DD)'),
       travelers: z.number().describe('Number of guests/travelers'),
-      tier: z.enum(['luxury', 'mid-range', 'budget']).optional().describe('Hotel budget tier. Choose budget if user requested cheaper hotels or budget accommodation.')
+      tier: z.enum(['luxury', 'mid-range', 'mid_range', 'budget']).optional().describe('Hotel budget tier. Choose budget if user requested cheaper hotels or budget accommodation.')
     }),
   }
 );

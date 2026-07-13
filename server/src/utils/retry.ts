@@ -28,16 +28,22 @@ export async function withRetry<T>(
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let timeoutId: any;
     try {
-      // Wrap the function call in a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Request timeout')), timeout);
+      });
+
       const result = await Promise.race([
         fn(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Request timeout')), timeout)
-        ),
+        timeoutPromise,
       ]);
+      clearTimeout(timeoutId);
       return result;
     } catch (error: any) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       lastError = error as Error;
 
       // Detect Groq or general API rate limits (HTTP 429)

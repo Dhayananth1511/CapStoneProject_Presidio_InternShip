@@ -132,13 +132,26 @@ function getFoodCost(activities: TripContext['activities'], travelers: number, d
 export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakdown> {
   const { input, transport, accommodation, activities, local_transport } = context;
   const budget = input.budget_inr || 30000;
-  const days = calculateTripDays(input);
-  const nights = Math.max(1, days);
+  const travelers = input.travelers || 1;
+
+  // Calculate inclusive/exclusive travel periods timezone-safely
+  let nights = 5;
+  let days = 6;
+  if (input.start_date && input.end_date) {
+    const [startY, startM, startD] = input.start_date.split('-').map(Number);
+    const [endY, endM, endD] = input.end_date.split('-').map(Number);
+    const startMs = Date.UTC(startY, startM - 1, startD);
+    const endMs = Date.UTC(endY, endM - 1, endD);
+    nights = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+    days = nights + 1;
+  } else if (input.duration_days && input.duration_days > 0) {
+    days = Math.max(1, Math.ceil(input.duration_days));
+    nights = Math.max(1, days - 1);
+  }
 
   // Use real search outputs when available, and only fall back to zero if a provider failed.
   const transportSelection = getCheapestTransportCost(transport);
   const accommodationSelection = getAccommodationCost(accommodation, nights);
-  const travelers = input.travelers || 1;
 
   const foodSelection = getFoodCost(activities, travelers, days);
 
@@ -147,7 +160,12 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
   const activityVisits = Math.max(1, Math.min(attractionsCount || days, days));
   const activityCost = feePerPerson > 0 ? feePerPerson * travelers * activityVisits : 0;
 
-  const localTransportCost = parseFirstNumber(local_transport?.cab_estimate_inr);
+  // Real cab calculation fallback of ₹300 per traveler per day (up to ₹1200 maximum per day per cab grouping)
+  const calculatedLocalTransport = parseFirstNumber(local_transport?.cab_estimate_inr);
+  const cabsNeeded = Math.ceil(travelers / 4);
+  const localTransportCost = calculatedLocalTransport > 0 
+    ? calculatedLocalTransport 
+    : Math.round(Math.min(300 * travelers, 1200 * cabsNeeded) * days);
 
   const subtotal = transportSelection.cost + accommodationSelection.cost + foodSelection.cost + activityCost + localTransportCost;
   
@@ -197,11 +215,17 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
 
   // If way over budget, suggest realistic alternatives
   if (!isFeasible) {
-    breakdown.alternatives = [
-      `Choose a cheaper hotel tier (saves approx. ₹${Math.round(accommodationSelection.cost * 0.4)})`,
-      `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((foodSelection.cost + localTransportCost) / Math.max(1, days)) * 1.5)})`,
-      `Increase limit to ₹${totalCost} for comfortable traveling accommodations`,
-    ];
+    const alternatives: string[] = [];
+    const currentCategory = accommodation?.selected_category || (accommodation?.selected_hotel?.name === 'Self Arranged' ? 'skipped' : undefined);
+
+    if (accommodationSelection.cost > 0 && currentCategory !== 'budget' && currentCategory !== 'skipped') {
+      alternatives.push(`Choose a cheaper hotel tier (saves approx. ₹${Math.round(accommodationSelection.cost * 0.4)})`);
+    }
+
+    alternatives.push(`Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((foodSelection.cost + localTransportCost) / Math.max(1, days)) * 1.5)})`);
+    alternatives.push(`Increase limit to ₹${totalCost} for comfortable traveling accommodations`);
+
+    breakdown.alternatives = alternatives;
   }
 
   return breakdown;

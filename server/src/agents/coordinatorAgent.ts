@@ -32,9 +32,14 @@ const modelWithTools = routerLlm.bindTools([
 
 export async function runParallelAgents(context: TripContext, userMessage: string): Promise<TripContext> {
   const { input } = context;
-  const days = input.start_date && input.end_date
-    ? (new Date(input.end_date).getTime() - new Date(input.start_date).getTime()) / (1000 * 60 * 60 * 24)
-    : 5;
+  let days = 5;
+  if (input.start_date && input.end_date) {
+    const [startY, startM, startD] = input.start_date.split('-').map(Number);
+    const [endY, endM, endD] = input.end_date.split('-').map(Number);
+    const startMs = Date.UTC(startY, startM - 1, startD);
+    const endMs = Date.UTC(endY, endM - 1, endD);
+    days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
+  }
 
   logger.info('Starting Dynamic LLM Tool router analysis', { userMessage });
 

@@ -197,6 +197,70 @@ ${recentHistory || '(No history yet)'}
     }
   }
 
+  // --- Programmatic Cache Clearing on Parameter Change ---
+  if (
+    context.input.destination &&
+    updatedContext.input.destination &&
+    context.input.destination.trim().toLowerCase() !== updatedContext.input.destination.trim().toLowerCase()
+  ) {
+    logger.info('Supervisor: Destination changed. Clearing all downstream travel data.', {
+      from: context.input.destination,
+      to: updatedContext.input.destination,
+    });
+    updatedContext.weather = {};
+    updatedContext.transport = {};
+    updatedContext.accommodation = {};
+    updatedContext.activities = {};
+    updatedContext.local_transport = {};
+    updatedContext.budget = {};
+    updatedContext.itinerary = {};
+    updatedContext.formattedPlan = '';
+  }
+
+  const startDateChanged = context.input.start_date !== undefined && updatedContext.input.start_date !== undefined && context.input.start_date !== updatedContext.input.start_date;
+  const endDateChanged = context.input.end_date !== undefined && updatedContext.input.end_date !== undefined && context.input.end_date !== updatedContext.input.end_date;
+  if (startDateChanged || endDateChanged) {
+    logger.info('Supervisor: Dates changed. Clearing date-dependent travel data.', {
+      from: `${context.input.start_date} -> ${context.input.end_date}`,
+      to: `${updatedContext.input.start_date} -> ${updatedContext.input.end_date}`,
+    });
+    updatedContext.weather = {};
+    updatedContext.transport = {};
+    updatedContext.accommodation = {};
+    updatedContext.budget = {};
+    updatedContext.itinerary = {};
+    updatedContext.formattedPlan = '';
+  }
+
+  if (
+    context.input.travelers !== undefined &&
+    updatedContext.input.travelers !== undefined &&
+    context.input.travelers !== updatedContext.input.travelers
+  ) {
+    logger.info('Supervisor: Travelers count changed. Resetting transport, accommodation, budget, and itinerary.', {
+      from: context.input.travelers,
+      to: updatedContext.input.travelers,
+    });
+    updatedContext.transport = {};
+    updatedContext.accommodation = {};
+    updatedContext.budget = {};
+    updatedContext.itinerary = {};
+    updatedContext.formattedPlan = '';
+  }
+
+  if (
+    context.input.budget_inr !== undefined &&
+    updatedContext.input.budget_inr !== undefined &&
+    context.input.budget_inr !== updatedContext.input.budget_inr
+  ) {
+    logger.info('Supervisor: Budget limit changed. Clearing budget assessment cache.', {
+      from: context.input.budget_inr,
+      to: updatedContext.input.budget_inr,
+    });
+    updatedContext.budget = {};
+    updatedContext.formattedPlan = '';
+  }
+
   // Step 2: LLM Supervisor — true agentic tool-calling routing.
   // The supervisor LLM reads the current context and decides which child agent to invoke.
   // Defensive guards below prevent hallucination-induced crashes.

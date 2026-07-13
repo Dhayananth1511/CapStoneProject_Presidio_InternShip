@@ -71,24 +71,45 @@ export function validateTripDates(
 ): { valid: boolean; reason?: string } {
   if (!start_date || !end_date) return { valid: true }; // Let missingInfoAgent handle this
 
-  const start = new Date(start_date);
-  const end = new Date(end_date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start_date) || !/^\d{4}-\d{2}-\d{2}$/.test(end_date)) {
     return { valid: false, reason: 'Invalid date format detected. Please use YYYY-MM-DD.' };
   }
 
-  if (start < today) {
+  const [startY, startM, startD] = start_date.split('-').map(Number);
+  const [endY, endM, endD] = end_date.split('-').map(Number);
+
+  if (
+    isNaN(startY) || isNaN(startM) || isNaN(startD) ||
+    isNaN(endY) || isNaN(endM) || isNaN(endD)
+  ) {
+    return { valid: false, reason: 'Invalid date format detected. Please use YYYY-MM-DD.' };
+  }
+
+  const now = new Date();
+  const currentY = now.getFullYear();
+  const currentM = now.getMonth() + 1;
+  const currentD = now.getDate();
+
+  const startIsPast = startY < currentY || 
+                      (startY === currentY && startM < currentM) || 
+                      (startY === currentY && startM === currentM && startD < currentD);
+
+  if (startIsPast) {
     return { valid: false, reason: `Start date (${start_date}) is in the past. Please choose a future date.` };
   }
 
-  if (end <= start) {
+  const endBeforeOrEqualStart = endY < startY || 
+                               (endY === startY && endM < startM) || 
+                               (endY === startY && endM === startM && endD <= startD);
+
+  if (endBeforeOrEqualStart) {
     return { valid: false, reason: `End date (${end_date}) must be after start date (${start_date}).` };
   }
 
-  const durationDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+  const startMs = Date.UTC(startY, startM - 1, startD);
+  const endMs = Date.UTC(endY, endM - 1, endD);
+  const durationDays = (endMs - startMs) / (1000 * 60 * 60 * 24);
+
   if (durationDays > 30) {
     return { valid: false, reason: `Trip duration of ${Math.round(durationDays)} days exceeds the 30-day maximum. Please shorten your trip.` };
   }
