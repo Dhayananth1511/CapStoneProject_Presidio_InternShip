@@ -152,7 +152,7 @@ export default function ChatPage() {
   }, [messages, activeStep]);
 
   useEffect(() => {
-    if (context?.accommodation?.selected_category) {
+    if (context?.accommodation?.selected_category && context.accommodation.selected_category !== 'skipped') {
       setLodgingCategoryTab(context.accommodation.selected_category);
     }
   }, [context]);
@@ -1102,38 +1102,69 @@ export default function ChatPage() {
                               </p>
                               {context.accommodation.selected_category && (
                                 <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                                  isDark ? 'bg-indigo-950 text-indigo-400 border border-indigo-900/60' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                  context.accommodation.selected_category === 'skipped'
+                                    ? 'bg-amber-500 text-white border border-amber-400'
+                                    : isDark
+                                    ? 'bg-indigo-950 text-indigo-400 border border-indigo-900/60'
+                                    : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
                                 }`}>
-                                  Active: {context.accommodation.selected_category.replace('_', ' ')}
+                                  Active: {context.accommodation.selected_category === 'skipped' ? 'Self Arranged' : context.accommodation.selected_category.replace('_', ' ')}
                                 </span>
                               )}
                             </div>
 
                             {/* Tiers Tab Bar */}
                             {hasCategories && (
-                              <div className="flex rounded-lg p-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                                {(['budget', 'mid_range', 'luxury'] as const).map((tab) => {
-                                  const optionsCount = (context.accommodation.categories[tab] || []).length;
-                                  if (optionsCount === 0) return null;
-                                  const tabLabel = tab === 'budget' ? 'Budget' : tab === 'mid_range' ? 'Mid-Range' : 'Luxury';
-                                  const isActive = lodgingCategoryTab === tab;
-                                  return (
-                                    <button
-                                      key={tab}
-                                      type="button"
-                                      onClick={() => setLodgingCategoryTab(tab)}
-                                      className={`flex-1 text-center py-1.5 text-[10.5px] font-bold rounded-md transition select-none cursor-pointer ${
-                                        isActive
-                                          ? isDark
-                                            ? 'bg-slate-850 text-indigo-400 shadow-sm border border-slate-750'
-                                            : 'bg-white text-indigo-600 shadow-sm border border-slate-205'
-                                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                                      }`}
-                                    >
-                                      {tabLabel} ({optionsCount})
-                                    </button>
-                                  );
-                                })}
+                              <div className="space-y-2">
+                                <div className="flex rounded-lg p-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                  {(['budget', 'mid_range', 'luxury'] as const).map((tab) => {
+                                    const optionsCount = (context.accommodation.categories[tab] || []).length;
+                                    if (optionsCount === 0) return null;
+                                    const tabLabel = tab === 'budget' ? 'Budget' : tab === 'mid_range' ? 'Mid-Range' : 'Luxury';
+                                    const isActive = lodgingCategoryTab === tab;
+                                    return (
+                                      <button
+                                        key={tab}
+                                        type="button"
+                                        onClick={() => setLodgingCategoryTab(tab)}
+                                        className={`flex-1 text-center py-1.5 text-[10.5px] font-bold rounded-md transition select-none cursor-pointer ${
+                                          isActive
+                                            ? isDark
+                                              ? 'bg-slate-850 text-indigo-400 shadow-sm border border-slate-750'
+                                              : 'bg-white text-indigo-600 shadow-sm border border-slate-205'
+                                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                                        }`}
+                                      >
+                                        {tabLabel} ({optionsCount})
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {context.status !== 'CONFIRMED' && (
+                                  <button
+                                    type="button"
+                                    disabled={selectHotelMutation.isPending}
+                                    onClick={() => handleSelectHotel('Self Arranged', 'skipped')}
+                                    className={`w-full py-1.5 rounded-lg text-[10.5px] font-bold border transition text-center flex items-center justify-center gap-1 select-none cursor-pointer ${
+                                      context.accommodation.selected_category === 'skipped'
+                                        ? isDark
+                                          ? 'bg-amber-500/10 border-amber-500/50 text-amber-300'
+                                          : 'bg-amber-50 border-amber-300 text-amber-800'
+                                        : isDark
+                                          ? 'bg-slate-900/50 hover:bg-amber-500/10 border-slate-800 text-slate-400 hover:text-amber-300 hover:border-amber-500/30'
+                                          : 'bg-white hover:bg-amber-50/50 border-slate-205 text-slate-500 hover:text-amber-850 hover:border-amber-250'
+                                    }`}
+                                  >
+                                    {context.accommodation.selected_category === 'skipped' ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-amber-500" /> Skipped: Arranging Accommodation Myself
+                                      </>
+                                    ) : (
+                                      'Skip Lodgings (Arrange Myself / Managed manually)'
+                                    )}
+                                  </button>
+                                )}
                               </div>
                             )}
 

@@ -200,18 +200,30 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    if (!category || !['budget', 'mid_range', 'luxury'].includes(category)) {
-      res.status(400).json({ message: 'Valid hotel category is required (budget, mid_range, luxury).' });
+    if (!category || !['budget', 'mid_range', 'luxury', 'skipped'].includes(category)) {
+      res.status(400).json({ message: 'Valid hotel category is required (budget, mid_range, luxury, skipped).' });
       return;
     }
 
     const accommodation = trip.accommodation || {};
-    const hotels = Array.isArray(accommodation.hotels) ? accommodation.hotels : [];
-    const selectedHotel = hotels.find((h: any) => h.name === hotelName);
+    let selectedHotel: any = null;
 
-    if (!selectedHotel) {
-      res.status(400).json({ message: `Hotel "${hotelName}" was not found in the search options for this trip.` });
-      return;
+    if (category === 'skipped' || hotelName === 'Self Arranged') {
+      selectedHotel = {
+        name: 'Self Arranged',
+        price_per_night_inr: 0,
+        rating: 5.0,
+        amenities: ['Managed by Traveler'],
+        total_cost_inr: 0
+      };
+    } else {
+      const hotels = Array.isArray(accommodation.hotels) ? accommodation.hotels : [];
+      selectedHotel = hotels.find((h: any) => h.name === hotelName);
+
+      if (!selectedHotel) {
+        res.status(400).json({ message: `Hotel "${hotelName}" was not found in the search options for this trip.` });
+        return;
+      }
     }
 
     const oldHotelName = accommodation.recommended || '';
@@ -220,15 +232,18 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
     accommodation.selected_category = category;
     accommodation.selected_hotel = selectedHotel;
     accommodation.recommended = selectedHotel.name;
-    accommodation.price_per_night = selectedHotel.price_per_night_inr || selectedHotel.price_per_night;
+    accommodation.price_per_night = selectedHotel.price_per_night_inr;
 
-    // Shift selected hotel to the front of hotels list for compatibility with other agents
-    const originalIdx = hotels.findIndex((h: any) => h.name === selectedHotel.name);
-    if (originalIdx > -1) {
-      const [removed] = hotels.splice(originalIdx, 1);
-      hotels.unshift(removed);
+    if (category !== 'skipped') {
+      const hotels = Array.isArray(accommodation.hotels) ? accommodation.hotels : [];
+      // Shift selected hotel to the front of hotels list for compatibility with other agents
+      const originalIdx = hotels.findIndex((h: any) => h.name === selectedHotel.name);
+      if (originalIdx > -1) {
+        const [removed] = hotels.splice(originalIdx, 1);
+        hotels.unshift(removed);
+      }
+      accommodation.hotels = hotels;
     }
-    accommodation.hotels = hotels;
     trip.accommodation = accommodation;
 
     // Re-run budget agent on the updated context
@@ -243,7 +258,9 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
       trip.conversationHistory.push({ role: 'assistant', content: altMessage });
     } else {
       trip.status = 'PLANNED';
-      const successMessage = `🏨 Selected **${selectedHotel.name}** (${category.toUpperCase()} tier). The updated total trip cost is **₹${newBudget.total_cost_inr.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`;
+      const successMessage = category === 'skipped'
+        ? `🏨 Accommodation has been skipped (Self Arranged). The updated total trip cost is **₹${newBudget.total_cost_inr?.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`
+        : `🏨 Selected **${selectedHotel.name}** (${category.toUpperCase()} tier). The updated total trip cost is **₹${newBudget.total_cost_inr.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`;
       trip.conversationHistory.push({ role: 'assistant', content: successMessage });
     }
 

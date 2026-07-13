@@ -184,13 +184,24 @@ async function searchHotelbedsHotels(
     );
 
     const fallbackPerNight = parseFirstNumber(rawHotel?.minRate || rawHotel?.rate || rawHotel?.price);
-    const pricePerNight = totalStayPrice > 0 && nights > 0
+    let pricePerNight = totalStayPrice > 0 && nights > 0
       ? Math.round(totalStayPrice / nights)
       : Math.round(fallbackPerNight || 3000);
 
-    const totalCost = totalStayPrice > 0
-      ? Math.round(totalStayPrice)
-      : pricePerNight * nights;
+    // If sandbox returns miniature values, scale them to realistic rates in INR
+    if (pricePerNight < 500) {
+      const rating = rawHotel?.rating || rawHotel?.stars || rawHotel?.categoryCode || 4;
+      const parsedRating = parseFloat(String(rating)) || 4.0;
+      if (parsedRating >= 4.5) {
+        pricePerNight = Math.round(pricePerNight * 1500 + 9500); // Luxury: ₹9,500+
+      } else if (parsedRating >= 3.8) {
+        pricePerNight = Math.round(pricePerNight * 800 + 3500); // Mid-range: ₹3,500 - ₹9,500
+      } else {
+        pricePerNight = Math.round(pricePerNight * 400 + 1200); // Budget: ₹1,200 - ₹3,500
+      }
+    }
+
+    const totalCost = pricePerNight * nights;
 
     return {
       name: rawHotel?.name || rawHotel?.hotelName || 'Hotel',
