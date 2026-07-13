@@ -254,7 +254,7 @@ You MUST invoke exactly one tool.`;
 
   const supervisorLlm = new ChatGroq({
     apiKey: process.env.GROQ_API_KEY,
-    model: 'gemma2-9b-it', // Different model pool to spread RPM load
+    model: 'llama-3.1-8b-instant', // Different model pool to spread RPM load
     temperature: 0.1,
   });
 

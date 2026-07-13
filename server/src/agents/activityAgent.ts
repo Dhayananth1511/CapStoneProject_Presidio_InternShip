@@ -12,7 +12,7 @@ import logger from '../utils/logger';
 
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'gemma2-9b-it', // Separate RPM pool from llama models
+  model: 'llama-3.1-8b-instant', // Separate RPM pool from llama models
   temperature: 0.3,
 });
 

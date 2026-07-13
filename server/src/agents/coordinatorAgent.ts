@@ -19,7 +19,7 @@ const llm = new ChatGroq({
 
 const routerLlm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
-  model: 'gemma2-9b-it', // Different model pool — avoids llama-3.1-8b-instant RPM contention
+  model: 'llama-3.1-8b-instant', // Different model pool — avoids llama-3.1-8b-instant RPM contention
   temperature: 0.1,
 });
 
