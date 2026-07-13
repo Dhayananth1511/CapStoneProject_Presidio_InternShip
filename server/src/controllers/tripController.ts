@@ -6,7 +6,39 @@ import { runBudgetAgent } from '../agents/budgetAgent';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
-import { isMessageSafe, validateTripDates } from '../utils/inputSanitizer';
+import { isMessageSafe } from '../utils/inputSanitizer';
+
+const cleanCityName = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const city = value
+    .replace(/[.,;:!?]+$/g, '')
+    .replace(/\b(?:from|and|with|for|on|before|after|please|replan)\b.*$/i, '')
+    .trim();
+
+  if (!/[a-zA-Z]{2,}/.test(city)) return undefined;
+  return city
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
+const extractExplicitReplanInput = (reason: string): { destination?: string; origin?: string } => {
+  const destinationPatterns = [
+    /\bdestination\s+(?:from\s+)?[a-zA-Z][a-zA-Z\s.'-]{1,50}?\s+to\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+    /\b(?:change|update|set|switch)\s+(?:the\s+)?destination\s+(?:from\s+)?[a-zA-Z][a-zA-Z\s.'-]{1,50}?\s+to\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+    /\b(?:change|update|set|switch)\s+(?:the\s+)?destination\s+(?:to|as|is)?\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+    /\bdestination\s+(?:is|to|as)\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+    /\b(?:go|travel|trip|plan)(?:ing)?\s+(?:to|for)\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+  ];
+  const originPatterns = [
+    /\b(?:departure|depature|origin|from|starting\s+from|start\s+from)\s+(?:city\s+)?(?:is|to|as)?\s+([a-zA-Z][a-zA-Z\s.'-]{1,50})/i,
+  ];
+
+  const destination = cleanCityName(destinationPatterns.map((pattern) => reason.match(pattern)?.[1]).find(Boolean));
+  const origin = cleanCityName(originPatterns.map((pattern) => reason.match(pattern)?.[1]).find(Boolean));
+
+  return { destination, origin };
+};
 
 // POST /api/trips/plan — User sends a chat message to plan a trip
 export const createOrUpdateTrip = async (req: Request, res: Response): Promise<void> => {
@@ -103,25 +135,52 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
 
     const context = trip.toObject() as any;
     const { updatedContext } = await runReplanningAgent(context, reason as string);
+    const explicitInput = extractExplicitReplanInput(reason as string);
+
+    updatedContext.input = {
+      ...(updatedContext.input || {}),
+      ...(explicitInput.destination ? { destination: explicitInput.destination } : {}),
+      ...(explicitInput.origin ? { origin: explicitInput.origin } : {}),
+    };
+
+    // Always clear the itinerary when replanning so it gets freshly regenerated
+    updatedContext.itinerary = undefined;
+    updatedContext.formattedPlan = undefined;
 
     // Save modified context to ensure intermediate variables are updated
     await Trip.findOneAndUpdate(
       { sessionId: tripId },
       { 
         status: 'DRAFT',
+        input: updatedContext.input,
         weather: updatedContext.weather,
         transport: updatedContext.transport,
         accommodation: updatedContext.accommodation,
         activities: updatedContext.activities,
         local_transport: updatedContext.local_transport,
         budget: updatedContext.budget,
-        itinerary: updatedContext.itinerary,
-        formattedPlan: undefined
+        itinerary: undefined,
+        formattedPlan: undefined,
       }
     );
 
-    // Re-run planning from coordinator stage with updated context
-    const result = await planTrip(reason as string, userId, tripId as string, (req as any).requestId);
+    // Build an enriched message that includes current trip context so the slot extractor
+    // can correctly parse date adjustments (e.g., "add 1 day") against current end_date.
+    const currentInput = updatedContext.input || {};
+    const destinationChanged = !!explicitInput.destination || /\b(?:change|update|set|switch)\s+(?:the\s+)?destination\b/i.test(reason as string);
+    const enrichedMessage = [
+      reason,
+      explicitInput.destination ? `Destination: ${explicitInput.destination}` : '',
+      !destinationChanged && currentInput.destination ? `Destination: ${currentInput.destination}` : '',
+      currentInput.origin ? `Origin: ${currentInput.origin}` : '',
+      currentInput.start_date ? `Start date: ${currentInput.start_date}` : '',
+      currentInput.end_date ? `Current end date: ${currentInput.end_date}` : '',
+      currentInput.travelers ? `Travelers: ${currentInput.travelers}` : '',
+      currentInput.budget_inr ? `Budget: ₹${currentInput.budget_inr}` : '',
+    ].filter(Boolean).join('. ');
+
+    // Re-run planning from coordinator stage with updated context and enriched message
+    const result = await planTrip(enrichedMessage, userId, tripId as string, (req as any).requestId);
 
     res.json(result);
   } catch (error) {
