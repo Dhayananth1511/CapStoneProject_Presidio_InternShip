@@ -432,7 +432,6 @@ export default function ChatPage() {
       text += `🏨 Accommodation:      ₹${(context.budget.accommodation || 0).toLocaleString()}\n`;
       text += `🍔 Food & Meals:         ₹${(context.budget.food || 0).toLocaleString()}\n`;
       text += `🎟️ Activities/Tours:     ₹${(context.budget.activities || 0).toLocaleString()}\n`;
-      text += `🚕 Local transport:    ₹${(context.budget.local_transport || 0).toLocaleString()}\n`;
       text += `🚨 Emergency fund:     ₹${(context.budget.emergency_fund || 0).toLocaleString()}\n`;
       
       const estimatedTotal = context.budget.total_cost_inr ?? context.budget.total_estimated_cost ?? 0;
@@ -954,12 +953,6 @@ export default function ChatPage() {
                                 <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🏨 Lodging</td>
                                 <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.accommodation || 0).toLocaleString()}
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🍔 Food & Meals</td>
-                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                  ₹{(context.budget.food || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr>

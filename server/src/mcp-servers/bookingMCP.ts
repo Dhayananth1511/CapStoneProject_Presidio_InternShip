@@ -217,9 +217,9 @@ async function searchHotelbedsContentHotels(
     'Accept': 'application/json',
   };
 
-  // Fetch up to 50 hotels for the destination
+  // Fetch up to 100 hotels for the destination, filtering to India (IN)
   const res = await fetch(
-    `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/hotels?destinationCode=${destCode}&from=1&to=50&language=ENG&useSecondaryLanguage=True`,
+    `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/hotels?destinationCode=${destCode}&countryCodes=IN&from=1&to=100&language=ENG&useSecondaryLanguage=True`,
     { headers }
   );
 
@@ -233,9 +233,48 @@ async function searchHotelbedsContentHotels(
 
   if (rawHotels.length === 0) return null;
 
-  console.log(`[bookingMCP] ✅ Hotelbeds Content API returned ${rawHotels.length} real hotels for ${destination} (${destCode})`);
+  console.log(`[bookingMCP] Hotelbeds Content API returned ${rawHotels.length} raw hotels for ${destination} (${destCode})`);
 
-  return rawHotels.map((h: any) => {
+  // ── RELEVANCE FILTER ──────────────────────────────────────────────────────
+  // The Hotelbeds SANDBOX API is known to return hotels from countries other
+  // than the one requested (e.g. Italian hotels when asking for Goa).  We
+  // discard any hotel whose country code, city content, or address clearly
+  // does not match India / the target destination.
+  const destNameLower = destination.trim().toLowerCase();
+  // Common non-Indian keywords that signal a foreign hotel sneaking in
+  const FOREIGN_SIGNALS = [
+    'italy', 'italia', 'spain', 'espana', 'france', 'germany', 'ligure',
+    'riviera', 'milan', 'rome', 'paris', 'barcelona', 'madrid', 'lisbon',
+    'london', 'amsterdam', 'venice', 'florence', 'naples', 'sicily',
+    'switzerland', 'austria', 'greece', 'turkey', 'dubai', 'usa', 'canada',
+    'australia', 'china', 'japan', 'thailand', 'malaysia', 'singapore',
+  ];
+
+  const relevant = rawHotels.filter((h: any) => {
+    const cc = String(h?.countryCode || '').toUpperCase();
+    // If country code is explicit and not India, reject
+    if (cc && cc !== 'IN') return false;
+
+    const city    = String(h?.city?.content    || h?.city    || '').toLowerCase();
+    const address = String(h?.address?.content || h?.address || '').toLowerCase();
+    const hotelName = String(h?.name?.content  || h?.name   || '').toLowerCase();
+    const combined = `${city} ${address} ${hotelName}`;
+
+    // Reject if any foreign signal appears
+    if (FOREIGN_SIGNALS.some(sig => combined.includes(sig))) return false;
+
+    return true;
+  });
+
+  console.log(`[bookingMCP] ✅ ${relevant.length} India-relevant hotels after geographic filter for ${destination}`);
+
+  // If filtering wiped everything, fall back to the raw list but log a warning.
+  const finalList = relevant.length > 0 ? relevant : rawHotels;
+  if (relevant.length === 0) {
+    console.warn(`[bookingMCP] ⚠️  All hotels were filtered out. Hotelbeds sandbox may not have real ${destination} data.`);
+  }
+
+  return finalList.map((h: any) => {
     const name = h?.name?.content || h?.name || 'Hotel';
     const categoryCode = h?.categoryCode || '3EST';
     const stars = categoryCodeToStars(categoryCode);
@@ -280,6 +319,22 @@ export async function searchHotels(
     } catch (err: any) {
       console.warn(`[bookingMCP] Hotel search failed: ${err.message}`);
       hotels = [];
+    }
+
+    // ── SECONDARY SANITY FILTER ───────────────────────────────────────────────
+    // Even after the content-API filter, run a final pass to drop hotels that
+    // contain obvious foreign geographic identifiers in their name.
+    const FOREIGN_NAME_SIGNALS = [
+      'tigullio', 'milan', 'milan', 'de milan', 'assarotti', 'santa margherita',
+      'ligure', 'riviera', 'di gilio', 'viana',
+    ];
+    const beforeCount = hotels.length;
+    hotels = hotels.filter(h => {
+      const lname = h.name.toLowerCase();
+      return !FOREIGN_NAME_SIGNALS.some(sig => lname.includes(sig));
+    });
+    if (hotels.length < beforeCount) {
+      console.warn(`[bookingMCP] Dropped ${beforeCount - hotels.length} foreign-named hotels from results for '${destination}'.`);
     }
 
     const recommendedHotel = hotels.length > 0
