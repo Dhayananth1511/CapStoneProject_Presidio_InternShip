@@ -1,4 +1,4 @@
-// Transport Agent — search transit options with 12-hour Redis cache.
+// Transport Agent — search transit options (flights, trains, buses).
 // Includes real flights, multiple train classes, and bus options.
 // Supports user selection of preferred transport mode.
 
@@ -6,7 +6,6 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { ChatGroq } from '@langchain/groq';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
-import redis from '../config/redis';
 import { getTransportOptions } from '../mcp-servers/transitMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
@@ -19,19 +18,7 @@ const llm = new ChatGroq({
 
 export const transportTool = tool(
   async ({ origin, destination, travel_date, travelers }) => {
-    const cacheKey = `transport:v2:${origin}:${destination}:${travel_date}:t${travelers}`;
-
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.debug('Cache HIT — transport options tool', { cacheKey });
-        return cached;
-      }
-    } catch {
-      logger.warn('Redis unavailable for transport cache');
-    }
-
-    logger.debug('Cache MISS — transport options tool fetching from MCP', { cacheKey });
+    logger.debug('Transport tool fetching from MCP', { origin, destination, travel_date, travelers });
     const data = await getTransportOptions(origin, destination, travel_date, travelers);
 
     // Standalone LLM Reasoning Phase
@@ -61,14 +48,7 @@ Briefly explain the best option for speed vs cost, which class is recommended, a
       reasoning,
     };
 
-    const finalResultString = JSON.stringify(finalResult);
-    try {
-      await redis.setex(cacheKey, 43200, finalResultString); // 12 hours
-    } catch {
-      logger.warn('Could not write transport to cache');
-    }
-
-    return finalResultString;
+    return JSON.stringify(finalResult);
   },
   {
     name: 'fetch_transport',

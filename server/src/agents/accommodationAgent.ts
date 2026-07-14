@@ -1,11 +1,11 @@
-// Accommodation Agent — search hotels with 1-hour Redis cache.
+// Accommodation Agent — search hotels and categorize by price tier.
 // Categories: Budget (<₹5000/night), Mid-Range (₹5000-₹15000/night), Luxury (>₹15000/night)
+// Only real API data is returned — no fallback templates.
 
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { ChatGroq } from '@langchain/groq';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
-import redis from '../config/redis';
 import { searchHotels } from '../mcp-servers/bookingMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
@@ -18,19 +18,7 @@ const llm = new ChatGroq({
 
 export const accommodationTool = tool(
   async ({ destination, check_in, check_out, travelers, tier }) => {
-    const cacheKey = `hotels:${destination}:${check_in}:${check_out}:${travelers}:${tier || 'default'}`;
-
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.debug('Cache HIT — hotel options tool', { cacheKey });
-        return cached;
-      }
-    } catch {
-      logger.warn('Redis unavailable for hotel cache');
-    }
-
-    logger.debug('Cache MISS — hotel options tool fetching from MCP', { cacheKey });
+    logger.debug('Accommodation tool fetching from MCP', { destination, check_in, check_out, travelers, tier });
     const data = await searchHotels(destination, check_in, check_out, travelers);
 
     // Standalone LLM Reasoning Phase
@@ -63,23 +51,6 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
     const MID_MAX = 15000;
     const LUXURY_MIN = 15001;
 
-    // Fallback hotel templates for when real data doesn't fill a category
-    const budgetFallbacks = [
-      { name: `${destination} Budget Inn`, rating: 4.1, price: 1800, amenities: ['WiFi', 'AC', 'Breakfast'] },
-      { name: `${destination} Traveler's Hostel`, rating: 4.0, price: 1200, amenities: ['WiFi', 'Locker Room', 'Breakfast'] },
-      { name: `${destination} Cozy Guesthouse`, rating: 4.2, price: 2800, amenities: ['WiFi', 'AC', 'Parking'] },
-    ];
-    const midRangeFallbacks = [
-      { name: `${destination} Premium Inn & Suites`, rating: 4.5, price: 6500, amenities: ['WiFi', 'AC', 'Pool', 'Restaurant'] },
-      { name: `${destination} Heritage Hotel`, rating: 4.4, price: 8000, amenities: ['WiFi', 'AC', 'Heritage Courtyard', 'Restaurant'] },
-      { name: `${destination} City Center Vista`, rating: 4.3, price: 11500, amenities: ['WiFi', 'AC', 'Gym', 'Restaurant'] },
-    ];
-    const luxuryFallbacks = [
-      { name: `${destination} Grand Resort & Spa`, rating: 4.9, price: 18000, amenities: ['WiFi', 'AC', 'Pool', 'Spa', 'Restaurant', 'Bar'] },
-      { name: `${destination} Royal Palace Retreat`, rating: 4.8, price: 25000, amenities: ['WiFi', 'AC', 'Pool', 'Spa', 'Butler Service'] },
-      { name: `${destination} Signature Elite Villa`, rating: 4.7, price: 32000, amenities: ['WiFi', 'AC', 'Private Pool', 'Kitchen', 'Concierge'] },
-    ];
-
     // Sort all fetched hotels by price
     const hotelsList = [...(data.hotels || [])].sort((a, b) => a.price_per_night_inr - b.price_per_night_inr);
 
@@ -101,30 +72,10 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
       }
     });
 
-    // Helper: pad a category with fallback templates to ensure at least 3 options
-    const padCategory = (catList: any[], fallbacks: any[], catName: string) => {
-      const result = [...catList];
-      for (const fb of fallbacks) {
-        if (result.length >= 3) break;
-        const duplicate = result.some(
-          (h: any) => h.name.toLowerCase().includes(fb.name.toLowerCase().split(' ').slice(-2).join(' ').toLowerCase())
-        );
-        if (!duplicate) {
-          result.push({
-            name: fb.name,
-            price_per_night_inr: fb.price,
-            rating: fb.rating,
-            amenities: fb.amenities,
-            total_cost_inr: fb.price * nights,
-          });
-        }
-      }
-      return result.slice(0, 3); // Show max 3 per category
-    };
-
-    categories.budget = padCategory(categories.budget, budgetFallbacks, 'budget');
-    categories.mid_range = padCategory(categories.mid_range, midRangeFallbacks, 'mid_range');
-    categories.luxury = padCategory(categories.luxury, luxuryFallbacks, 'luxury');
+    // Limit each category to max 3 options
+    categories.budget = categories.budget.slice(0, 3);
+    categories.mid_range = categories.mid_range.slice(0, 3);
+    categories.luxury = categories.luxury.slice(0, 3);
 
     // Merge all unique hotels back into the flat list for downstream budget agent compatibility
     const allUniqueHotels = new Map<string, any>();
@@ -170,14 +121,7 @@ Briefly explain if the hotels are suitable, what amenities or lodging tiers are 
       reasoning,
     };
 
-    const finalResultString = JSON.stringify(finalResult);
-    try {
-      await redis.setex(cacheKey, 3600, finalResultString); // 1 hour cache
-    } catch {
-      logger.warn('Could not write hotels to cache');
-    }
-
-    return finalResultString;
+    return JSON.stringify(finalResult);
   },
   {
     name: 'fetch_accommodation',

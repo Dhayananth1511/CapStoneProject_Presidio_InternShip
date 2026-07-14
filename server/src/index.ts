@@ -15,7 +15,6 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 
 import connectDB from './config/db';
-import redis from './config/redis';
 import logger from './utils/logger';
 import { requestId } from './middleware/requestId';
 import { errorHandler } from './middleware/errorHandler';
@@ -84,23 +83,12 @@ app.get('/health/db', async (_req, res) => {
   });
 });
 
-app.get('/health/cache', async (_req, res) => {
-  try {
-    await redis.ping();
-    res.json({ success: true, status: 'healthy' });
-  } catch (error) {
-    res.status(503).json({ success: false, status: 'unhealthy' });
-  }
-});
-
 // ==========================================
 // ROUTES
 // ==========================================
 app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/admin', adminRoutes);
-
-// (NOTE: Trip and Admin routes will be created on Day 2 and mounted here!)
 
 // ==========================================
 // UNMAPPED ROUTE FALLBACK (404)
@@ -121,17 +109,10 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // 1. Connect MongoDB
+    // Connect MongoDB
     await connectDB();
 
-    // 2. Connect Redis cache
-    try {
-      await redis.connect();
-    } catch (redisError: any) {
-      logger.warn(`Redis connect failed: ${redisError.message}. Proceeding without cache.`);
-    }
-
-    // 3. Bind Listener port
+    // Bind Listener port
     app.listen(PORT, () => {
       logger.info(`Server backend bootstrapped on Port ${PORT} in ${process.env.NODE_ENV} mode.`);
     });

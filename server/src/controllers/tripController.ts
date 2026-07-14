@@ -157,7 +157,6 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
         transport: updatedContext.transport,
         accommodation: updatedContext.accommodation,
         activities: updatedContext.activities,
-        local_transport: updatedContext.local_transport,
         budget: updatedContext.budget,
         itinerary: undefined,
         formattedPlan: undefined,

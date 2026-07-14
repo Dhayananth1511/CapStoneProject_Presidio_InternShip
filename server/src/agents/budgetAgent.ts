@@ -9,7 +9,6 @@ export interface BudgetBreakdown {
   accommodation: number;
   food: number;
   activities: number;
-  local_transport: number;
   emergency_fund: number;
   total_cost_inr: number;
   remaining_budget_inr: number;
@@ -19,7 +18,6 @@ export interface BudgetBreakdown {
     transport?: { mode?: string; operator?: string; cost_inr: number };
     accommodation?: { hotel?: string; price_per_night_inr?: number; nights: number; cost_inr: number };
     activities?: { attraction_count: number; fee_per_person_inr: number; cost_inr: number };
-    local_transport?: { cost_inr: number };
     food?: { cost_inr: number; per_person_per_day_inr: number; days: number; source?: string };
   };
 }
@@ -138,7 +136,7 @@ function getFoodCost(activities: TripContext['activities'], travelers: number, d
 }
 
 export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakdown> {
-  const { input, transport, accommodation, activities, local_transport } = context;
+  const { input, transport, accommodation, activities } = context;
   const budget = input.budget_inr || 30000;
   const days = calculateTripDays(input);
   const nights = Math.max(1, days);
@@ -155,9 +153,7 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
   const activityVisits = Math.max(1, Math.min(attractionsCount || days, days));
   const activityCost = feePerPerson > 0 ? feePerPerson * travelers * activityVisits : 0;
 
-  const localTransportCost = parseFirstNumber(local_transport?.cab_estimate_inr);
-
-  const subtotal = transportSelection.cost + accommodationSelection.cost + foodSelection.cost + activityCost + localTransportCost;
+  const subtotal = transportSelection.cost + accommodationSelection.cost + foodSelection.cost + activityCost;
   
   // Emergency fund = 10% of subtotal for unexpected expenses
   const emergencyFund = Math.round(subtotal * 0.1);
@@ -169,7 +165,6 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
     accommodation: accommodationSelection.cost,
     food: foodSelection.cost,
     activities: activityCost,
-    local_transport: localTransportCost,
     emergency_fund: emergencyFund,
     total_cost_inr: totalCost,
     remaining_budget_inr: budget - totalCost,
@@ -191,9 +186,6 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
         fee_per_person_inr: feePerPerson,
         cost_inr: activityCost,
       },
-      local_transport: {
-        cost_inr: localTransportCost,
-      },
       food: {
         cost_inr: foodSelection.cost,
         per_person_per_day_inr: foodSelection.perPersonPerDay,
@@ -207,7 +199,7 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
   if (!isFeasible) {
     breakdown.alternatives = [
       `Choose a cheaper hotel tier (saves approx. ₹${Math.round(accommodationSelection.cost * 0.4)})`,
-      `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((foodSelection.cost + localTransportCost) / Math.max(1, days)) * 1.5)})`,
+      `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round((foodSelection.cost / Math.max(1, days)) * 1.5)})`,
       `Increase limit to ₹${totalCost} for comfortable traveling accommodations`,
     ];
   }

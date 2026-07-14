@@ -1,11 +1,10 @@
-// Weather Agent — exposes a LangChain tool to fetch forecast data with Redis caching.
-// Cache TTL is 6 hours to save OpenMeteo API calls.
+// Weather Agent — exposes a LangChain tool to fetch weather forecast data.
+// Calls the Weather MCP server directly. No caching layer.
 
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { ChatGroq } from '@langchain/groq';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
-import redis from '../config/redis';
 import { getWeatherForecast } from '../mcp-servers/weatherMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
@@ -23,19 +22,7 @@ export const weatherTool = tool(
       fs.appendFileSync('d:/Presidio Capstone Project/server/tool_calls.log', `[${new Date().toISOString()}] weatherTool args: ${JSON.stringify({ destination, start_date, end_date })}\n`);
     } catch (err) {}
 
-    const cacheKey = `weather:${destination}:${start_date}:${end_date}`;
-
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.debug('Cache HIT — weather tool', { cacheKey });
-        return cached; 
-      }
-    } catch {
-      logger.warn('Redis unavailable, bypassing weather cache');
-    }
-
-    logger.debug('Cache MISS — weather tool fetching from MCP', { cacheKey });
+    logger.debug('Weather tool fetching from MCP', { destination, start_date, end_date });
     const weatherData = await getWeatherForecast(destination, start_date, end_date);
 
     // Standalone LLM Reasoning Phase
@@ -61,14 +48,7 @@ Briefly explain if the conditions are favorable for travel, note the average tem
       reasoning,
     };
 
-    const finalResultString = JSON.stringify(finalResult);
-    try {
-      await redis.setex(cacheKey, 21600, finalResultString);
-    } catch {
-      logger.warn('Could not write weather to Redis cache');
-    }
-
-    return finalResultString;
+    return JSON.stringify(finalResult);
   },
   {
     name: 'fetch_weather',

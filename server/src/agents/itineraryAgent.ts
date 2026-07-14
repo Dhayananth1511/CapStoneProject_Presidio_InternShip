@@ -1,6 +1,5 @@
 // Itinerary Agent — builds the day-by-day schedule using real tourist locations.
-// It weaves together weather advisories, real attraction distances (from local_transport),
-// meal breaks, check-in/out times, and daily spending caps into a coherent schedule.
+// Weaves together weather advisories, meal breaks, check-in/out times, and daily spending caps.
 //
 // BATCHING STRATEGY: We generate at most 5 days per LLM call to prevent the
 // model from truncating its JSON output mid-stream (which causes parse failures
@@ -25,43 +24,32 @@ async function generateBatch(
   context: TripContext,
   dailyBudget: number
 ): Promise<any[]> {
-  const { input, weather, transport, accommodation, activities, local_transport } = context;
+  const { input, weather, transport, accommodation, activities } = context;
 
   // Find matching weather for these dates
   const weatherSnippet = batchDays.map(d =>
     (weather?.forecast || []).find((f: any) => f.date === d.date) || { date: d.date, condition: 'Clear', temp_high_c: 28, temp_low_c: 22 }
   );
 
-  // Build a structured list of attractions with distances from hotel
-  const attractionDistances = (local_transport as any)?.attraction_distances || [];
+  // Build a structured list of attractions from activities data
   const realAttractions = (activities?.attraction_options || []) as any[];
-  
-  // Create enriched attraction info: name + distance + cost + rating
-  const enrichedAttractions = realAttractions.map((attr: any) => {
-    const distInfo = attractionDistances.find(
-      (d: any) => d.attraction?.toLowerCase().includes(attr.name?.toLowerCase().split(' ')[0]) ||
-                  attr.name?.toLowerCase().includes(d.attraction?.toLowerCase().split(' ')[0])
-    );
-    return {
-      name: attr.name,
-      rating: attr.rating || 4.0,
-      vicinity: attr.vicinity || input.destination,
-      distance_from_hotel_km: distInfo?.distance_km || null,
-      cab_cost_inr: distInfo?.cab_cost_inr || null,
-    };
-  }).filter((a: any) => a.name);
+
+  // Create enriched attraction info: name + rating + vicinity
+  const enrichedAttractions = realAttractions.map((attr: any) => ({
+    name: attr.name,
+    rating: attr.rating || 4.0,
+    vicinity: attr.vicinity || input.destination,
+  })).filter((a: any) => a.name);
 
   // Fallback: use simple attraction names if no enriched data
   const attractionsForPrompt = enrichedAttractions.length > 0
-    ? enrichedAttractions.slice(0, 10).map((a: any) =>
-        `${a.name} (${a.rating}★${a.distance_from_hotel_km ? `, ${a.distance_from_hotel_km}km from hotel, cab ~₹${a.cab_cost_inr}` : ''})`)
+    ? enrichedAttractions.slice(0, 10).map((a: any) => `${a.name} (${a.rating}★)`)
     : (activities?.attractions || []).slice(0, 10);
 
   const batchPrompt = `Trip: ${input.destination} | Travelers: ${input.travelers}
 Hotel: ${accommodation?.recommended || 'Hotel'} (${accommodation?.selected_category || 'mid_range'} category)
-Tourist Attractions (with distance from hotel): ${attractionsForPrompt.join('; ')}
+Tourist Attractions: ${attractionsForPrompt.join('; ')}
 Restaurants: ${(activities?.restaurants || []).slice(0, 6).join(', ')}
-Available Local Transport: ${(local_transport as any)?.recommended_mode || 'Auto Rickshaw'} (avg cab fare ₹${(local_transport as any)?.daily_transport_budget?.cab_per_day_inr || 300}/day)
 Daily budget: ₹${dailyBudget} (excluding accommodation)
 Transport arrival (Day 1 only): ${(transport as any)?.options?.[0]?.arrival || '14:00'}
 Weather: ${JSON.stringify(weatherSnippet)}
@@ -71,9 +59,8 @@ Start day numbering from ${batchDays[0].day}.
 IMPORTANT: 
 - Day 1 should begin with arrival/check-in then start sightseeing
 - Use the REAL tourist attractions listed above
-- Include distances and local transport costs in the schedule where relevant
 - Spread attractions across days (don't repeat same place)
-- Include local transport cost in cost_inr for travel activities`;
+- Include a suggested local transport note (cab, auto, etc.) for travel activities`;
 
   const systemPrompt = `You are a travel itinerary planner. Return ONLY valid, complete JSON — no markdown fences, no explanation.
 Schema (STRICTLY follow this, closing ALL braces/brackets):
@@ -84,7 +71,7 @@ Schema (STRICTLY follow this, closing ALL braces/brackets):
       "date": "YYYY-MM-DD",
       "title": "Day title",
       "schedule": [
-        { "time": "HH:MM", "activity": "description", "location": "exact place name", "cost_inr": 500, "duration_min": 60, "transport_note": "5km by auto ₹60" }
+        { "time": "HH:MM", "activity": "description", "location": "exact place name", "cost_inr": 500, "duration_min": 60, "transport_note": "By auto ₹60" }
       ],
       "daily_total_inr": 2000,
       "weather_note": "brief weather note"
@@ -126,7 +113,7 @@ Always include a transport_note field for activities that require travel from ho
             { time: '15:00', activity: fallbackAttractions[idx * 2 + 1] ? `Explore ${fallbackAttractions[idx * 2 + 1]}` : 'Sightseeing & local activities', location: fallbackAttractions[idx * 2 + 1] || input.destination, cost_inr: 300, duration_min: 180, transport_note: 'By cab ₹150' },
             { time: '19:00', activity: 'Dinner & evening leisure', location: accommodation?.recommended || 'Hotel', cost_inr: 500, duration_min: 90 },
           ],
-          daily_total_inr: 1800 + Math.round((local_transport as any)?.daily_transport_budget?.auto_per_day_inr || 200),
+          daily_total_inr: 1800,
           weather_note: 'Check local conditions before heading out.',
         }));
       }
@@ -136,7 +123,7 @@ Always include a transport_note field for activities that require travel from ho
 }
 
 export async function runItineraryAgent(context: TripContext): Promise<{ days: any[]; notes: string }> {
-  const { input, budget, activities, accommodation, local_transport } = context;
+  const { input, budget, activities, accommodation } = context;
 
   // Build the list of all trip days
   const startDate = new Date(input.start_date || new Date());
@@ -166,13 +153,12 @@ export async function runItineraryAgent(context: TripContext): Promise<{ days: a
     allGeneratedDays.push(...days);
   }
 
-  // Build summary notes including actual attractions and local transport info
+  // Build summary notes
   const attractionCount = (activities?.attractions || []).length;
-  const localMode = (local_transport as any)?.recommended_mode || 'Auto Rickshaw';
   const hotelName = accommodation?.recommended || 'Accommodation';
 
   return {
     days: allGeneratedDays,
-    notes: `${totalDays}-day trip to ${input.destination}. Staying at ${hotelName}. Budget ≈₹${dailyBudget}/day. ${attractionCount} tourist spots covered. Recommended local transport: ${localMode}. Book accommodations and transport well in advance.`,
+    notes: `${totalDays}-day trip to ${input.destination}. Staying at ${hotelName}. Budget ≈₹${dailyBudget}/day. ${attractionCount} tourist spots covered. Book accommodations and transport well in advance.`,
   };
 }

@@ -1,10 +1,9 @@
-// Activity Agent — search local attractions with 24-hour Redis cache.
+// Activity Agent — search local attractions and restaurants.
 
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { ChatGroq } from '@langchain/groq';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
-import redis from '../config/redis';
 import { searchHotelbedsActivities } from '../mcp-servers/hotelbedsActivitiesMCP';
 import { getPlacesNearby } from '../mcp-servers/mapsMCP';
 import { withRetry } from '../utils/retry';
@@ -18,19 +17,7 @@ const llm = new ChatGroq({
 
 export const activityTool = tool(
   async ({ destination, interests, days, travelers }) => {
-    const cacheKey = `activities:${destination}:${interests.join('-')}:${days}d`;
-
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        logger.debug('Cache HIT — activities tool', { cacheKey });
-        return cached;
-      }
-    } catch {
-      logger.warn('Redis unavailable for activities cache');
-    }
-
-    logger.debug('Cache MISS — activities tool fetching from MCP', { cacheKey });
+    logger.debug('Activity tool fetching from MCP', { destination, interests, days });
     let data: any;
     try {
       data = await searchHotelbedsActivities(destination, interests, days, travelers || 1);
@@ -67,14 +54,7 @@ Briefly explain if these matches fit traveler preferences, and highlight 2-3 key
       reasoning,
     };
 
-    const finalResultString = JSON.stringify(finalResult);
-    try {
-      await redis.setex(cacheKey, 86450, finalResultString);
-    } catch {
-      logger.warn('Could not write activities to cache');
-    }
-
-    return finalResultString;
+    return JSON.stringify(finalResult);
   },
   {
     name: 'fetch_activities',

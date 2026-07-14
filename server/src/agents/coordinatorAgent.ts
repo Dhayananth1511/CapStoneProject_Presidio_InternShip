@@ -8,7 +8,6 @@ import { weatherTool } from './weatherAgent';
 import { transportTool } from './transportAgent';
 import { accommodationTool } from './accommodationAgent';
 import { activityTool } from './activityAgent';
-import { localTransportTool } from './localTransportAgent';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 
@@ -29,7 +28,6 @@ const modelWithTools = routerLlm.bindTools([
   transportTool,
   accommodationTool,
   activityTool,
-  localTransportTool,
 ]);
 
 export async function runParallelAgents(context: TripContext, userMessage: string): Promise<TripContext> {
@@ -42,21 +40,20 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
 
   const systemPrompt = `You are an intelligent travel supervisor. Based on the user query and current state, call the appropriate tools.
 Rules:
-1. If this is the initial planning session (i.e. context contains mostly empty fields or no weather/hotel/transit data is fetched), call ALL five tools:
+1. If this is the initial planning session (i.e. context contains mostly empty fields or no weather/hotel/transit data is fetched), call ALL four tools:
    - fetch_weather (requires destination, start_date, end_date)
    - fetch_transport (requires origin, destination, travel_date, travelers)
    - fetch_accommodation (requires destination, check_in, check_out, travelers)
    - fetch_activities (requires destination, interests, days)
-   - fetch_local_transport (requires destination, hotel_location)
 2. If this is a modification (re-planning) request, call ONLY the tool(s) specific to the user's requirements:
-   - "change hotel" or "find different lodging" or choosing a cheaper hotel tier -> call fetch_accommodation and fetch_local_transport.
+   - "change hotel" or "find different lodging" or choosing a cheaper hotel tier -> call fetch_accommodation.
    - "add food spots" or "new interests" -> call ONLY fetch_activities.
-   - "change dates" -> dates impact transit, accommodation, weather, and local transit, so call fetch_weather, fetch_transport, fetch_accommodation, and fetch_local_transport.
+   - "change dates" -> dates impact transit, accommodation, and weather, so call fetch_weather, fetch_transport, and fetch_accommodation.
 3. For fetch_accommodation, you must pass the optional "tier" parameter based on the user's details:
    - If user asks to choose a cheaper hotel tier, save money on lodging, or requests budget/cheap options, pass tier="budget".
    - If user requests luxury, high-end, premium, or expensive options, pass tier="luxury".
    - If user requests normal, mid-range, average, or moderate options, pass tier="mid-range".
-Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}, hotel_location="${context.accommodation?.recommended || ''}".`;
+Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}.`;
 
   const response = await withRetry(() => modelWithTools.invoke([
     new SystemMessage(systemPrompt),
@@ -65,7 +62,6 @@ Ensure you populate tool arguments using the current context: destination="${inp
       hasTransport: !!context.transport?.options?.length,
       hasAccommodation: !!context.accommodation?.hotels?.length,
       hasActivities: !!context.activities?.attractions?.length,
-      hasLocalTransport: !!context.local_transport?.cab_estimates?.length,
     })}`)
   ]));
 
@@ -79,90 +75,53 @@ Ensure you populate tool arguments using the current context: destination="${inp
       { name: 'fetch_weather', args: { destination: input.destination!, start_date: input.start_date!, end_date: input.end_date! } },
       { name: 'fetch_transport', args: { origin: input.origin!, destination: input.destination!, travel_date: input.start_date!, travelers: input.travelers } },
       { name: 'fetch_accommodation', args: { destination: input.destination!, check_in: input.start_date!, check_out: input.end_date!, travelers: input.travelers } },
-      { name: 'fetch_activities', args: { destination: input.destination!, interests: input.interests || [], days } },
-      { name: 'fetch_local_transport', args: { destination: input.destination!, hotel_location: context.accommodation?.recommended || '' } }
+      { name: 'fetch_activities', args: { destination: input.destination!, interests: input.interests || [], days } }
     );
   }
 
-  // 1. Separate non-local tool calls from local transport
-  const firstStageToolCalls = toolCalls.filter(t => t.name !== 'fetch_local_transport');
-  const localTransportToolCall = toolCalls.find(t => t.name === 'fetch_local_transport');
-
   const newContext = { ...context };
 
-  if (firstStageToolCalls.length > 0) {
-    const promises = firstStageToolCalls.map(async (toolCall) => {
-      const toolName = toolCall.name;
-      const args = toolCall.args;
+  const promises = toolCalls.map(async (toolCall) => {
+    const toolName = toolCall.name;
+    const args = toolCall.args;
 
-      let rawResult: any;
-      if (toolName === 'fetch_weather') {
-        rawResult = await weatherTool.invoke(args as any);
-      } else if (toolName === 'fetch_transport') {
-        rawResult = await transportTool.invoke(args as any);
-      } else if (toolName === 'fetch_accommodation') {
-        rawResult = await accommodationTool.invoke(args as any);
-      } else if (toolName === 'fetch_activities') {
-        rawResult = await activityTool.invoke(args as any);
-      } else {
-        throw new Error(`Unknown tool chosen by LLM: ${toolName}`);
-      }
-
-      const resultString = typeof rawResult === 'string'
-        ? rawResult
-        : (rawResult && 'content' in rawResult ? String(rawResult.content) : JSON.stringify(rawResult));
-
-      return { name: toolName, value: JSON.parse(resultString) };
-    });
-
-    const results = await Promise.allSettled(promises);
-
-    results.forEach((res) => {
-      if (res.status === 'fulfilled') {
-        const { name, value } = res.value;
-        if (name === 'fetch_weather') newContext.weather = value;
-        else if (name === 'fetch_transport') newContext.transport = value;
-        else if (name === 'fetch_accommodation') newContext.accommodation = value;
-        else if (name === 'fetch_activities') newContext.activities = value;
-      } else {
-        const err = res.reason;
-        logger.error('Dynamic tool call failed during concurrent execution', { 
-          errorMessage: err?.message || String(err), 
-          errorStack: err?.stack 
-        });
-      }
-    });
-  }
-
-  // 2. Perform Stage 2 sequential call for local transport using Stage 1 context details
-  if (localTransportToolCall) {
-    const args = { ...localTransportToolCall.args };
-    
-    // Inject real-world hotel location if fetched in Stage 1
-    if (newContext.accommodation?.recommended) {
-      args.hotel_location = newContext.accommodation.recommended;
-    }
-    
-    // Inject core attractions if fetched in Stage 1
-    if (Array.isArray(newContext.activities?.attractions)) {
-      args.attractions = newContext.activities.attractions;
-    } else if (Array.isArray(newContext.activities?.attraction_options)) {
-      args.attractions = newContext.activities.attraction_options.map((a: any) => a.name);
+    let rawResult: any;
+    if (toolName === 'fetch_weather') {
+      rawResult = await weatherTool.invoke(args as any);
+    } else if (toolName === 'fetch_transport') {
+      rawResult = await transportTool.invoke(args as any);
+    } else if (toolName === 'fetch_accommodation') {
+      rawResult = await accommodationTool.invoke(args as any);
+    } else if (toolName === 'fetch_activities') {
+      rawResult = await activityTool.invoke(args as any);
+    } else {
+      throw new Error(`Unknown tool chosen by LLM: ${toolName}`);
     }
 
-    try {
-      const rawResult = await localTransportTool.invoke(args as any);
-      const resultString = typeof rawResult === 'string'
-        ? rawResult
-        : (rawResult && 'content' in rawResult ? String(rawResult.content) : JSON.stringify(rawResult));
-      newContext.local_transport = JSON.parse(resultString);
-    } catch (err: any) {
-      logger.error('Stage 2 local transport tool call failed', {
+    const resultString = typeof rawResult === 'string'
+      ? rawResult
+      : (rawResult && 'content' in rawResult ? String(rawResult.content) : JSON.stringify(rawResult));
+
+    return { name: toolName, value: JSON.parse(resultString) };
+  });
+
+  const results = await Promise.allSettled(promises);
+
+  results.forEach((res) => {
+    if (res.status === 'fulfilled') {
+      const { name, value } = res.value;
+      if (name === 'fetch_weather') newContext.weather = value;
+      else if (name === 'fetch_transport') newContext.transport = value;
+      else if (name === 'fetch_accommodation') newContext.accommodation = value;
+      else if (name === 'fetch_activities') newContext.activities = value;
+    } else {
+      const err = res.reason;
+      logger.error('Dynamic tool call failed during concurrent execution', {
         errorMessage: err?.message || String(err),
-        errorStack: err?.stack
+        errorStack: err?.stack,
       });
     }
-  }
+  });
 
   return newContext;
 }
@@ -195,7 +154,6 @@ IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.`;
       attractions: (context.activities?.attractions || []).slice(0, 10),
       restaurants: (context.activities?.restaurants || []).slice(0, 6),
     },
-    local_transport: context.local_transport || 'No local transport estimates available.',
     itinerary_days: (context.itinerary?.days || []).map((d: any) => ({
       day: d.day,
       date: d.date,

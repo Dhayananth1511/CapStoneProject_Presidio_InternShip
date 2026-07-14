@@ -61,7 +61,6 @@ export interface TripContext {
   transport?: any;
   accommodation?: any;
   activities?: any;
-  local_transport?: any;
   budget?: any;
   itinerary?: any;
   booking?: any;

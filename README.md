@@ -1,6 +1,6 @@
 # Travel Planner AI Agent - Capstone Project Documentation
 
-This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating architectural principles and technologies demonstrating a production-ready, multi-agent AI system backed by MCP tool calling, dual-layer memory, Redis caching, and AWS cloud infrastructure.
+This repository contains the architecture, workflow designs, and system integration details for the Travel Planner AI Client/Server application. The project serves as an enterprise-grade capstone integrating architectural principles and technologies demonstrating a production-ready, multi-agent AI system backed by MCP tool calling, dual-layer memory, and AWS cloud infrastructure.
 
 ---
 
@@ -74,52 +74,31 @@ graph TD
     %% --- Parallel Agent Execution ---
     subgraph ParallelTasks ["Stage 1: Dynamic LLM-Routed Parallel Agents"]
         %% Weather
-        WeatherAgent["Weather Agent<br/>(fetch_weather tool)"]:::agent --> WeatherCacheCheck{"Redis Check"}:::cache
-        WeatherCacheCheck -->|Miss| WeatherMCP["Weather MCP Request"]:::api
-        WeatherMCP --> WeatherSave["Write to Redis"]:::cache
-        WeatherCacheCheck -->|Hit| WeatherOut["Weather Data"]
-        WeatherSave --> WeatherOut
+        WeatherAgent["Weather Agent<br/>(fetch_weather tool)"]:::agent --> WeatherMCP["Weather MCP Request"]:::api
+        WeatherMCP --> WeatherOut["Weather Data"]
         
         %% Transport
-        TransAgent["Transport Agent<br/>(fetch_transport tool)"]:::agent --> TransCacheCheck{"Redis Check"}:::cache
-        TransCacheCheck -->|Miss| TransMCP["Transit MCP Request"]:::api
-        TransMCP --> TransSave["Write to Redis"]:::cache
-        TransCacheCheck -->|Hit| TransOut["Transport Data"]
-        TransSave --> TransOut
+        TransAgent["Transport Agent<br/>(fetch_transport tool)"]:::agent --> TransMCP["Transit MCP Request"]:::api
+        TransMCP --> TransOut["Transport Data"]
         
         %% Accommodation
-        AccomAgent["Accom Agent<br/>(fetch_accommodation tool)"]:::agent --> AccomCacheCheck{"Redis Check"}:::cache
-        AccomCacheCheck -->|Miss| AccomMCP["Hotel MCP Request"]:::api
-        AccomMCP --> AccomSave["Write to Redis"]:::cache
-        AccomCacheCheck -->|Hit| AccomOut["Accommodation Data"]
-        AccomSave --> AccomOut
+        AccomAgent["Accom Agent<br/>(fetch_accommodation tool)"]:::agent --> AccomMCP["Hotel MCP Request"]:::api
+        AccomMCP --> AccomOut["Accommodation Data"]
         
         %% Activity
-        ActAgent["Activity Agent<br/>(fetch_activities tool)"]:::agent --> ActCacheCheck{"Redis Check"}:::cache
-        ActCacheCheck -->|Miss| ActMCP["Places MCP Request"]:::api
-        ActMCP --> ActSave["Write to Redis"]:::cache
-        ActCacheCheck -->|Hit| ActOut["Activity Data"]
-        ActSave --> ActOut
-        
-        %% Local Transport
-        LocalTransAgent["Local Transport Agent<br/>(fetch_local_transport tool)"]:::agent --> LocalCacheCheck{"Redis Check"}:::cache
-        LocalCacheCheck -->|Miss| LocalMCP["Distance Matrix MCP Request"]:::api
-        LocalMCP --> LocalSave["Write to Redis"]:::cache
-        LocalCacheCheck -->|Hit| LocalOut["Local Transport Data"]
-        LocalSave --> LocalOut
+        ActAgent["Activity Agent<br/>(fetch_activities tool)"]:::agent --> ActMCP["Places MCP Request"]:::api
+        ActMCP --> ActOut["Activity Data"]
     end
     
     Coordinator -->|fetch_weather| WeatherAgent
     Coordinator -->|fetch_transport| TransAgent
     Coordinator -->|fetch_accommodation| AccomAgent
     Coordinator -->|fetch_activities| ActAgent
-    Coordinator -->|fetch_local_transport| LocalTransAgent
     
     WeatherOut --> JoinTasks["Aggregate Parallel Outputs"]:::process
     TransOut --> JoinTasks
     AccomOut --> JoinTasks
     ActOut --> JoinTasks
-    LocalOut --> JoinTasks
     
     %% --- Sequential Agent Execution ---
     subgraph SequentialTasks ["Stage 2: Sequential Planning"]
@@ -234,55 +213,33 @@ graph TD
     
     RoutingDecision -->|orchestrate_and_generate_trip_plan| Coord["Coordinator Agent"]:::agent
     
-    %% Hybrid Parallel / Sequential Stage
     subgraph ParallelPhase ["Parallel Gathering Phase"]
         %% Weather
-        WeatherAgent["Weather Agent"]:::agent --> WeatherCache{"Redis Check"}:::cache
-        WeatherCache -->|Miss| WeatherMCP["Weather MCP"]:::tool
-        WeatherMCP --> WeatherWrite["Write to Redis"]:::cache
-        WeatherCache -->|Hit| WeatherJoin["Weather Data"]
-        WeatherWrite --> WeatherJoin
+        WeatherAgent["Weather Agent"]:::agent --> WeatherMCP["Weather MCP"]:::tool
+        WeatherMCP --> WeatherJoin["Weather Data"]
         
         %% Transport
-        TransAgent["Transport Agent"]:::agent --> TransCache{"Redis Check"}:::cache
-        TransCache -->|Miss| SchedulesMCP["Transit MCP"]:::tool
-        SchedulesMCP --> TransWrite["Write to Redis"]:::cache
-        TransCache -->|Hit| TransJoin["Transport Data"]
-        TransWrite --> TransJoin
+        TransAgent["Transport Agent"]:::agent --> SchedulesMCP["Transit MCP"]:::tool
+        SchedulesMCP --> TransJoin["Transport Data"]
         
         %% Accommodation
-        AccomAgent["Accommodation Agent"]:::agent --> AccomCache{"Redis Check"}:::cache
-        AccomCache -->|Miss| HotelMCP["Hotel MCP"]:::tool
-        HotelMCP --> AccomWrite["Write to Redis"]:::cache
-        AccomCache -->|Hit| AccomJoin["Accommodation Data"]
-        AccomWrite --> AccomJoin
+        AccomAgent["Accommodation Agent"]:::agent --> HotelMCP["Hotel MCP"]:::tool
+        HotelMCP --> AccomJoin["Accommodation Data"]
         
         %% Activity
-        ActAgent["Activity Agent"]:::agent --> ActCache{"Redis Check"}:::cache
-        ActCache -->|Miss| MapsMCP["Maps MCP"]:::tool
-        MapsMCP --> ActWrite["Write to Redis"]:::cache
-        ActCache -->|Hit| ActJoin["Activity Data"]
-        ActWrite --> ActJoin
-        
-        %% Local Transport
-        LocalAgent["Local Transport Agent"]:::agent --> LocalCache{"Redis Check"}:::cache
-        LocalCache -->|Miss| DistMCP["Maps MCP (Distance Matrix)"]:::tool
-        DistMCP --> LocalWrite["Write to Redis"]:::cache
-        LocalCache -->|Hit| LocalJoin["Local Transport Data"]
-        LocalWrite --> LocalJoin
+        ActAgent["Activity Agent"]:::agent --> MapsMCP["Maps MCP"]:::tool
+        MapsMCP --> ActJoin["Activity Data"]
     end
     
     Coord --> WeatherAgent
     Coord --> TransAgent
     Coord --> AccomAgent
     Coord --> ActAgent
-    Coord --> LocalAgent
     
     WeatherJoin --> JoinGather["Join Gathered Data"]:::process
     TransJoin --> JoinGather
     AccomJoin --> JoinGather
     ActJoin --> JoinGather
-    LocalJoin --> JoinGather
     
     subgraph SequentialPhase ["Sequential Planning Phase"]
         BudgetAgent["Budget Agent"]:::agent
@@ -495,12 +452,8 @@ graph TD
     HITLGateCheck -->|Approve| BookingAgent
 
     %% Storage Tier
-    subgraph DBTier ["Database & Caching"]
+    subgraph DBTier ["Database Tier"]
         DB[(MongoDB Atlas Database)]:::db
-        
-        subgraph CacheStore ["In-Memory Caching"]
-            RedisCache[(Redis Cache)]:::cache
-        end
         
         subgraph MemStores ["Memory Store"]
             ST_Memory[(Short-Term Memory)]:::db
@@ -536,11 +489,6 @@ graph TD
     PlannerService -->|Query & Update History| ST_Memory
     PlannerService -->|Query preferences| LT_Memory
     
-    WeatherAgent -.->|Read/Write Cache| RedisCache
-    TransAgent -.->|Read/Write Cache| RedisCache
-    AccomAgent -.->|Read/Write Cache| RedisCache
-    ActAgent -.->|Read/Write Cache| RedisCache
-    
     Coord -->|Inference Query| LLM
     LLM -->|Standardized MCP Tool Requests| LCTools
     BookingAgent -->|OAuth Calendar Event| CalendarTool
@@ -570,7 +518,7 @@ sequenceDiagram
     participant PlannerSvc as Planner Service
     participant Supervisor as PlannerAgent (Supervisor)
     participant Coord as CoordinatorAgent
-    participant Redis as Redis Cache
+    participant Redis as cache
     participant DB as MongoDB Atlas
 
     Traveler->>FE: Enters "Trip to Ooty for 4 days"
@@ -608,10 +556,7 @@ sequenceDiagram
     critical Stage 1: Parallel Data Retrieval
         Supervisor->>Coord: runParallelAgents(context)
         Note over Coord: Dynamic bindTools selects tools: weather, transport, accommodation, activities
-        Coord->>Redis: Check caches (Multi-Key)
-        Redis-->>Coord: Cache Misses
         Note over Coord: Invokes MCP Server tools (OpenMeteo, Google Places, transit)
-        Coord->>Redis: Caches responses (Custom TTLs)
         Coord-->>Supervisor: Return populated TripContext
     end
 
@@ -781,7 +726,6 @@ Each MCP tool exposes a strictly typed JSON schema so the LLM can call it determ
 | Google Calendar | Via MCP | `calendar-mcp-server` |
 | Groq LLM API | Direct (LangChain) | — |
 | MongoDB Atlas | Direct (Mongoose) | — |
-| Redis | Direct (ioredis) | — |
 
 ---
 
@@ -807,7 +751,7 @@ User Input → Planner Agent → Missing Info Agent → Destination Rec Agent
 
 ### Stage 1 — Parallel Data Retrieval (Concurrent)
 
-The Coordinator Agent dispatches all five agents **simultaneously** using `Promise.allSettled()`. Each agent queries its MCP server independently.
+The Coordinator Agent dispatches all four agents **simultaneously** using `Promise.allSettled()`. Each agent queries its MCP server independently.
 
 | Agent | Input | MCP Server Called | Output |
 |:---|:---|:---|:---|
@@ -815,7 +759,6 @@ The Coordinator Agent dispatches all five agents **simultaneously** using `Promi
 | **Transport Agent** | `{ origin, destination, travel_dates }` | `transit-mcp-server → Mock Rail/Bus` | `{ options: [...trainBusOptions], estimated_cost_inr }` |
 | **Accommodation Agent** | `{ destination, check_in, check_out, travelers }` | `booking-mcp-server → Mock Hotel` | `{ hotels: [...], recommended, price_per_night }` |
 | **Activity Agent** | `{ destination, interests, days }` | `maps-mcp-server → Google Places` | `{ attractions: [...], restaurants: [...], timings, entry_fees }` |
-| **Local Transport Agent** | `{ destination, hotel_location }` | `maps-mcp-server → Distance Matrix` | `{ cab_estimates: [...], auto_estimates: [...] }` |
 
 ### Stage 2 — Sequential Planning (Ordered)
 
@@ -863,8 +806,7 @@ TripContext (shared state)
       │       ├── Weather Agent → writes forecast to TripContext
       │       ├── Transport Agent → writes options to TripContext
       │       ├── Accommodation Agent → writes hotels to TripContext
-      │       ├── Activity Agent → writes attractions to TripContext
-      │       └── Local Transport Agent → writes transfer estimates to TripContext
+      │       └── Activity Agent → writes attractions to TripContext
       │
       ├── Budget Agent reads TripContext → writes cost breakdown
       ├── Itinerary Agent reads TripContext → writes daily schedule
@@ -938,20 +880,16 @@ Every agent receives and returns data conforming to this shared context object. 
     "restaurants": ["Garden View Cafe", "Mountain Retreat Dining"],
     "total_entry_fees_inr": 3500
   },
-  "local_transport": {
-    "cab_estimates_inr": 2500
-  },
   "budget": {
     "breakdown": {
       "transport": 1800,
       "accommodation": 8500,
       "food": 4000,
       "activities": 3500,
-      "local_transport": 2500,
-      "emergency_fund": 2030
+      "emergency_fund": 1780
     },
-    "total_cost_inr": 22330,
-    "remaining_budget_inr": 7670,
+    "total_cost_inr": 19580,
+    "remaining_budget_inr": 10420,
     "is_feasible": true
   },
   "itinerary": {
@@ -979,12 +917,11 @@ Real systems fail. This section defines what happens when each component in the 
 
 | Component | Error Scenario | Action | User Impact |
 |:---|:---|:---|:---|
-| **Weather MCP** | OpenMeteo timeout / rate limit | Retry with exponential backoff (3 attempts), then return cached forecast if available | Transparent — uses stale-while-revalidate |
-| **Maps MCP** | Google Maps API quota exceeded | Return cached `Distance Matrix` results from Redis; flag in response | Minor delay, cached distances used |
+| **Weather MCP** | OpenMeteo timeout / rate limit | Retry with exponential backoff (3 attempts), then return fallback forecast | Transparent — last known data used |
+| **Maps MCP** | Google Maps API quota exceeded | Return safe fallback message; flag in response | Minor delay, advisory shown |
 | **Groq LLM** | Invalid JSON in LLM response | Re-prompt with stricter JSON-only system instruction (max 2 retries) | Slight latency |
 | **Groq LLM** | Rate limit / timeout | Wait 5s, retry once; if fails, return partial plan with advisory message | User sees partial plan |
 | **MongoDB Atlas** | Connection error / timeout | Return `503 Service Unavailable`; Winston error log emitted | Request fails gracefully with user message |
-| **Redis** | Connection refused / OOM | Bypass cache, query MCP directly; log warning | Slower response, no user-facing error |
 | **Budget Agent** | Budget ceiling exceeded | Do not crash — return 3 alternative budget scenarios for user selection | User prompted to adjust budget |
 | **Google Calendar MCP** | OAuth token expired | Trigger token refresh flow; if still fails, booking proceeds without calendar sync | Advisory notification to user |
 | **Missing Info Agent** | User provides ambiguous destination | Prompt with top-3 destination suggestions for clarification | Guided clarification dialog |
@@ -1060,7 +997,6 @@ graph TD
             
             subgraph Containers ["Docker Containers"]
                 ExpressApp["Express API<br/>(Node.js — Port 5000)"]:::server
-                RedisContainer["Redis<br/>(Port 6379)"]:::db
             end
         end
         
@@ -1080,7 +1016,6 @@ graph TD
     CFront -->|Static assets| S3
     CFront -->|API /api/*| NGINX
     NGINX --> ExpressApp
-    ExpressApp --> RedisContainer
     ExpressApp -->|Secrets| SSM
     ExpressApp -.->|Logs & Metrics| CW
 
@@ -1093,7 +1028,7 @@ graph TD
 
 ### Docker Compose Configuration
 
-The backend and Redis run as co-located Docker containers on a single EC2 instance, managed by Docker Compose:
+The backend runs as a Docker container on a single EC2 instance, managed by Docker Compose:
 
 ```yaml
 # docker-compose.yml (production)
@@ -1105,25 +1040,15 @@ services:
     environment:
       - NODE_ENV=production
       - MONGO_URI=${MONGO_URI}
-      - REDIS_URL=redis://redis:6379
       - GROQ_API_KEY=${GROQ_API_KEY}
-    depends_on:
-      - redis
     restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
 ```
 
 ### Terraform Provisioned Resources
 
 | Resource | Purpose | Free Tier |
 |:---|:---|:---|
-| `aws_instance` (t2.micro) | EC2 host for Express API + Redis | ✅ 750 hrs/month |
+| `aws_instance` (t2.micro) | EC2 host for Express API | ✅ 750 hrs/month |
 | `aws_s3_bucket` | React production build hosting | ✅ 5GB |
 | `aws_cloudfront_distribution` | Global CDN + HTTPS termination | ✅ 1TB outbound |
 | `aws_security_group` | Port rules (80, 443, 5000, 22) | ✅ Free |
@@ -1227,8 +1152,6 @@ graph TD
 | Agent Error | Winston | `error` | agentName, error, stack |
 | MCP Tool Call | Winston | `debug` | toolName, inputParams, latencyMs |
 | MCP Tool Error | Winston | `warn` | toolName, error, retryAttempt |
-| Cache Hit | Winston | `debug` | cacheKey, ttlRemaining |
-| Cache Miss | Winston | `debug` | cacheKey |
 | DB Query | Mongoose | `debug` | collection, operation, durationMs |
 | Auth Success | Winston | `info` | userId, role, ip |
 | Auth Failure | Winston | `warn` | reason, ip, requestId |
@@ -1253,7 +1176,6 @@ This allows full request tracing in CloudWatch using a single `requestId` filter
 |:---|:---|:---|:---|
 | `/health` | GET | `{ status: "ok" }` | Load balancer liveness probe |
 | `/health/db` | GET | `{ mongo: "ok" / "error" }` | MongoDB connection status |
-| `/health/cache` | GET | `{ redis: "ok" / "error" }` | Redis connection status |
 | `/health/llm` | GET | `{ groq: "ok" / "error" }` | LLM API reachability |
 
 ### Key Metrics Tracked (CloudWatch)
@@ -1263,7 +1185,6 @@ This allows full request tracing in CloudWatch using a single `requestId` filter
 | `api.request.duration` | p50/p95/p99 API latency |
 | `agent.execution.duration` | How long each agent takes |
 | `mcp.tool.latency` | External API response times |
-| `redis.hit_rate` | Cache effectiveness |
 | `llm.token_usage` | Groq API cost monitoring |
 | `auth.failure_count` | Potential brute force detection |
 | `system.error_rate` | Overall system health |
@@ -1324,10 +1245,9 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 | **Hotel** | 4 Nights at Ooty Vista Inn (Stays class accommodation) | ₹8,500 |
 | **Food / Dining** | Meal allowances, breakfast packages, local recommendations | ₹4,000 |
 | **Activities** | Entry tickets, botanical gardens, tea estate slots | ₹3,500 |
-| **Local Transport** | Station transfer cabs, local auto charges | ₹2,500 |
-| **Emergency Fund** | 10% Reserve Buffer calculated for local disruptions | ₹2,030 |
-| **Grand Total** | Summary of all categories including emergency fund | **₹22,330** |
-| **Remaining Budget** | Safety variance (based on base limit of ₹30,000) | **₹7,670** |
+| **Emergency Fund** | 10% Reserve Buffer calculated for local disruptions | ₹1,780 |
+| **Grand Total** | Summary of all categories including emergency fund | **₹19,580** |
+| **Remaining Budget** | Safety variance (based on base limit of ₹30,000) | **₹10,420** |
 
 ---
 
@@ -1354,8 +1274,7 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 | **AI / Agents** | Groq LLM API | AI Inference operations (Llama 3 execution model) | 100% Free Developer Tier |
 | | LangChain JS | AI Agent chain orchestration framework | 100% Free |
 | | Model Context Protocol (MCP) | Interface structure standard for tool integrations | 100% Free |
-| **Database & Caching** | MongoDB Atlas | Primary database (Indexed scopes, users & trips) | Shared M0 Cluster — 100% Free |
-| | Redis | In-memory API query caching (weather data, schedules) | 100% Free (Self-hosted on EC2 or Redis Cloud Free) |
+| **Database** | MongoDB Atlas | Primary database (Indexed scopes, users & trips) | Shared M0 Cluster — 100% Free |
 | **DevOps & Infra** | GitHub Actions | Automatically triggers CI/CD build scripts | 2,000 build minutes/month Free |
 | | Docker | System container orchestration packaging | 100% Free Community Tier |
 | | Terraform | Automated infrastructure scripts (VPC/EC2/S3 config) | 100% Free CLI |
