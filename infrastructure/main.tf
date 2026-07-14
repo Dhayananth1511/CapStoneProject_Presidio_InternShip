@@ -452,10 +452,26 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
 # ============================================================
 
 resource "aws_cloudfront_distribution" "frontend" {
-  # Origin = where CloudFront fetches files from (our S3 bucket)
+  # Origin 1 — S3 static frontend
   origin {
     domain_name = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id   = "S3-${aws_s3_bucket.frontend.bucket}"
+  }
+
+  # Origin 2 — EC2 API backend (port 5000)
+  # CloudFront connects to EC2 over HTTP internally; CloudFront → browser is HTTPS.
+  # This fixes the mixed-content block that occurs when the React SPA
+  # (served over HTTPS from CloudFront) tries to call http://EC2:5000.
+  origin {
+    domain_name = aws_eip.api_eip.public_dns
+    origin_id   = "EC2-API"
+
+    custom_origin_config {
+      http_port              = 5000
+      https_port             = 443
+      origin_protocol_policy = "http-only"  # EC2 speaks plain HTTP on port 5000
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
   }
 
   enabled             = true
@@ -466,6 +482,31 @@ resource "aws_cloudfront_distribution" "frontend" {
   # PriceClass_100 = only NA + Europe edge locations = cheapest
   price_class = "PriceClass_100"
 
+  # ── /api/* → EC2 backend (ordered, evaluated before default) ──
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    target_origin_id = "EC2-API"
+
+    # API must not be cached — every request must reach EC2
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
+
+    viewer_protocol_policy = "redirect-to-https"
+
+    # Forward all headers + cookies so JWT auth (httpOnly cookies) works
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Origin", "Content-Type", "Accept", "Cookie"]
+      cookies { forward = "all" }
+    }
+
+    # Zero TTL — never cache API responses in CloudFront
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # ── Default: S3 React SPA ─────────────────────────────────────
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]

@@ -31,6 +31,10 @@ const app = express();
 // Helmet sets HTTP security headers to protect against exploit injections
 app.use(helmet());
 
+// Trust the first proxy (CloudFront) — without this, express-rate-limit sees
+// the CloudFront egress IP for every user and incorrectly rate-limits all at once.
+app.set('trust proxy', 1);
+
 // CORS config: permit only incoming traffic from our client app
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(

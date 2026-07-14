@@ -70,9 +70,11 @@ jobs:
       - name: Build React frontend
         run: cd client && npm run build
         env:
-          # VITE_API_URL = where the frontend sends API requests
-          # Points to the EC2 Elastic IP on port 5000
-          VITE_API_URL: http://${{ secrets.EC2_HOST }}:5000/api
+          # VITE_API_URL = where the frontend sends API requests.
+          # We route /api/* through CloudFront (HTTPS) → EC2:5000.
+          # NEVER use http://EC2_IP:5000 here — browsers block mixed content
+          # (HTTP requests from an HTTPS page are silently dropped).
+          VITE_API_URL: https://${{ secrets.CLOUDFRONT_DOMAIN }}/api
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
