@@ -11,6 +11,7 @@ import { runDestinationRecAgent } from './destinationRecAgent';
 import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
 import { runBudgetAgent } from './budgetAgent';
 import { runItineraryAgent } from './itineraryAgent';
+import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { validateTripDates, clampTravelers, clampBudget } from '../utils/inputSanitizer';
@@ -63,6 +64,7 @@ export interface TripContext {
   activities?: any;
   budget?: any;
   itinerary?: any;
+  local_transport?: any;
   booking?: any;
   formattedPlan?: string;
   conversationHistory: Array<{ role: string; content: string }>;
@@ -366,7 +368,17 @@ You MUST invoke exactly one tool.`;
 
   // Generate day-by-day JSON schedule
   const itinerary = await runItineraryAgent(updatedContext);
-  updatedContext.itinerary = itinerary;
+  
+  // Enrich itinerary with local transportation costs & calibrate the budget to match!
+  try {
+    const enrichment = await enrichItineraryWithLocalTransport(itinerary, updatedContext);
+    updatedContext.itinerary = enrichment.itinerary;
+    updatedContext.budget = enrichment.budget;
+    updatedContext.local_transport = enrichment.local_transport;
+  } catch (enrichErr: any) {
+    logger.error('Failed to post-process local travel expenses for itinerary', { error: enrichErr.message });
+    updatedContext.itinerary = itinerary;
+  }
 
   // Synthesize final Markdown planner presentation
   const formattedPlan = await synthesizeTripPlan(updatedContext);

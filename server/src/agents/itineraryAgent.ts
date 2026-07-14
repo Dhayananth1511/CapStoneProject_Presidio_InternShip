@@ -62,7 +62,9 @@ IMPORTANT:
 - Prefer live provider attractions when marked [google_places]
 - If an attraction is marked [llm_recommendation], present it as a recommended visit, not a confirmed live listing
 - Spread attractions across days (don't repeat same place)
-- Include a suggested local transport note (cab, auto, etc.) for travel activities`;
+- Include a suggested local transport note (cab, auto, etc.) for travel activities
+- IMPORTANT ROUTING RULE: Organize daily sightseeing schedules and group nearby locations geographically so that travel times from the chosen hotel (${accommodation?.recommended || 'Hotel'}) are minimized.
+- In each schedule item, customize the 'transport_note' field to state the estimated distance and transit time/route from the hotel (e.g. '5.4 km NE of hotel - 12 mins via cab' or 'Walk 5 mins from hotel').`;
 
   const systemPrompt = `You are a travel itinerary planner. Return ONLY valid, complete JSON — no markdown fences, no explanation.
 Schema (STRICTLY follow this, closing ALL braces/brackets):

@@ -9,6 +9,7 @@ export interface BudgetBreakdown {
   accommodation: number;
   food: number;
   activities: number;
+  local_transport?: number;
   emergency_fund: number;
   total_cost_inr: number;
   remaining_budget_inr: number;

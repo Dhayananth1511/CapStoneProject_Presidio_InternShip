@@ -41,7 +41,7 @@ export async function getPlacesNearby(
       );
       const placesData: any = await placesRes.json();
 
-      const attractionResults = placesData.results?.slice(0, Math.min(days * 2, 8)) || [];
+      const attractionResults = placesData.results?.slice(0, 10) || [];
       const attractions = attractionResults.map((p: any) => p.name);
       const attractionOptions = attractionResults.map((p: any) => ({
         name: p.name,

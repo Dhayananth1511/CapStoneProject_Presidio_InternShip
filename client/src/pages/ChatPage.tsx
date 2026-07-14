@@ -32,6 +32,7 @@ import {
   Download,
   ArrowUpRight,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
 
@@ -41,6 +42,30 @@ interface Message {
 }
 
 const MAX_MESSAGE_LENGTH = 500;
+
+function formatTimeAndPeriod(timeStr: string): string {
+  if (!timeStr) return '';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return timeStr;
+  const hour = parseInt(parts[0], 10);
+  const min = parseInt(parts[1], 10);
+  if (isNaN(hour) || isNaN(min)) return timeStr;
+  
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  const displayMin = min < 10 ? `0${min}` : min;
+  const formattedTime = `${displayHour}:${displayMin} ${ampm}`;
+  
+  let category = '';
+  if (hour < 5) category = 'Late Night';
+  else if (hour < 11) category = 'Morning';
+  else if (hour < 13) category = 'Late Morning';
+  else if (hour < 17) category = 'Afternoon';
+  else if (hour < 20) category = 'Evening';
+  else category = 'Night';
+  
+  return `${category} (${formattedTime})`;
+}
 
 // Pre-defined interests for tag-picker UI (covers the main travel interest categories)
 const INTEREST_TAGS = [
@@ -400,61 +425,395 @@ export default function ChatPage() {
     }
   };
 
-  // Download confirmed plan details as plain text / markdown file
+  // Helper to remove block emojis and garbled symbols for standard jsPDF Helvetica
+  const cleanForPDF = (text: string): string => {
+    if (!text) return '';
+    return text
+      .replace(/₹/g, 'INR ')
+      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '');
+  };
+
+  // Download confirmed plan details as PDF file
   const handleDownloadItinerary = () => {
     if (!context) return;
     
-    let text = `=====================================================\n`;
-    text += `          TRIPPLANNER AI TRAVEL PLAN ITINERARY\n`;
-    text += `=====================================================\n\n`;
-    text += `📍 Destination: ${context.input.destination || 'N/A'}\n`;
-    text += `🛫 Origin: ${context.input.origin || 'N/A'}\n`;
-    text += `👥 Travelers: ${context.input.travelers || 1}\n`;
-    text += `📅 Dates: ${context.input.start_date || 'N/A'} to ${context.input.end_date || 'N/A'}\n`;
-    text += `💰 Budget limit: ₹${context.input.budget_inr ? context.input.budget_inr.toLocaleString() : 0}\n`;
-    text += `🛡️ Status: ${context.status}\n\n`;
-    
-    if (context.booking?.refs) {
-      text += `-----------------------------------------------------\n`;
-      text += `              BOOKING REFERENCES\n`;
-      text += `-----------------------------------------------------\n`;
-      text += `🏨 Hotel reservation: ${context.booking.refs.hotel || 'N/A'}\n`;
-      text += `✈️ Transit reservation: ${context.booking.refs.transport || 'N/A'}\n`;
-      text += `📅 Calendar integration: ${context.booking.refs.calendar || 'Synced'}\n\n`;
-    }
+    try {
+      const doc = new jsPDF();
+      let y = 20;
 
-    if (context.budget) {
-      text += `-----------------------------------------------------\n`;
-      text += `                BUDGET SUMMARY (INR)\n`;
-      text += `-----------------------------------------------------\n`;
-      text += `✈️ Flight/Transport:   ₹${(context.budget.transport || 0).toLocaleString()}\n`;
-      text += `🏨 Accommodation:      ₹${(context.budget.accommodation || 0).toLocaleString()}\n`;
-      text += `🍔 Food & Meals:         ₹${(context.budget.food || 0).toLocaleString()}\n`;
-      text += `🎟️ Activities/Tours:     ₹${(context.budget.activities || 0).toLocaleString()}\n`;
-      text += `🚨 Emergency fund:     ₹${(context.budget.emergency_fund || 0).toLocaleString()}\n`;
+      // Header helper for subsequent pages
+      const checkPageBreak = (neededHeight: number) => {
+        if (y + neededHeight > 275) {
+          doc.addPage();
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(140, 140, 140);
+          doc.text(`TRIPPLANNER AI ITINERARY - DESTINATION: ${(context.input.destination || 'TRIP').toUpperCase()}`, 15, 10);
+          doc.setDrawColor(226, 232, 240);
+          doc.line(15, 12, 195, 12);
+          y = 22;
+        }
+      };
+
+      // 1. Branding Header Banner
+      doc.setFillColor(30, 41, 59); // Dark blue gray/navy
+      doc.rect(15, y, 180, 24, 'F');
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text('TRIPPLANNER AI - TRIP PLAN ITINERARY', 22, y + 15);
+      y += 32;
+
+      // 2. Summary Details Card
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.rect(15, y, 180, 42, 'FD');
       
-      const estimatedTotal = context.budget.total_cost_inr ?? context.budget.total_estimated_cost ?? 0;
-      text += `-----------------------------------------------------\n`;
-      text += `🔥 TOTAL ESTIMATED COST: ₹${estimatedTotal.toLocaleString()}\n`;
-      text += `-----------------------------------------------------\n\n`;
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(10.5);
+
+      // Col 1
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Destination:', 20, y + 10);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`${context.input.destination || 'N/A'}`, 48, y + 10);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Origin:', 20, y + 18);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`${context.input.origin || 'N/A'}`, 48, y + 18);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Dates:', 20, y + 26);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`${context.input.start_date || 'N/A'} to ${context.input.end_date || 'N/A'}`, 48, y + 26);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Travelers:', 20, y + 34);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`${context.input.travelers || 1} guest(s)`, 48, y + 34);
+
+      // Col 2
+      const selectedHotelName = context.accommodation?.recommended || context.accommodation?.selected_hotel?.name || 'Self Arranged';
+      const transportProvider = context.transport?.selected_option 
+        ? `${context.transport.selected_option.operator} (${context.transport.selected_option.mode})`
+        : (context.transport?.options?.[0]
+          ? `${context.transport.options[0].operator} (${context.transport.options[0].mode})`
+          : 'Self Arranged');
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Accommodation:', 112, y + 10);
+      doc.setFont('Helvetica', 'normal');
+      
+      // Make Hotel Name a clickable link in the header card
+      if (selectedHotelName && selectedHotelName !== 'Self Arranged' && selectedHotelName !== 'Hotel') {
+        doc.setTextColor(79, 70, 229); // indigo link color
+        let truncatedHotelName = selectedHotelName.length > 22 ? selectedHotelName.substring(0, 20) + '...' : selectedHotelName;
+        const hotelCardMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedHotelName + ' ' + (context.input?.destination || ''))}`;
+        doc.textWithLink(truncatedHotelName, 148, y + 10, { url: hotelCardMapsUrl });
+        
+        // draw underline
+        const wCard = doc.getTextWidth(truncatedHotelName);
+        doc.setDrawColor(79, 70, 229);
+        doc.setLineWidth(0.15);
+        doc.line(148, y + 10.5, 148 + wCard, y + 10.5);
+      } else {
+        doc.text(selectedHotelName, 148, y + 10);
+      }
+      doc.setTextColor(30, 41, 59); // Reset
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Main Transit:', 112, y + 18);
+      doc.setFont('Helvetica', 'normal');
+      let truncatedTransitGroup = transportProvider.length > 22 ? transportProvider.substring(0, 20) + '...' : transportProvider;
+      doc.text(truncatedTransitGroup, 148, y + 18);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Budget Ceiling:', 112, y + 26);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`INR ${(context.input.budget_inr || 30000).toLocaleString()}`, 148, y + 26);
+
+      doc.setFont('Helvetica', 'bold');
+      doc.text('Feasibility:', 112, y + 34);
+      doc.setFont('Helvetica', 'normal');
+      doc.text(context.budget?.is_feasible ? 'Feasible (Within Budget)' : 'Over Budget Constraint', 148, y + 34);
+
+      y += 50;
+
+      // 3. Booking references if confirmed
+      if (context.booking?.refs) {
+        checkPageBreak(30);
+        doc.setDrawColor(99, 102, 241);
+        doc.setFillColor(245, 243, 255);
+        doc.rect(15, y, 180, 18, 'FD');
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(109, 40, 217); // Purple
+        doc.text('CONFIRMED RESERVATIONS & BOOKING REFERENCES:', 20, y + 6);
+        doc.setFont('Helvetica', 'normal');
+        doc.setTextColor(30, 41, 59);
+        doc.setFontSize(8.5);
+        doc.text(`Hotel Booking Ref: ${context.booking.refs.hotel || 'N/A'}    |    Transit Booking Ref: ${context.booking.refs.transport || 'N/A'}    |    Sync: ${context.booking.refs.calendar || 'Completed'}`, 20, y + 12);
+        
+        y += 26;
+      }
+
+      // 4. Budget summary table
+      if (context.budget) {
+        checkPageBreak(75);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Planned Budget Breakdown & Cost Analysis', 15, y);
+        y += 6;
+
+        // Table Header
+        doc.setFillColor(241, 245, 249);
+        doc.rect(15, y, 180, 8, 'F');
+        doc.setFontSize(8.5);
+        doc.setFont('Helvetica', 'bold');
+        doc.text('Expense Category', 20, y + 5.5);
+        doc.text('Cost (INR)', 160, y + 5.5);
+        y += 8;
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9);
+        
+        const budgetCategoryRows = [
+          { name: 'Main Transit (Outbound & Return Commutes)', cost: context.budget.transport || 0 },
+          { name: 'Lodging (Hotel / Accommodation stays)', cost: context.budget.accommodation || 0 },
+          { name: 'Food & Meals budget allocation', cost: context.budget.food || 0 },
+          { name: 'Local Sightseeing & Activities (Entry Fees)', cost: context.budget.activities || 0 },
+          { name: 'Local Transport (Taxi / Auto Rickshaw commutes)', cost: context.budget.local_transport || 0 },
+          { name: 'Emergency backup reserve logic (10%)', cost: context.budget.emergency_fund || 0 },
+        ];
+
+        budgetCategoryRows.forEach(row => {
+          doc.text(row.name, 20, y + 5.5);
+          doc.text(`INR ${Number(row.cost).toLocaleString()}`, 160, y + 5.5);
+          doc.setDrawColor(241, 245, 249);
+          doc.line(15, y + 8, 195, y + 8);
+          y += 8;
+        });
+
+        // Total sum
+        const estimatedTotalVal = context.budget.total_cost_inr ?? context.budget.total_estimated_cost ?? 0;
+        doc.setFont('Helvetica', 'bold');
+        doc.setFillColor(236, 253, 245);
+        doc.rect(15, y, 180, 9, 'F');
+        doc.setTextColor(16, 185, 129); // green
+        doc.text('TOTAL ESTIMATED TRIP COST', 20, y + 6);
+        doc.text(`INR ${estimatedTotalVal.toLocaleString()}`, 160, y + 6);
+        y += 18;
+      }
+
+      // 5. Curated Day-to-Day Timeline Planner
+      if (context.itinerary?.days && Array.isArray(context.itinerary.days)) {
+        checkPageBreak(25);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(12.5);
+        doc.setTextColor(79, 70, 229); // Indigo
+        doc.text('Curated Chronological Timeline Itinerary', 15, y);
+        y += 8;
+
+        context.itinerary.days.forEach((day: any) => {
+          checkPageBreak(35);
+          // Day title bar
+          doc.setFillColor(99, 102, 241); // Indigo-500
+          doc.rect(15, y, 180, 9, 'F');
+          doc.setFontSize(9.5);
+          doc.setFont('Helvetica', 'bold');
+          doc.setTextColor(255, 255, 255);
+          
+          const title = `Day ${day.day}: ${cleanForPDF(day.title || 'Sightseeing schedule')}`;
+          doc.text(title, 20, y + 6);
+          if (day.daily_total_inr > 0) {
+            doc.text(`Estimated Spend: INR ${day.daily_total_inr.toLocaleString()}`, 148, y + 6);
+          }
+          y += 9;
+
+          // Weather block
+          if (day.weather_note) {
+            doc.setFillColor(239, 246, 255);
+            doc.rect(15, y, 180, 6, 'F');
+            doc.setFontSize(8.5);
+            doc.setFont('Helvetica', 'oblique');
+            doc.setTextColor(30, 41, 59);
+            
+            const cleanedWeather = cleanForPDF(day.weather_note);
+            doc.text(`Weather Status: ${cleanedWeather}`, 20, y + 4.5);
+            y += 6;
+          }
+          y += 4;
+
+          // Prepend chosen hotel base node in timeline list
+          if (selectedHotelName && selectedHotelName !== 'Self Arranged' && selectedHotelName !== 'Hotel') {
+            checkPageBreak(22);
+            const hotelNodeStartY = y;
+
+            // Timeline dot for hotel
+            doc.setFillColor(255, 255, 255);
+            doc.setDrawColor(99, 102, 241);
+            doc.setLineWidth(0.4);
+            doc.circle(20, y + 3.5, 1.2, 'FD');
+
+            doc.setFont('Helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(99, 102, 241);
+            doc.text('Base Hotel Stay', 24, y + 4.5);
+
+            y += 9;
+
+            doc.setFont('Helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(79, 70, 229); // clickable link style
+            
+            const hotelMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedHotelName + ' ' + (context.input?.destination || ''))}`;
+            doc.textWithLink(selectedHotelName, 24, y, { url: hotelMapsUrl });
+            
+            const hotelLinkWidth = doc.getTextWidth(selectedHotelName);
+            doc.setDrawColor(79, 70, 229);
+            doc.setLineWidth(0.15);
+            doc.line(24, y + 0.5, 24 + hotelLinkWidth, y + 0.5);
+            
+            y += 6;
+
+            // Connector line for hotel item
+            doc.setDrawColor(99, 102, 241);
+            doc.line(20, hotelNodeStartY, 20, y);
+            y += 2;
+          }
+
+          // Schedule items
+          if (day.schedule && Array.isArray(day.schedule) && day.schedule.length > 0) {
+            day.schedule.forEach((action: any) => {
+              // Estimate height for page break check
+              let itemH = 15;
+              if (action.transport_note) itemH += 5;
+              checkPageBreak(itemH);
+              
+              const itemStartY = y;
+              
+              // Timeline connector circle
+              doc.setFillColor(255, 255, 255);
+              doc.setDrawColor(99, 102, 241);
+              doc.setLineWidth(0.4);
+              doc.circle(20, y + 3.5, 1.2, 'FD');
+
+              // Period and Costs
+              const formattedTime = formatTimeAndPeriod(action.time) || action.time;
+              doc.setFont('Helvetica', 'bold');
+              doc.setFontSize(8.5);
+              doc.setTextColor(99, 102, 241);
+              doc.text(formattedTime, 24, y + 4.5);
+
+              // Cost string
+              let priceDetails = '';
+              if (action.cost_inr > 0) priceDetails += `Entry: INR ${action.cost_inr.toLocaleString()}`;
+              if (action.travel_cost_inr > 0) {
+                if (priceDetails) priceDetails += '  |  ';
+                priceDetails += `Commute: INR ${action.travel_cost_inr.toLocaleString()}`;
+              }
+              if (priceDetails) {
+                doc.setFont('Helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(16, 185, 129);
+                doc.text(priceDetails, 150, y + 4.5);
+              }
+              y += 10; // spacing between time row and activity row
+
+              // Activity name & Location link drawing
+              doc.setFont('Helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(30, 41, 59);
+
+              let activityText = action.activity;
+              let hasLink = false;
+              let locationName = '';
+              let mapsUrl = '';
+
+              if (action.location) {
+                locationName = action.location;
+                const placeQuery = action.location;
+                mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeQuery + ' ' + (context.input?.destination || ''))}`;
+                hasLink = true;
+                
+                if (!activityText.toLowerCase().includes(locationName.toLowerCase())) {
+                  activityText += ' at ';
+                }
+              }
+
+              doc.text(activityText, 24, y);
+              
+              if (hasLink && locationName) {
+                const activityWidth = doc.getTextWidth(activityText);
+                doc.setTextColor(79, 70, 229);
+                doc.textWithLink(locationName, 24 + activityWidth, y, { url: mapsUrl });
+                
+                const locationWidth = doc.getTextWidth(locationName);
+                doc.setDrawColor(79, 70, 229);
+                doc.setLineWidth(0.15);
+                doc.line(24 + activityWidth, y + 0.5, 24 + activityWidth + locationWidth, y + 0.5);
+                
+                doc.setTextColor(30, 41, 59); // Reset color
+              }
+              y += 6; // Move below activity line
+
+              // Transport note
+              if (action.transport_note) {
+                doc.setFont('Helvetica', 'oblique');
+                doc.setFontSize(8);
+                doc.setTextColor(100, 116, 139);
+                const cleanedTransitLine = cleanForPDF(action.transport_note);
+                doc.text(`   ${cleanedTransitLine}`, 24, y);
+                y += 5; // Move below transport note line
+              }
+              
+              // Draw timeline segment
+              doc.setDrawColor(99, 102, 241);
+              doc.setLineWidth(0.4);
+              doc.line(20, itemStartY, 20, y);
+              
+              y += 3; // buffer spacing between timeline nodes
+            });
+          } else {
+            doc.setFont('Helvetica', 'oblique');
+            doc.setFontSize(8.5);
+            doc.setTextColor(100, 116, 139);
+            doc.text('Leisure & rest hours.', 25, y + 4.5);
+            y += 8;
+          }
+          y += 5;
+        });
+
+        // 6. Curated Notes
+        if (context.itinerary.notes) {
+          checkPageBreak(30);
+          
+          doc.setDrawColor(226, 232, 240);
+          doc.setFillColor(248, 250, 252);
+          doc.rect(15, y, 180, 22, 'FD');
+          
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(9.5);
+          doc.setTextColor(79, 70, 229);
+          doc.text('Core Notes & Recommendations:', 20, y + 6);
+          
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(71, 85, 105);
+          const splitNotes = doc.splitTextToSize(cleanForPDF(context.itinerary.notes), 170);
+          doc.text(splitNotes, 20, y + 12);
+        }
+      }
+
+      // Download
+      doc.save(`TripPlanner_Itinerary_${context.input.destination || 'Trip'}.pdf`);
+      toast.success('Successfully downloaded PDF Itinerary! 📄');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to generate PDF document.');
     }
-    
-    // Add raw formatted plan if it exists
-    if (context.formattedPlan) {
-      text += `-----------------------------------------------------\n`;
-      text += `                  CURATED ITINERARY\n`;
-      text += `-----------------------------------------------------\n`;
-      text += context.formattedPlan;
-    }
-    
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `TripPlanner_Itinerary_${context.input.destination || 'Trip'}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success('Itinerary downloaded successfully! 📄');
   };
 
   const toggleDay = (dayNum: number) => {
@@ -955,6 +1314,12 @@ export default function ChatPage() {
                                 </td>
                               </tr>
                               <tr>
+                                <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🍔 Food & Meals</td>
+                                <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                  ₹{(context.budget.food || 0).toLocaleString()}
+                                </td>
+                              </tr>
+                              <tr>
                                 <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🎟️ Sightseeing / Entrance</td>
                                 <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                   ₹{(context.budget.activities || 0).toLocaleString()}
@@ -1141,7 +1506,7 @@ export default function ChatPage() {
                                 <div className="space-y-1">
                                   <p className="font-bold text-[10.5px]">Live booking data unavailable — AI recommendations shown</p>
                                   <p className={`text-[10px] leading-relaxed ${isDark ? 'text-amber-400/80' : 'text-amber-700'}`}>
-                                    We couldn't find verified hotel listings for <span className="font-bold">{context.input?.destination}</span> via our booking provider. These are well-known properties recommended by AI. You can visit and book them directly — click any card or "Search &amp; Book Online".
+                                    We couldn't find verified hotel listings for <span className="font-bold">{context.input?.destination}</span> via our booking provider. These are popular properties recommended by AI. You can choose any of these options for your trip, and click any card to view it on Google Maps.
                                   </p>
                                 </div>
                               </div>
@@ -1208,7 +1573,7 @@ export default function ChatPage() {
 
                             {/* Hotels List */}
                             <div className="flex flex-col gap-2.5">
-                              {hotelsList.map((hotel: any, idx: number) => {
+                               {hotelsList.map((hotel: any, idx: number) => {
                                 const isRecommended = hotel.name === context.accommodation.recommended;
                                 const ratingCount = Math.round(hotel.rating || 4.0);
                                 const stars = Array.from({ length: 5 }, (_, i) => i < ratingCount);
@@ -1217,7 +1582,7 @@ export default function ChatPage() {
                                 return (
                                   <div
                                     key={idx}
-                                    className={`p-3 rounded-xl border transition flex flex-col gap-2.5 ${
+                                    className={`p-3 rounded-xl border transition flex flex-col gap-2.5 cursor-pointer hover:shadow-md ${
                                       isRecommended
                                         ? isDark
                                           ? 'bg-indigo-955/20 border-primary shadow-md shadow-primary/5'
@@ -1225,13 +1590,11 @@ export default function ChatPage() {
                                         : isDark
                                         ? 'bg-slate-900/40 border-slate-850 hover:border-slate-700'
                                         : 'bg-white border-slate-205 hover:border-slate-350'
-                                    } ${hotel.is_llm_recommended ? 'cursor-pointer hover:border-amber-400/60 dark:hover:border-amber-500/50 hover:shadow-md' : ''}`}
+                                    }`}
                                     onClick={(e) => {
-                                      if (hotel.is_llm_recommended) {
-                                        const target = e.target as HTMLElement;
-                                        if (target.tagName !== 'BUTTON' && !target.closest('button')) {
-                                          window.open(`https://www.google.com/search?q=${encodeURIComponent(hotel.name + ' ' + (context.input?.destination || ''))}`, '_blank');
-                                        }
+                                      const target = e.target as HTMLElement;
+                                      if (target.tagName !== 'BUTTON' && !target.closest('button') && target.tagName !== 'A' && !target.closest('a')) {
+                                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (context.input?.destination || ''))}`, '_blank');
                                       }
                                     }}
                                   >
@@ -1246,6 +1609,16 @@ export default function ChatPage() {
                                               <Check className="h-2.5 w-2.5" /> Selected
                                             </span>
                                           )}
+                                          <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (context.input?.destination || ''))}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="View on Google Maps"
+                                            className="text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors flex items-center p-0.5"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <ArrowUpRight className="h-3.5 w-3.5" />
+                                          </a>
                                         </div>
 
                                         {/* Star Ratings */}
@@ -1285,21 +1658,6 @@ export default function ChatPage() {
                                       </p>
                                     )}
 
-                                    {hotel.is_llm_recommended && (
-                                      <div className={`text-[9.5px] font-semibold p-2.5 rounded-lg border leading-relaxed flex flex-col gap-1 ${
-                                        isDark
-                                          ? 'bg-amber-955/20 border-amber-900/40 text-amber-350'
-                                          : 'bg-amber-50 border-amber-250 text-amber-800'
-                                      }`}>
-                                        <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500">
-                                          ⚠️ Web Recommendation
-                                        </span>
-                                        <span>
-                                          This option cannot be booked directly through our app, but you can go there and book it. Click this card to search and book online.
-                                        </span>
-                                      </div>
-                                    )}
-
                                     {/* Amenities list */}
                                     {Array.isArray(hotel.amenities) && hotel.amenities.length > 0 && (
                                       <div className="flex flex-wrap gap-1">
@@ -1309,7 +1667,7 @@ export default function ChatPage() {
                                             className={`text-[8.5px] font-semibold px-2 py-0.5 rounded-full border ${
                                               isDark
                                                 ? 'bg-slate-950/50 border-slate-800 text-slate-400'
-                                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                                                : 'bg-slate-50 border-slate-205 text-slate-500'
                                             }`}
                                           >
                                             {amenity}
@@ -1318,44 +1676,29 @@ export default function ChatPage() {
                                       </div>
                                     )}
 
-                                    {/* Select / Book Button */}
-                                    {context.status !== 'CONFIRMED' && (
-                                      hotel.is_llm_recommended ? (
-                                        <a
-                                          href={`https://www.google.com/search?q=${encodeURIComponent('book ' + hotel.name + ' ' + (context.input?.destination || ''))}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={`w-full py-1.5 rounded-lg text-xs font-bold border transition text-center flex items-center justify-center gap-1.5 cursor-pointer select-none ${
-                                            isDark
-                                              ? 'bg-amber-950/40 hover:bg-amber-900/60 border-amber-800/50 text-amber-300 hover:text-amber-200'
-                                              : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-700 hover:text-amber-800'
-                                          }`}
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <ArrowUpRight className="h-3.5 w-3.5" /> Search & Book Online
-                                        </a>
-                                      ) : (
-                                        !isRecommended && (
-                                          <button
-                                            type="button"
-                                            disabled={isSaving || context.status === 'CONFIRMED'}
-                                            onClick={() => handleSelectHotel(hotel.name, lodgingCategoryTab)}
-                                            className={`w-full py-1.5 rounded-lg text-xs font-bold border transition text-center flex items-center justify-center gap-1 cursor-pointer select-none ${
-                                              isDark
-                                                ? 'bg-indigo-950/40 hover:bg-primary/20 border-indigo-900/40 text-indigo-300 hover:text-white'
-                                                : 'bg-indigo-50/50 hover:bg-primary/10 border-indigo-200 text-indigo-700 hover:text-indigo-805'
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                          >
-                                            {isSaving ? (
-                                              <>
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Selecting Hotel...
-                                              </>
-                                            ) : (
-                                              'Choose Hotel'
-                                            )}
-                                          </button>
-                                        )
-                                      )
+                                    {/* Select Button */}
+                                    {context.status !== 'CONFIRMED' && !isRecommended && (
+                                      <button
+                                        type="button"
+                                        disabled={isSaving || context.status === 'CONFIRMED'}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSelectHotel(hotel.name, lodgingCategoryTab);
+                                        }}
+                                        className={`w-full py-1.5 rounded-lg text-xs font-bold border transition text-center flex items-center justify-center gap-1 cursor-pointer select-none ${
+                                          isDark
+                                            ? 'bg-indigo-950/40 hover:bg-primary/20 border-indigo-900/40 text-indigo-300 hover:text-white'
+                                            : 'bg-indigo-50/50 hover:bg-primary/10 border-indigo-200 text-indigo-700 hover:text-indigo-805'
+                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                      >
+                                        {isSaving ? (
+                                          <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Selecting Hotel...
+                                          </>
+                                        ) : (
+                                          'Choose Hotel'
+                                        )}
+                                      </button>
                                     )}
                                   </div>
                                 );
@@ -1643,22 +1986,6 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {context.activities.data_provenance === 'llm_recommendation' && (
-                      <div className={`p-3 rounded-lg border flex items-start gap-2.5 ${
-                        isDark
-                          ? 'bg-amber-950/15 border-amber-800/30 text-amber-300'
-                          : 'bg-amber-50 border-amber-200 text-amber-800'
-                      }`}>
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
-                        <div className="space-y-1">
-                          <p className="font-bold text-[10.5px]">Live data unavailable — AI recommendations shown</p>
-                          <p className={`text-[10px] leading-relaxed ${isDark ? 'text-amber-400/80' : 'text-amber-700'}`}>
-                            We couldn't fetch live activity/places data for <span className="font-bold">{context.input?.destination}</span>. The places shown below are AI-recommended based on popular attractions. They cannot be booked through this app — click any card to search &amp; explore on Google Maps.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Rich Attraction Cards Grid */}
                     {Array.isArray(context.activities.attraction_options) && context.activities.attraction_options.length > 0 && (
                       <div className="space-y-3 pt-2">
@@ -1673,13 +2000,24 @@ export default function ChatPage() {
                             // Build direct search query for Google Maps using name and destination
                             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + (context.input?.destination || ''))}${item.place_id ? `&query_place_id=${item.place_id}` : ''}`;
                             
-                            // Image source: Proxy server endpoint or fallback Unsplash URL
+                                                        // Image source: Proxy server endpoint or fallback Unsplash URL
+                            const fallbackImages = [
+                              'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&w=650&q=80',
+                              'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=650&q=80'
+                            ];
                             const imgSrc = item.photo_reference
                               ? (item.photo_reference.startsWith('http')
                                 ? item.photo_reference
                                 : `/api/trips/place-photo?photo_reference=${item.photo_reference}`)
-                              : 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80';
-
+                              : fallbackImages[idx % fallbackImages.length];
                             return (
                               <div
                                 key={idx}
@@ -1704,18 +2042,10 @@ export default function ChatPage() {
                                     src={imgSrc}
                                     alt={item.name}
                                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                    onError={(e) => {
-                                      e.currentTarget.src = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80';
-                                    }}
-                                  />
+                                                                        onError={(e) => {
+                                      e.currentTarget.src = fallbackImages[idx % fallbackImages.length];
+                                    }}                                  />
                                   <div className="absolute top-2 right-2 flex items-center gap-1">
-                                    {item.is_llm_recommended && (
-                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow ${
-                                        isDark ? 'bg-amber-500 text-white' : 'bg-amber-400 text-white'
-                                      }`}>
-                                        ⚠️ Web Rec
-                                      </span>
-                                    )}
                                     <a
                                       href={item.is_llm_recommended
                                         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + (context.input?.destination || ''))}`
@@ -1741,19 +2071,17 @@ export default function ChatPage() {
                                     <h5 className={`font-bold text-[11.5px] leading-tight line-clamp-1 group-hover:text-primary transition-colors ${isDark ? 'text-slate-100' : 'text-slate-900'}`} title={item.name}>
                                       {item.name}
                                     </h5>
-                                    {item.vicinity && (
+                                                                        {item.vicinity && (
                                       <p className={`text-[9.5px] line-clamp-1 mt-0.5 flex items-center gap-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                                         <MapPin className="h-2.5 w-2.5 shrink-0" />
                                         {item.vicinity}
                                       </p>
                                     )}
-                                  </div>
-
-                                  {item.is_llm_recommended && (
-                                    <p className={`text-[9px] leading-tight pt-1 ${isDark ? 'text-amber-400/80' : 'text-amber-700'}`}>
-                                      Not directly bookable — click to search &amp; visit
-                                    </p>
-                                  )}
+                                    {item.description && (
+                                      <p className={`text-[10px] leading-snug line-clamp-2 mt-1 italic ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                        "{item.description}"
+                                      </p>
+                                    )}                                  </div>
 
                                   <div className="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-slate-150/10 dark:border-slate-800">
                                     {/* Star Rating */}
@@ -1886,6 +2214,7 @@ export default function ChatPage() {
                 }`}>
                   {context.itinerary.days.map((dayItem: any, idx: number) => {
                     const isDayExpanded = expandedDays[dayItem.day] === undefined ? dayItem.day === 1 : expandedDays[dayItem.day];
+                    const hotelName = context.accommodation?.recommended || context.accommodation?.selected_hotel?.name || 'Self Arranged';
                     return (
                       <div key={idx} className="relative pl-8 space-y-3">
                         {/* Node point */}
@@ -1933,9 +2262,55 @@ export default function ChatPage() {
                               )}
 
                               {/* Activities list */}
-                              {dayItem.schedule && dayItem.schedule.length > 0 ? (
-                                <div className="space-y-2.5">
-                                  {dayItem.schedule.map((action: any, aIdx: number) => {
+                              {((dayItem.schedule && dayItem.schedule.length > 0) || (hotelName && hotelName !== 'Self Arranged' && hotelName !== 'Hotel')) ? (
+                                <div className="space-y-4">
+                                  {/* Stay hotel node if selected */}
+                                  {hotelName && hotelName !== 'Self Arranged' && hotelName !== 'Hotel' && (
+                                    <div className={`group relative pl-6 pb-4 border-l ${
+                                      isDark ? 'border-slate-800' : 'border-slate-200'
+                                    }`}>
+                                      {/* Activity dot indicator */}
+                                      <span className={`absolute -left-1.5 top-1.5 h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center transition-colors bg-white ${
+                                        isDark 
+                                          ? 'bg-slate-950 border-indigo-500 group-hover:border-emerald-500' 
+                                          : 'border-primary group-hover:border-emerald-600'
+                                      }`} />
+
+                                      <div className={`rounded-xl p-3.5 border transition ${
+                                        isDark 
+                                          ? 'bg-slate-900/40 border-slate-800 hover:border-slate-700' 
+                                          : 'bg-white border-slate-200 hover:border-slate-300'
+                                      }`}>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded flex items-center gap-1 leading-none ${
+                                            isDark ? 'bg-slate-850 text-indigo-300' : 'bg-indigo-50 text-indigo-700'
+                                          }`}>
+                                            🏨 Accommodation Base
+                                          </span>
+                                        </div>
+                                        <h5 className={`text-xs font-semibold leading-normal ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                          Base Stay at{' '}
+                                          <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotelName + ' ' + (context.input?.destination || ''))}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title={`Search "${hotelName}" on Google Maps`}
+                                            className={`font-bold underline inline-flex items-center gap-0.5 hover:text-indigo-500 transition-colors ${
+                                              isDark ? 'text-indigo-400' : 'text-indigo-650'
+                                              }`}
+                                            >
+                                              {hotelName}
+                                              <ArrowUpRight className="h-3.5 w-3.5 text-indigo-400" />
+                                            </a>
+                                          </h5>
+                                          <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-550'} mt-1`}>
+                                            Daily transit rides and round-trip distances are calculated relative to this hotel.
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+  
+                                    {dayItem.schedule && dayItem.schedule.map((action: any, aIdx: number) => {
                                     const actionText = String(action.activity || '').toLowerCase();
                                     const isRecommendation = actionText.includes('recommended');
                                     const badges = [
@@ -1946,55 +2321,114 @@ export default function ChatPage() {
                                       action.transport_note ? 'Transit' : '',
                                     ].filter(Boolean);
 
-                                    const detailLines = [
-                                      isRecommendation ? '- **Source:** AI recommendation (live place data unavailable)' : '- **Source:** Live provider-backed place data',
-                                      action.location ? `- **Location:** ${action.location}` : '',
-                                      action.transport_note ? `- **Getting there:** ${action.transport_note}` : '',
-                                      action.duration_min ? `- **Planned duration:** ${action.duration_min} min` : '',
-                                      action.cost_inr > 0 ? `- **Expected spend:** \u20B9${action.cost_inr.toLocaleString()}` : '- **Expected spend:** Free / already covered',
-                                    ].filter(Boolean).join('\n');
+                                    const formattedTime = formatTimeAndPeriod(action.time) || action.time;
+                                    const placeQuery = action.location || action.activity;
+                                    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeQuery + ' ' + (context.input?.destination || ''))}`;
 
                                     return (
                                       <div
                                         key={aIdx}
-                                        className={`p-2.5 rounded-lg border space-y-2 transition ${
-                                          isDark ? 'bg-slate-900/50 border-slate-850 hover:border-slate-800' : 'bg-slate-50 border-slate-205 hover:border-slate-300'
+                                        className={`group relative pl-6 pb-5 last:pb-0 border-l last:border-l-0 ${
+                                          isDark ? 'border-slate-800' : 'border-slate-200'
                                         }`}
                                       >
-                                        <div className="flex justify-between items-center text-[10px]">
-                                          <span className={`font-semibold flex items-center gap-1 ${
-                                            isDark ? 'text-slate-400' : 'text-slate-550'
-                                          }`}>
-                                            <Clock className="h-3 w-3 text-primary" />
-                                            {action.time} ({action.duration_min} min)
-                                          </span>
-                                          {action.cost_inr > 0 && (
-                                            <span className={`font-bold ${isDark ? 'text-slate-350' : 'text-slate-650'}`}>
-                                              {'\u20B9'}{action.cost_inr.toLocaleString()}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1">
-                                          {badges.map((badge, badgeIdx) => (
-                                            <span
-                                              key={badgeIdx}
-                                              className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full border ${
-                                                badge === 'Recommended'
-                                                  ? isDark
-                                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                                                    : 'bg-amber-50 border-amber-200 text-amber-700'
-                                                  : isDark
-                                                    ? 'bg-slate-950/50 border-slate-800 text-slate-350'
-                                                    : 'bg-white border-slate-200 text-slate-600'
-                                              }`}
-                                            >
-                                              {badge}
-                                            </span>
-                                          ))}
-                                        </div>
-                                        <p className={`text-xs font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{action.activity}</p>
-                                        <div className={`prose prose-sm max-w-none text-[11px] leading-relaxed ${isDark ? 'prose-invert text-slate-350' : 'prose-slate text-slate-600'}`}>
-                                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailLines}</ReactMarkdown>
+                                        {/* Activity dot indicator */}
+                                        <span className={`absolute -left-1.5 top-1.5 h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                          isDark 
+                                            ? 'bg-slate-950 border-indigo-500 group-hover:border-emerald-500' 
+                                            : 'bg-white border-primary group-hover:border-emerald-600'
+                                        }`} />
+
+                                        <div className={`rounded-xl p-3.5 border transition ${
+                                          isDark 
+                                            ? 'bg-slate-900/40 border-slate-800 hover:border-slate-700' 
+                                            : 'bg-white border-slate-200 hover:border-slate-300'
+                                        }`}>
+                                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${
+                                                isDark ? 'bg-slate-850 text-indigo-300' : 'bg-indigo-50 text-indigo-700'
+                                              }`}>
+                                                <Clock className="h-3 w-3" />
+                                                {formattedTime}
+                                              </span>
+                                              {action.duration_min && (
+                                                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${
+                                                  isDark ? 'bg-slate-900 text-slate-400' : 'bg-slate-100 text-slate-600'
+                                                }`}>
+                                                  ⏱️ {action.duration_min} mins
+                                                </span>
+                                              )}
+                                              {action.travel_cost_inr > 0 && (
+                                                <span className={`text-[9px] font-semibold px-2 py-0.5 rounded ${
+                                                  isDark ? 'bg-emerald-950/30 text-emerald-450 border border-emerald-900/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                                }`}>
+                                                  🚗 Commute: ₹{action.travel_cost_inr}
+                                                </span>
+                                              )}
+                                              {action.cost_inr > 0 && (
+                                                <span className={`text-[9px] font-semibold px-2 py-0.5 rounded ${
+                                                  isDark ? 'bg-blue-950/30 text-blue-400 border border-blue-900/30' : 'bg-blue-50 text-blue-700 border border-blue-100'
+                                                }`}>
+                                                  🎟️ Entry: ₹{action.cost_inr}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {/* Action tags badges */}
+                                            <div className="flex gap-1">
+                                              {badges.map((badge, badgeIdx) => (
+                                                <span
+                                                  key={badgeIdx}
+                                                  className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                                    badge === 'Recommended'
+                                                      ? isDark
+                                                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                                        : 'bg-amber-50 border-amber-200 text-amber-700'
+                                                      : isDark
+                                                        ? 'bg-slate-950 border-slate-800 text-slate-400'
+                                                        : 'bg-white border-slate-205 text-slate-500'
+                                                  }`}
+                                                >
+                                                  {badge}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          {/* Activity & Clickable Place Title */}
+                                          <div className="space-y-1.5">
+                                            <h5 className={`text-xs font-semibold leading-normal ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                              {action.activity}
+                                              {action.location && (
+                                                <span className="font-normal text-slate-400">
+                                                  {" at "}
+                                                  <a
+                                                    href={mapsUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    title={`Search "${action.location}" on Google Maps`}
+                                                    className={`font-semibold underline inline-flex items-center gap-0.5 hover:text-indigo-500 transition-colors ${
+                                                      isDark ? 'text-indigo-400' : 'text-indigo-650'
+                                                    }`}
+                                                  >
+                                                    {action.location}
+                                                    <ArrowUpRight className="h-3.5 w-3.5 text-indigo-400" />
+                                                  </a>
+                                                </span>
+                                              )}
+                                            </h5>
+
+                                            {/* Getting there transit note */}
+                                            {action.transport_note && (
+                                              <p className={`text-[11px] flex gap-1 items-start ${
+                                                isDark ? 'text-slate-400' : 'text-slate-655'
+                                              }`}>
+                                                <span className="shrink-0">🚏</span>
+                                                <span className="italic">{action.transport_note}</span>
+                                              </p>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     );

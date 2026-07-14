@@ -3,6 +3,7 @@ import { planTrip } from '../services/plannerService';
 import { runBookingAgent } from '../agents/bookingAgent';
 import { runReplanningAgent } from '../agents/replanningAgent';
 import { runBudgetAgent } from '../agents/budgetAgent';
+import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
@@ -304,10 +305,30 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
     }
     trip.accommodation = accommodation;
 
-    // Re-run budget agent on the updated context
-    const contextObj = trip.toObject() as any;
-    const newBudget = await runBudgetAgent(contextObj);
-    trip.budget = newBudget;
+    // Enrich itinerary with local transportation costs & calibrate the budget to match the new hotel!
+    let updatedItinerary = trip.itinerary;
+    let finalBudget = trip.budget;
+    let finalLocalTransport = trip.local_transport;
+
+    try {
+      const tempContext = trip.toObject() as any;
+      tempContext.budget = await runBudgetAgent(tempContext);
+      
+      const enrichment = await enrichItineraryWithLocalTransport(updatedItinerary, tempContext);
+      updatedItinerary = enrichment.itinerary;
+      finalBudget = enrichment.budget;
+      finalLocalTransport = enrichment.local_transport;
+    } catch (enrichErr: any) {
+      logger.error('Failed to re-enrich hotel local transport details', enrichErr);
+      const tempContext = trip.toObject() as any;
+      finalBudget = await runBudgetAgent(tempContext);
+    }
+    
+    trip.budget = finalBudget;
+    trip.itinerary = updatedItinerary;
+    trip.local_transport = finalLocalTransport;
+
+    const newBudget = finalBudget;
 
     // Check if new budget exceeds/is feasible. Even if infeasible, we save the selection so they see it
     if (!newBudget.is_feasible) {
@@ -344,6 +365,7 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
         status: trip.status,
         accommodation: trip.accommodation,
         budget: trip.budget,
+        local_transport: trip.local_transport,
         itinerary: trip.itinerary,
         formattedPlan: trip.formattedPlan,
         conversationHistory: trip.conversationHistory
@@ -406,9 +428,26 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
     transport.options = options;
     trip.transport = transport;
 
-    // Re-run budget agent on the updated context
+    // Re-run budget agent on the updated context and preserve local transport cost
     const contextObj = trip.toObject() as any;
     const newBudget = await runBudgetAgent(contextObj);
+    
+    const existingLocalTransportCost = Number(trip.local_transport?.distances_from_hotel ? trip.budget?.local_transport : 0) || 0;
+    if (existingLocalTransportCost > 0) {
+      newBudget.local_transport = existingLocalTransportCost;
+      const subtotal = (newBudget.transport || 0) + (newBudget.accommodation || 0) + (newBudget.food || 0) + (newBudget.activities || 0) + existingLocalTransportCost;
+      newBudget.emergency_fund = Math.round(subtotal * 0.1);
+      newBudget.total_cost_inr = subtotal + newBudget.emergency_fund;
+      newBudget.remaining_budget_inr = (trip.input.budget_inr || 30000) - newBudget.total_cost_inr;
+      newBudget.is_feasible = newBudget.total_cost_inr <= (trip.input.budget_inr || 30000);
+      if (!newBudget.is_feasible) {
+        newBudget.alternatives = [
+          `Choose a cheaper hotel tier (saves approx. ₹${Math.round((newBudget.accommodation || 0) * 0.4)})`,
+          `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((newBudget.food || 0) / Math.max(1, (trip.itinerary?.days?.length || 5))) * 1.5)})`,
+          `Increase limit to ₹${newBudget.total_cost_inr} for comfortable traveling accommodations`,
+        ];
+      }
+    }
     trip.budget = newBudget;
 
     if (!newBudget.is_feasible) {

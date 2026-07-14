@@ -26,12 +26,12 @@ async function generateRecommendationFallback(destination: string, interests: st
   const fallbackPrompt = `Return ONLY valid JSON for destination-aware travel recommendations when live provider data is unavailable.
 Schema:
 {
-  "attractions": [{ "name": "string", "vicinity": "string", "rating": 4.2 }],
+  "attractions": [{ "name": "string", "vicinity": "string", "rating": 4.2, "description": "1-sentence short description describing the place (max 12 words)" }],
   "restaurants": [{ "name": "string", "rating": 4.3, "price_level": 2 }]
 }
 Rules:
 - Recommendations must fit ${destination}.
-- Use 4 attractions max and 4 restaurants max.
+- Use 8 attractions and 6 restaurants.
 - These are recommendations, not confirmed live listings.
 - Avoid generic placeholders like City Center, Old Town, Culinary Hub.
 - Keep names plausible and destination-specific.`;
@@ -55,6 +55,7 @@ Rules:
       photo_reference: null,
       place_id: `llm-rec-attraction-${idx}`,
       vicinity: item.vicinity || destination,
+      description: item.description || `A popular sightseeing attraction in ${destination}.`,
       types: ['recommendation'],
       source_type: 'llm_recommendation',
       is_llm_recommended: true,
@@ -118,6 +119,61 @@ export const activityTool = tool(
       } catch (fallbackError) {
         logger.error('Activity Agent recommendation fallback failed', fallbackError);
       }
+    }
+
+    // Enrich attractions list with descriptions using LLM if descriptions are omitted/blank
+    if (Array.isArray(data?.attraction_options) && data.attraction_options.length > 0) {
+      try {
+        const names = data.attraction_options.filter((item: any) => !item.description).map((item: any) => item.name);
+        if (names.length > 0) {
+          const enrichmentPrompt = `For each tourist spot listed below in key-value structure, write a very short, appealing 1-sentence description (max 12 words) describing what it is or why people visit it.
+Destination: ${destination}
+Spots:
+${names.map((n: string) => `- ${n}`).join('\n')}
+
+Format your reply ONLY as a valid JSON object mapping spot name to description:
+{
+  "Spot Name 1": "Description here",
+  "Spot Name 2": "Description here"
+}`;
+
+          const enrichmentRes = await withRetry(() => llm.invoke([
+            new SystemMessage(enrichmentPrompt),
+          ]));
+          
+          let enrichText = enrichmentRes.content.toString().trim();
+          if (enrichText.startsWith("```json")) {
+             enrichText = enrichText.substring(7);
+          }
+          if (enrichText.startsWith("```")) {
+             enrichText = enrichText.substring(3);
+          }
+          if (enrichText.endsWith("```")) {
+            enrichText = enrichText.substring(0, enrichText.length - 3);
+          }
+          enrichText = enrichText.trim();
+          const descriptions = JSON.parse(enrichText);
+          
+          data.attraction_options = data.attraction_options.map((item: any) => ({
+            ...item,
+            description: item.description || descriptions[item.name] || `A popular local attraction in ${destination}.`
+          }));
+        } else {
+          data.attraction_options = data.attraction_options.map((item: any) => ({
+            ...item,
+            description: item.description || `A popular local attraction in ${destination}.`
+          }));
+        }
+      } catch (enrichErr) {
+        logger.error('Failed to enrich attraction descriptions', enrichErr);
+        data.attraction_options = data.attraction_options.map((item: any) => ({
+          ...item,
+          description: item.description || `A popular local attraction in ${destination}.`
+        }));
+      }
+    } else {
+      data = data || {};
+      data.attraction_options = [];
     }
 
     // Standalone LLM Reasoning Phase
