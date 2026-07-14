@@ -132,6 +132,31 @@ function categoryCodeToStars(categoryCode: string): number {
   return isNaN(n) ? 3 : Math.min(5, Math.max(1, n));
 }
 
+function destinationKeywords(destination: string): string[] {
+  const normalized = destination.trim().toLowerCase();
+  const synonyms: Record<string, string[]> = {
+    goa: ['goa', 'panaji', 'panjim', 'calangute', 'baga', 'candolim', 'anjuna', 'vagator', 'morjim', 'colva', 'margao'],
+    ooty: ['ooty', 'udhagamandalam', 'ooti'],
+    delhi: ['delhi', 'new delhi'],
+    mumbai: ['mumbai', 'bombay'],
+    bengaluru: ['bangalore', 'bengaluru'],
+    chennai: ['chennai', 'madras'],
+    kochi: ['kochi', 'cochin'],
+    pondicherry: ['pondicherry', 'puducherry', 'pondy'],
+  };
+
+  const keywords = new Set<string>([normalized]);
+  Object.entries(synonyms).forEach(([key, values]) => {
+    if (normalized.includes(key) || values.some((value) => normalized.includes(value))) {
+      values.forEach((value) => keywords.add(value));
+      keywords.add(key);
+    }
+  });
+
+  normalized.split(/[,\s-]+/).filter(Boolean).forEach((part) => keywords.add(part));
+  return [...keywords].filter((value) => value.length >= 3);
+}
+
 function amenitiesFromFacilities(rawHotel: any): string[] {
   const amenities = new Set<string>(['WiFi', 'AC']);
   const facilityGroups: any[] = [
@@ -240,7 +265,7 @@ async function searchHotelbedsContentHotels(
   // than the one requested (e.g. Italian hotels when asking for Goa).  We
   // discard any hotel whose country code, city content, or address clearly
   // does not match India / the target destination.
-  const destNameLower = destination.trim().toLowerCase();
+  const destKeywords = destinationKeywords(destination);
   // Common non-Indian keywords that signal a foreign hotel sneaking in
   const FOREIGN_SIGNALS = [
     'italy', 'italia', 'spain', 'espana', 'france', 'germany', 'ligure',
@@ -252,29 +277,29 @@ async function searchHotelbedsContentHotels(
 
   const relevant = rawHotels.filter((h: any) => {
     const cc = String(h?.countryCode || '').toUpperCase();
-    // If country code is explicit and not India, reject
     if (cc && cc !== 'IN') return false;
 
-    const city    = String(h?.city?.content    || h?.city    || '').toLowerCase();
+    const city = String(h?.city?.content || h?.city || '').toLowerCase();
+    const state = String(h?.state?.content || h?.state || '').toLowerCase();
+    const destinationName = String(h?.destinationName?.content || h?.destinationName || '').toLowerCase();
     const address = String(h?.address?.content || h?.address || '').toLowerCase();
-    const hotelName = String(h?.name?.content  || h?.name   || '').toLowerCase();
-    const combined = `${city} ${address} ${hotelName}`;
+    const hotelName = String(h?.name?.content || h?.name || '').toLowerCase();
+    const combined = `${city} ${state} ${destinationName} ${address} ${hotelName}`;
 
-    // Reject if any foreign signal appears
     if (FOREIGN_SIGNALS.some(sig => combined.includes(sig))) return false;
 
-    return true;
+    const hasDestinationSignal = destKeywords.some((keyword) => combined.includes(keyword));
+    return hasDestinationSignal;
   });
 
-  console.log(`[bookingMCP] ✅ ${relevant.length} India-relevant hotels after geographic filter for ${destination}`);
+  console.log(`[bookingMCP] ? ${relevant.length} destination-relevant hotels after geographic filter for ${destination}`);
 
-  // If filtering wiped everything, fall back to the raw list but log a warning.
-  const finalList = relevant.length > 0 ? relevant : rawHotels;
   if (relevant.length === 0) {
-    console.warn(`[bookingMCP] ⚠️  All hotels were filtered out. Hotelbeds sandbox may not have real ${destination} data.`);
+    console.warn(`[bookingMCP] ?? No destination-matching hotels remained for '${destination}'. Returning no hotels instead of foreign mismatches.`);
+    return null;
   }
 
-  return finalList.map((h: any) => {
+  return relevant.map((h: any) => {
     const name = h?.name?.content || h?.name || 'Hotel';
     const categoryCode = h?.categoryCode || '3EST';
     const stars = categoryCodeToStars(categoryCode);
@@ -353,3 +378,4 @@ export async function searchHotels(
     };
   });
 }
+

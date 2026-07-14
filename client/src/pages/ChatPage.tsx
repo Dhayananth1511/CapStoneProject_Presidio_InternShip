@@ -31,7 +31,6 @@ import {
   Compass,
   Download,
   ArrowUpRight,
-  ExternalLink,
 } from 'lucide-react';
 import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
@@ -1296,16 +1295,48 @@ export default function ChatPage() {
                           </div>
                         );
                       }
-
                       return (
-                        <>
-                          <p className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{context.accommodation.recommended || 'Hotel Options matched'}</p>
-                          {context.accommodation.price_per_night && (
-                            <p className={isDark ? 'text-slate-400' : 'text-slate-655'}>
-                              Estimated Cost: ₹{context.accommodation.price_per_night.toLocaleString()} / night
+                        <div className="space-y-3.5">
+                          <div className={`rounded-xl border p-4 space-y-2 ${isDark ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                              <p className={`text-xs font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                                No destination-matching hotels found
+                              </p>
+                            </div>
+                            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                              We could not find hotels that clearly match <span className="font-bold">{context.input?.destination || 'this destination'}</span>. We are hiding unrelated results instead of showing wrong hotels.
                             </p>
+                            <p className={`text-[10.5px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                              You can continue with self-arranged stay, try a different budget tier, or adjust the destination wording.
+                            </p>
+                          </div>
+
+                          {context.status !== 'CONFIRMED' && (
+                            <button
+                              type="button"
+                              disabled={selectHotelMutation.isPending}
+                              onClick={() => handleSelectHotel('Self Arranged', 'skipped')}
+                              className={`w-full py-2 rounded-lg text-[10.5px] font-bold border transition text-center flex items-center justify-center gap-1 select-none cursor-pointer ${
+                                context.accommodation.selected_category === 'skipped'
+                                  ? isDark
+                                    ? 'bg-amber-500/10 border-amber-500/50 text-amber-300'
+                                    : 'bg-amber-50 border-amber-300 text-amber-800'
+                                  : isDark
+                                    ? 'bg-slate-900/50 hover:bg-amber-500/10 border-slate-800 text-slate-400 hover:text-amber-300 hover:border-amber-500/30'
+                                    : 'bg-white hover:bg-amber-50/50 border-slate-205 text-slate-500 hover:text-amber-850 hover:border-amber-250'
+                              }`}
+                            >
+                              {context.accommodation.selected_category === 'skipped' ? (
+                                <>
+                                  <Check className="h-3 w-3 text-amber-500" /> Skipped: Arranging Accommodation Myself
+                                </>
+                              ) : (
+                                'Continue with Self-Arranged Stay'
+                              )}
+                            </button>
                           )}
-                        </>
+                        </div>
                       );
                     })()}
 
@@ -1368,6 +1399,8 @@ export default function ChatPage() {
                               context.transport.selected_option.operator === option.operator && 
                               context.transport.selected_option.mode === option.mode;
                             const isCurrentlyActive = isSelected || (!context.transport.selected_option && idx === 0);
+                            const isLiveFlightSchedule = option.data_source === 'live_schedule_estimated_fare';
+                            const isEstimatedFlight = option.data_source === 'estimated_fallback';
 
                             return (
                               <div
@@ -1407,6 +1440,16 @@ export default function ChatPage() {
                                             Fastest
                                           </span>
                                         )}
+                                        {option.mode?.toLowerCase() === 'flight' && isLiveFlightSchedule && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 leading-none">
+                                            Live schedule
+                                          </span>
+                                        )}
+                                        {option.mode?.toLowerCase() === 'flight' && isEstimatedFlight && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 leading-none">
+                                            Estimated
+                                          </span>
+                                        )}
                                       </div>
 
                                       <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -1416,6 +1459,11 @@ export default function ChatPage() {
                                       <div className={`text-[9.5px] ${isDark ? 'text-slate-400' : 'text-slate-505'}`}>
                                         Duration: <span className="font-bold">{option.duration_hrs} hrs</span>
                                       </div>
+                                      {option.mode?.toLowerCase() === 'flight' && (
+                                        <div className={`text-[9.5px] ${isDark ? 'text-slate-400' : 'text-slate-505'}`}>
+                                          Source: <span className="font-bold">{isLiveFlightSchedule ? 'Live schedule + estimated fare' : 'Estimated fallback data'}</span>
+                                        </div>
+                                      )}
                                       {Array.isArray(option.amenities) && option.amenities.length > 0 && (
                                         <div className="flex flex-wrap gap-1 pt-1">
                                           {option.amenities.slice(0, 3).map((am: string, amIdx: number) => (
@@ -2135,3 +2183,9 @@ export default function ChatPage() {
     </div>
   );
 }
+
+
+
+
+
+

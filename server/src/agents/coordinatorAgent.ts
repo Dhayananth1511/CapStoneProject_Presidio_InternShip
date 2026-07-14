@@ -30,11 +30,78 @@ const modelWithTools = routerLlm.bindTools([
   activityTool,
 ]);
 
+function isBudgetOnlyAdjustment(userMessage: string): boolean {
+  const message = userMessage.toLowerCase();
+  const mentionsBudget = /(budget|increase limit|increase budget|raise budget|more money|adjust budget|budget ceiling|limit to|my budget is)/.test(message);
+  const mentionsOtherReplanTargets = /(change hotel|different hotel|cheaper hotel|find hotel|find cheaper|change accommodation|different accommodation|change lodging|change stay|transport|flight|train|bus|date|day|duration|shorten|extend|activity|activities|restaurant|destination|go to|change to)/.test(message);
+  return mentionsBudget && !mentionsOtherReplanTargets;
+}
+
+function isAccommodationChangeRequest(userMessage: string): boolean {
+  const message = userMessage.toLowerCase();
+  return /(change hotel|different hotel|cheaper hotel|find hotel|find cheaper|change accommodation|different accommodation|change lodging|change stay|budget hotel|luxury hotel|mid-range hotel)/.test(message);
+}
+
+function preserveSelectedHotel(existingAccommodation: any, fetchedAccommodation: any, userMessage: string): any {
+  if (!existingAccommodation?.selected_hotel || isAccommodationChangeRequest(userMessage)) {
+    return fetchedAccommodation;
+  }
+
+  const selectedHotelName = existingAccommodation.selected_hotel?.name;
+  if (!selectedHotelName) {
+    return fetchedAccommodation;
+  }
+
+  const hotels = Array.isArray(fetchedAccommodation?.hotels) ? [...fetchedAccommodation.hotels] : [];
+  const matchedHotel = hotels.find((hotel) => hotel?.name === selectedHotelName);
+
+  if (!matchedHotel) {
+    return {
+      ...fetchedAccommodation,
+      selected_hotel: existingAccommodation.selected_hotel,
+      recommended: existingAccommodation.selected_hotel?.name || fetchedAccommodation?.recommended,
+      selected_category: existingAccommodation.selected_category || fetchedAccommodation?.selected_category,
+      price_per_night: existingAccommodation.selected_hotel?.price_per_night_inr || existingAccommodation.price_per_night || fetchedAccommodation?.price_per_night,
+    };
+  }
+
+  const matchedCategory = ['budget', 'mid_range', 'luxury'].find((category) =>
+    Array.isArray(fetchedAccommodation?.categories?.[category]) &&
+    fetchedAccommodation.categories[category].some((hotel: any) => hotel?.name === selectedHotelName)
+  );
+
+  const reorderedHotels = [matchedHotel, ...hotels.filter((hotel) => hotel?.name !== selectedHotelName)];
+
+  return {
+    ...fetchedAccommodation,
+    hotels: reorderedHotels,
+    selected_hotel: matchedHotel,
+    recommended: matchedHotel.name,
+    selected_category: existingAccommodation.selected_category || matchedCategory || fetchedAccommodation?.selected_category,
+    price_per_night: matchedHotel.price_per_night_inr || fetchedAccommodation?.price_per_night,
+  };
+}
+
 export async function runParallelAgents(context: TripContext, userMessage: string): Promise<TripContext> {
   const { input } = context;
   const days = input.start_date && input.end_date
     ? (new Date(input.end_date).getTime() - new Date(input.start_date).getTime()) / (1000 * 60 * 60 * 24)
     : 5;
+
+  const hasExistingPlanData = !!(
+    context.weather?.forecast?.length ||
+    context.transport?.options?.length ||
+    context.accommodation?.hotels?.length ||
+    context.activities?.attractions?.length
+  );
+
+  if (hasExistingPlanData && isBudgetOnlyAdjustment(userMessage)) {
+    logger.info('Budget-only adjustment detected. Reusing existing fetched data without rerunning supplier tools.', {
+      userMessage,
+      sessionId: context.sessionId,
+    });
+    return { ...context };
+  }
 
   logger.info('Starting Dynamic LLM Tool router analysis', { userMessage });
 
@@ -112,7 +179,7 @@ Ensure you populate tool arguments using the current context: destination="${inp
       const { name, value } = res.value;
       if (name === 'fetch_weather') newContext.weather = value;
       else if (name === 'fetch_transport') newContext.transport = value;
-      else if (name === 'fetch_accommodation') newContext.accommodation = value;
+      else if (name === 'fetch_accommodation') newContext.accommodation = preserveSelectedHotel(context.accommodation, value, userMessage);
       else if (name === 'fetch_activities') newContext.activities = value;
     } else {
       const err = res.reason;

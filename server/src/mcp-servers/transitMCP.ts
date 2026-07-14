@@ -17,6 +17,7 @@ export interface TransportOption {
   rating?: number;
   amenities?: string[];
   class?: string;
+  data_source?: 'live_schedule_estimated_fare' | 'estimated_fallback';
 }
 
 const IATA_MAP: Record<string, string> = {
@@ -163,15 +164,34 @@ export async function getTransportOptions(
             rating: parseFloat((4.0 + Math.random() * 0.9).toFixed(1)),
             amenities: ['In-Flight Meals', 'Baggage Allowance', 'AC', 'Entertainment'],
             class: 'Economy',
+            data_source: 'live_schedule_estimated_fare',
           });
         });
       }
     } catch (flightError: any) {
       console.warn(`Flight lookup warning: ${flightError.message}. Bypassing flight search.`);
     }
+    if (!options.some((option) => option.mode === 'Flight')) {
+      const fallbackFlightPricePerPerson = estimateFlightPrice(distanceKm);
+      const fallbackFlightDuration = estimateFlightDuration(distanceKm);
+
+      options.push({
+        mode: 'Flight',
+        operator: `${getIataCode(origin)} -> ${getIataCode(destination)} Estimated Flight`,
+        duration_hrs: fallbackFlightDuration,
+        cost_per_traveler: fallbackFlightPricePerPerson,
+        cost_inr: fallbackFlightPricePerPerson * travelers,
+        departure: '09:00',
+        arrival: new Date(new Date('2000-01-01T09:00:00').getTime() + fallbackFlightDuration * 3600000)
+          .toTimeString().substring(0, 5),
+        rating: 3.8,
+        amenities: ['Estimated Schedule', 'Cabin Bag', 'AC'],
+        class: 'Economy',
+        data_source: 'estimated_fallback',
+      });
+    }
 
     // 3. Add real-distance-based Train options (multiple classes)
-    // If no flights were found, add synthetic placeholder based on distance
     const trainDuration = Math.max(0.5, Math.round((distanceKm / 60) * 10) / 10); // ~60km/h avg Indian Express
     
     // 3AC (cheapest AC tier)
@@ -249,3 +269,4 @@ export async function getTransportOptions(
     };
   });
 }
+
