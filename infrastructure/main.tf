@@ -496,7 +496,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     # Forward all headers + cookies so JWT auth (httpOnly cookies) works
     forwarded_values {
       query_string = true
-      headers      = ["Authorization", "Origin", "Content-Type", "Accept", "Cookie"]
+      headers      = ["Authorization", "Origin", "Content-Type", "Accept"]
       cookies { forward = "all" }
     }
 
