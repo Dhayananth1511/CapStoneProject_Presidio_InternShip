@@ -99,6 +99,16 @@ export const approveTrip = async (req: Request, res: Response): Promise<void> =>
       return; 
     }
 
+    if (trip.status !== 'PLANNED') {
+      res.status(400).json({ message: 'This trip is currently in draft status (or already confirmed/canceled) and cannot be approved.' });
+      return;
+    }
+
+    if (trip.budget && !trip.budget.is_feasible) {
+      res.status(400).json({ message: 'This trip exceeds your budget constraint and cannot be confirmed. Please select cheaper options or adjust your budget parameters.' });
+      return;
+    }
+
     const user = await User.findById(userId);
     const context = trip.toObject() as any;
 

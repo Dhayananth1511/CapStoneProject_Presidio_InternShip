@@ -44,8 +44,8 @@ async function generateBatch(
 
   // Fallback: use simple attraction names if no enriched data
   const attractionsForPrompt = enrichedAttractions.length > 0
-    ? enrichedAttractions.slice(0, 10).map((a: any) => `${a.name} (${a.rating}★) [${a.source_type}]`)
-    : (activities?.attractions || []).slice(0, 10);
+    ? enrichedAttractions.slice(0, 15).map((a: any) => `${a.name} (${a.rating}★) [${a.source_type}]`)
+    : (activities?.attractions || []).slice(0, 15);
 
   const batchPrompt = `Trip: ${input.destination} | Travelers: ${input.travelers}
 Hotel: ${accommodation?.recommended || 'Hotel'} (${accommodation?.selected_category || 'mid_range'} category)
@@ -83,7 +83,8 @@ Schema (STRICTLY follow this, closing ALL braces/brackets):
   ]
 }
 Include 4-6 schedule items per day. Keep activity descriptions concise (under 80 chars).
-Always include a transport_note field for activities that require travel from hotel.`;
+Always include a transport_note field for activities that require travel from hotel.
+CRITICAL CONSTRAINT: You MUST construct the daily schedule items utilizing ONLY the provided 'Tourist Attractions' and 'Restaurants' for that city. Do NOT generate or create any other sightseeing places, landmarks, or dining venues that are not explicitly provided in the Tourist Attractions and Restaurants lists in the prompt. If you need additional events, allocate leisure time, hotel relaxation, or neighborhood walks, but do not hallucinate external attractions.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {

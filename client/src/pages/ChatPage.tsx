@@ -1075,7 +1075,7 @@ export default function ChatPage() {
                   ? `border-b-2 border-primary ${isDark ? 'text-white bg-slate-900/50' : 'text-indigo-700 bg-indigo-50/60'}`
                   : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'
               } ${
-                context?.itinerary?.days && context.status !== 'DRAFT'
+                context?.itinerary?.days
                   ? 'after:absolute after:top-2 after:right-0 after:h-2 after:w-2 after:rounded-full after:bg-primary'
                   : ''
               }`}
@@ -2200,7 +2200,7 @@ export default function ChatPage() {
           ) : (
             /* TAB 2: INTERACTIVE TIME LINE ITINERARY */
             <div className="space-y-6">
-              {!context.itinerary?.days || context.status === 'DRAFT' ? (
+              {!context.itinerary?.days ? (
                 <div className="text-center py-16 text-slate-500 space-y-3">
                   <CalendarCheck className="h-10 w-10 mx-auto text-slate-700 animate-pulse" />
                   <p className="text-sm font-semibold">Itinerary Not Generated Yet</p>

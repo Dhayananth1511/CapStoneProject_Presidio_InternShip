@@ -380,6 +380,25 @@ You MUST invoke exactly one tool.`;
     updatedContext.itinerary = itinerary;
   }
 
+  // Double check budget feasibility after local transport enrichment
+  if (updatedContext.budget && !updatedContext.budget.is_feasible) {
+    updatedContext.status = 'DRAFT';
+    const altMessage = `⚠️ **Budget Constraint Exceeded!**\n\nYour defined travel budget of **₹${updatedContext.input.budget_inr?.toLocaleString()}** is exceeded. The AI agents estimated the minimum trip costs to be **₹${updatedContext.budget.total_cost_inr?.toLocaleString()}** (including ₹${updatedContext.budget.local_transport?.toLocaleString()} for local commutes).\n\n### Recommended Suggestions:\n${(updatedContext.budget.alternatives || []).map((alt: string) => `* 💸 ${alt}`).join('\n')}\n\n**What would you like to do?** You can select one of the saving suggestions above in the inspector panel, or reply here to adjust parameters (e.g., increase budget, reduce travelers, or shorten dates).`;
+    
+    const lastMsg = updatedContext.conversationHistory[updatedContext.conversationHistory.length - 1];
+    if (!lastMsg || lastMsg.content !== altMessage) {
+      updatedContext.conversationHistory.push({ role: 'assistant', content: altMessage });
+    }
+    
+    return {
+      context: updatedContext,
+      status: 'NEEDS_INFO',
+      clarifyingQuestion: altMessage,
+      budgetFeasible: false,
+      budgetAlternatives: updatedContext.budget.alternatives
+    };
+  }
+
   // Synthesize final Markdown planner presentation
   const formattedPlan = await synthesizeTripPlan(updatedContext);
   updatedContext.formattedPlan = formattedPlan;
