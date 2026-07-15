@@ -14,10 +14,10 @@ interface RetryOptions {
   timeout?: number;       // Default: 8000ms per attempt
 }
 
-export async function withRetry<T>(
-  fn: () => Promise<T>,
+export async function withRetry(
+  fn: () => Promise<any>,
   options: RetryOptions = {}
-): Promise<T> {
+): Promise<any> {
   let {
     maxRetries = 4,
     baseDelay = 2000,

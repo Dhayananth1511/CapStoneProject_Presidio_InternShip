@@ -131,6 +131,54 @@ jobs:
           script: |
             set -e
 
+            echo "=== Recreating latest fetch_secrets.sh ==="
+            cat > /home/ec2-user/app/fetch_secrets.sh << 'FETCH'
+            #!/bin/bash
+            ENV_FILE="/home/ec2-user/app/.env"
+            echo "NODE_ENV=production" > $ENV_FILE
+            echo "REDIS_URL=redis://redis:6379" >> $ENV_FILE
+            echo "AWS_DEFAULT_REGION=ap-south-1" >> $ENV_FILE
+
+            KEYS=(
+              "MONGO_URI"
+              "JWT_ACCESS_SECRET"
+              "JWT_REFRESH_SECRET"
+              "JWT_ACCESS_EXPIRES"
+              "JWT_REFRESH_EXPIRES"
+              "GROQ_API_KEY"
+              "GROQ_API_KEY_2"
+              "GROQ_API_KEY_3"
+              "GROQ_API_KEY_4"
+              "GROQ_API_KEY_5"
+              "GOOGLE_MAPS_API_KEY"
+              "HOTELBEDS_API_KEY"
+              "HOTELBEDS_API_SECRET"
+              "HOTELBEDS_BASE_URL"
+              "ACTIVITY_API_KEY"
+              "TRANSFERS_API_KEY"
+              "GOOGLE_CALENDAR_CLIENT_ID"
+              "GOOGLE_CALENDAR_CLIENT_SECRET"
+              "GOOGLE_CALENDAR_REDIRECT_URI"
+              "AVIATIONSTACK_API_KEY"
+              "OPENWEATHER_API_KEY"
+              "PORT"
+              "CLIENT_URL"
+            )
+
+            for KEY in "${KEYS[@]}"; do
+              VAL=$(aws ssm get-parameter --name "/travel-planner/${KEY}" --with-decryption --query "Parameter.Value" --output text --region ap-south-1 2>/dev/null || echo "")
+              if [ ! -z "${VAL}" ]; then
+                echo "${KEY}=${VAL}" >> $ENV_FILE
+              fi
+            done
+
+            chown ec2-user:ec2-user $ENV_FILE
+            chmod 600 $ENV_FILE
+            echo "Secrets .env updated successfully"
+            FETCH
+
+            chmod +x /home/ec2-user/app/fetch_secrets.sh
+
             echo "=== Fetching latest secrets from AWS SSM ==="
             /home/ec2-user/app/fetch_secrets.sh
 
