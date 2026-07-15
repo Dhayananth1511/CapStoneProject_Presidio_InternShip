@@ -39,6 +39,9 @@ RUN npm ci --only=production
 # Copy compiled JavaScript from the builder stage
 COPY --from=builder /app/dist ./dist
 
+# Create logs directory and set ownership to node user
+RUN mkdir -p /app/logs && chown -R node:node /app/logs
+
 # Expose the port the API runs on
 EXPOSE 5000
 
