@@ -71,8 +71,10 @@ export async function getPlacesNearby(
         }
       }
 
-      // Slice results
-      const slicedAttractions = attractionResults.slice(0, 12);
+      // Slice results based on the number of trip days.
+      // For longer trips, we need more sightseeing options to distribute across different days.
+      const attractionsCount = Math.max(12, Math.min(30, days * 4));
+      const slicedAttractions = attractionResults.slice(0, attractionsCount);
       const attractions = slicedAttractions.map((p: any) => p.name);
       const attractionOptions = slicedAttractions.map((p: any) => ({
         name: p.name,
@@ -90,7 +92,8 @@ export async function getPlacesNearby(
         `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=5000&type=restaurant&key=${GOOGLE_API_KEY}`
       );
       const restData: any = await restRes.json();
-      const restaurantOptions = restData.results?.slice(0, 6).map((p: any) => ({
+      const restaurantsCount = Math.max(6, Math.min(20, days * 3));
+      const restaurantOptions = restData.results?.slice(0, restaurantsCount).map((p: any) => ({
         name: p.name,
         rating: p.rating || 0,
         price_level: p.price_level,
@@ -272,7 +275,29 @@ export async function getHotelsNearby(
       const placesData: any = await placesRes.json();
       const results = placesData.results || [];
 
-      return results.slice(0, 15).map((p: any) => {
+      // Filter out restaurant/eatery places that don't offer room staying (Indian context)
+      const filteredResults = results.filter((p: any) => {
+        const nameLower = (p.name || '').toLowerCase();
+        const EATERY_KEYWORDS = [
+          'restaurant', 'eatery', 'dhaba', 'mess', 'caterer', 'bakery', 'sweet',
+          'cafe', 'bhojanalaya', 'dining', 'caffe', 'coffee', 'veg', 'tiffin',
+          'bhavan', 'bhawan', 'meals', 'kitchen', 'caterers', 'sweets', 'bazaar',
+          'canteen', 'tea house', 'bistro', 'food court', 'juice', 'ice cream', 'parlour'
+        ];
+        const LODGING_KEYWORDS = [
+          'lodge', 'lodging', 'stay', 'residency', 'resort', 'inn', 'guest house',
+          'guesthouse', 'homestay', 'villa', 'palace', 'apartment', 'suites', 'dorm',
+          'hostel', 'cottage', 'houseboat', 'heritage', 'retreat', 'castle', 'manor'
+        ];
+        const hasEateryKeyword = EATERY_KEYWORDS.some(k => nameLower.includes(k));
+        const hasLodgingKeyword = LODGING_KEYWORDS.some(k => nameLower.includes(k));
+        if (hasEateryKeyword && !hasLodgingKeyword) {
+          return false;
+        }
+        return true;
+      });
+
+      return filteredResults.slice(0, 15).map((p: any) => {
         const rating = p.rating || 4.0;
         const totalReviews = p.user_ratings_total || 25;
         const nameLower = (p.name || '').toLowerCase();

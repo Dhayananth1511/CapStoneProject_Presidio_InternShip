@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorizeAdmin } from '../middleware/auth';
-import { getAllTrips, getAnalytics } from '../controllers/adminController';
+import { getAllTrips, getAnalytics, getSystemLogs } from '../controllers/adminController';
 
 const router = Router();
 
@@ -9,5 +9,6 @@ router.use(authenticate, authorizeAdmin);
 
 router.get('/trips', getAllTrips);
 router.get('/analytics', getAnalytics);
+router.get('/logs', getSystemLogs);
 
 export default router;

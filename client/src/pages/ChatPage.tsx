@@ -372,7 +372,14 @@ export default function ChatPage() {
           setActiveTab('itinerary');
         }
       }
-      if (data.plan) {
+      
+      if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: data.clarifyingQuestion },
+        ]);
+        toast.error('Re-planning requires additional information or budget adjustment.');
+      } else if (data.status === 'PLANNED' && data.plan) {
         setMessages((prev) => [
           ...prev,
           {
@@ -2389,6 +2396,13 @@ export default function ChatPage() {
 
                           {isDayExpanded && (
                             <div className="space-y-3 pt-2.5 border-t border-card-border/40 animate-fadeIn">
+                              {dayItem.description && (
+                                <div className={`text-[11px] px-2.5 py-1.5 rounded border transition-colors ${
+                                  isDark ? 'text-slate-300 bg-slate-900/40 border-slate-800' : 'text-slate-700 bg-slate-50 border-slate-100'
+                                }`}>
+                                  📝 <strong>Summary:</strong> {dayItem.description}
+                                </div>
+                              )}
                               {dayItem.weather_note && (
                                 <div className={`text-[11px] px-2.5 py-1.5 rounded border italic transition-colors ${
                                   isDark ? 'text-slate-400 bg-indigo-955/20 border-indigo-900/10' : 'text-slate-655 bg-indigo-50/50 border-indigo-120/40'

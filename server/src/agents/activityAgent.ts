@@ -23,6 +23,8 @@ function extractJsonObject(text: string): any {
 }
 
 async function generateRecommendationFallback(destination: string, interests: string[], days: number) {
+  const attractionCount = Math.max(8, Math.min(30, days * 4));
+  const restaurantCount = Math.max(6, Math.min(20, days * 3));
   const fallbackPrompt = `Return ONLY valid JSON for destination-aware travel recommendations when live provider data is unavailable.
 Schema:
 {
@@ -31,7 +33,7 @@ Schema:
 }
 Rules:
 - Recommendations must fit ${destination}.
-- Use 8 attractions and 6 restaurants.
+- Use exactly ${attractionCount} attractions and ${restaurantCount} restaurants.
 - These are recommendations, not confirmed live listings.
 - Avoid generic placeholders like City Center, Old Town, Culinary Hub.
 - Keep names plausible and destination-specific.`;

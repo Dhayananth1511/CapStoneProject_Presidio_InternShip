@@ -1,4 +1,12 @@
 import winston from 'winston';
+import path from 'path';
+import fs from 'fs';
+
+// Ensure logs directory exists
+const logsDir = path.join(process.cwd(), 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
 
 // Define the log format
 const logFormat = winston.format.combine(
@@ -22,6 +30,14 @@ const logger = winston.createLogger({
             winston.format.simple() // Plain text for dev convenience
           )
         : logFormat
+    }),
+    // Log to a local file for admin retrieval dashboards
+    new winston.transports.File({
+      filename: path.join(logsDir, 'app.log'),
+      maxsize: 10485760, // 10MB
+      maxFiles: 5,
+      tailable: true,
+      format: logFormat
     })
   ]
 });

@@ -20,6 +20,9 @@ import {
   IndianRupee,
   Filter,
   TrendingUp,
+  Terminal,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
@@ -73,6 +76,22 @@ export default function AdminDashboard() {
   const [selectedTrip, setSelectedTrip] = useState<TripItem | null>(null);
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'logs'>('overview');
+  const [logLevelFilter, setLogLevelFilter] = useState<string>('');
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+
+  // React Query to fetch system logs
+  const { data: logsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
+    queryKey: ['adminLogs'],
+    queryFn: async () => {
+      const res = await api.get('/admin/logs');
+      return res.data;
+    },
+    enabled: activeTab === 'logs',
+    refetchInterval: 5000, // Poll logs every 5 seconds for a "live feed" feel
+  });
 
   // React Query to fetch analytics dashboard summary data
   const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useQuery({
@@ -194,20 +213,25 @@ export default function AdminDashboard() {
 
   const totalPages = Math.ceil((tripsData?.total || 0) / limit);
 
-  // Loading state
-  if (analyticsLoading || tripsLoading) {
+  // Loading & Error states
+  const showOverviewLoader = activeTab === 'overview' && (analyticsLoading || tripsLoading);
+  const showLogsLoader = activeTab === 'logs' && logsLoading && !logsData;
+
+  if (showOverviewLoader || showLogsLoader) {
     return (
       <div className={`flex flex-col items-center justify-center min-h-[60vh] gap-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
         <Compass className="h-10 w-10 text-primary animate-spin" />
-        <p className="text-sm font-medium">Loading real-time dashboard data...</p>
+        <p className="text-sm font-medium">
+          {showLogsLoader ? 'Streaming system logs...' : 'Loading real-time dashboard data...'}
+        </p>
       </div>
     );
   }
 
   // Error state
-  if (analyticsError) {
+  if (activeTab === 'overview' && analyticsError) {
     return (
-      <div className={`flex flex-col items-center justify-center min-h-[60vh] gap-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+      <div className={`flex flex-col items-center justify-center min-h-[60vh] gap-4 ${isDark ? 'text-slate-400' : 'text-slate-505'}`}>
         <div className="h-12 w-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 text-xl font-bold">!</div>
         <p className="text-sm font-semibold text-red-400">Failed to load dashboard data</p>
         <p className="text-xs">Check that the server is running and your session is valid.</p>
@@ -236,8 +260,36 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* METRICS STATS GRID */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* TAB NAVIGATION */}
+      <div className="flex border-b border-slate-800 pb-px mb-2">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition duration-300 cursor-pointer ${
+            activeTab === 'overview'
+              ? 'border-primary text-primary bg-primary/5'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Compass className="h-4.5 w-4.5" />
+          Overview & Diagnostics
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition duration-300 cursor-pointer ${
+            activeTab === 'logs'
+              ? 'border-primary text-primary bg-primary/5'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Terminal className="h-4.5 w-4.5" />
+          Live AWS System Logs
+        </button>
+      </div>
+
+      {activeTab === 'overview' ? (
+        <>
+          {/* METRICS STATS GRID */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {/* STAT 1 */}
         <div className="premium-card rounded-xl p-5 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary">
@@ -505,6 +557,198 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Logs summary cards */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="premium-card rounded-xl p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                <Terminal className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Total Cached Logs</span>
+                <span className="text-2xl font-extrabold">{logsData?.logs?.length || 0}</span>
+              </div>
+            </div>
+            
+            <div className="premium-card rounded-xl p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-red-500">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Exceptions / Errors</span>
+                <span className="text-2xl font-extrabold text-red-500">
+                  {(logsData?.logs || []).filter((l: any) => (l.level || '').toLowerCase() === 'error').length}
+                </span>
+              </div>
+            </div>
+
+            <div className="premium-card rounded-xl p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500">
+                <Filter className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Warnings</span>
+                <span className="text-2xl font-extrabold text-amber-500">
+                  {(logsData?.logs || []).filter((l: any) => ['warn', 'warning'].includes((l.level || '').toLowerCase())).length}
+                </span>
+              </div>
+            </div>
+
+            <div className="premium-card rounded-xl p-5 flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-450">
+                <RefreshCw className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Normal Operations</span>
+                <span className="text-2xl font-extrabold text-emerald-450">
+                  {(logsData?.logs || []).filter((l: any) => (l.level || '').toLowerCase() === 'info').length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Logs control filter bar */}
+          <div className={`premium-card rounded-xl overflow-hidden shadow-xl border ${isDark ? 'border-card-border/80' : 'border-slate-200'}`}>
+            <div className={`p-5 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${
+              isDark ? 'border-card-border bg-slate-900/40' : 'border-slate-200 bg-slate-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Terminal className="h-4.5 w-4.5 text-primary animate-pulse" />
+                <h3 className={`text-sm font-bold uppercase tracking-wider transition-colors ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>
+                  Live AWS Swarm Console Pipe
+                </h3>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Search query logs */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={logSearchQuery}
+                    onChange={(e) => setLogSearchQuery(e.target.value)}
+                    className={`rounded-lg px-3 py-1.5 text-xs placeholder-slate-500 focus:outline-none focus:border-primary w-48 border transition-all ${
+                      isDark ? 'bg-slate-850 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                    }`}
+                    placeholder="Search logs metadata..."
+                  />
+                </div>
+
+                {/* Selection level */}
+                <select
+                  value={logLevelFilter}
+                  onChange={(e) => setLogLevelFilter(e.target.value)}
+                  className={`border rounded-lg px-2 w-32 py-1.5 text-xs focus:outline-none focus:border-primary transition ${
+                    isDark ? 'bg-slate-850 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                  }`}
+                >
+                  <option value="">All Log Levels</option>
+                  <option value="info">Info</option>
+                  <option value="warn">Warn</option>
+                  <option value="error">Error</option>
+                  <option value="debug">Debug</option>
+                </select>
+
+                {/* Manual flush/reload */}
+                <button
+                  onClick={() => refetchLogs()}
+                  className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-slate-700/25 transition active:scale-95 cursor-pointer ${
+                    isDark ? 'border-slate-700 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700 shadow-sm'
+                  }`}
+                >
+                  <RefreshCw className={`h-3 w-3 ${logsLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* List logs screen console style layout */}
+            <div className={`p-4 font-mono text-xs overflow-y-auto max-h-[550px] space-y-2 border-collapse transition-colors ${
+              isDark ? 'bg-black/90 text-slate-300' : 'bg-slate-900 text-slate-200'
+            }`}>
+              {(() => {
+                const filteredLogs = (logsData?.logs || []).filter((log: any) => {
+                  const matchesLevel = logLevelFilter ? (log.level || '').toLowerCase() === logLevelFilter.toLowerCase() : true;
+                  const matchesSearch = logSearchQuery
+                    ? JSON.stringify(log).toLowerCase().includes(logSearchQuery.toLowerCase())
+                    : true;
+                  return matchesLevel && matchesSearch;
+                });
+
+                if (filteredLogs.length > 0) {
+                  return filteredLogs.map((log: any, idx: number) => {
+                    const level = (log.level || 'info').toLowerCase();
+                    const isExpanded = expandedLogId === idx;
+                    const time = log.timestamp || new Date().toLocaleString();
+                    const msg = log.message || '';
+                    const service = log.service || 'unknown';
+
+                    let levelColorClass = 'text-sky-400 bg-sky-950/40 border-sky-900/30';
+                    if (level === 'error') {
+                      levelColorClass = 'text-rose-400 bg-rose-950/40 border-rose-900/30 font-bold';
+                    } else if (level === 'warn' || level === 'warning') {
+                      levelColorClass = 'text-amber-400 bg-amber-950/40 border-amber-900/30 font-semibold';
+                    } else if (level === 'debug') {
+                      levelColorClass = 'text-slate-400 bg-slate-800/40 border-slate-700/30';
+                    }
+
+                    // Strip service and timestamp, get key-value options
+                    const { timestamp, message, level: l, service: s, ...meta } = log;
+                    const hasMeta = Object.keys(meta).length > 0;
+
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => hasMeta && setExpandedLogId(isExpanded ? null : idx)}
+                        className={`p-2.5 rounded-lg border transition-all ${
+                          level === 'error'
+                            ? 'border-red-950 bg-red-950/10 hover:bg-red-950/20'
+                            : level === 'warn'
+                            ? 'border-amber-950 bg-amber-950/10 hover:bg-amber-950/20'
+                            : 'border-slate-800/60 hover:bg-slate-850/40'
+                        } ${hasMeta ? 'cursor-pointer' : ''}`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${levelColorClass}`}>
+                              {level}
+                            </span>
+                            <span className="text-slate-500 text-[10px]">{time}</span>
+                            <span className="text-slate-600 text-[10px]">[{service}]</span>
+                            <span className={`text-slate-200 flex-1 break-all ${level === 'error' ? 'text-red-400' : ''}`}>
+                              {msg}
+                            </span>
+                          </div>
+                          {hasMeta && (
+                            <span className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold select-none whitespace-nowrap">
+                              {isExpanded ? 'Collapse [-]' : 'Payload [+]'}
+                            </span>
+                          )}
+                        </div>
+
+                        {isExpanded && hasMeta && (
+                          <div className={`mt-2.5 p-3 rounded-lg text-[11px] overflow-x-auto border ${
+                            isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-950 border-slate-800'
+                          }`}>
+                            <pre className="text-pink-400">{JSON.stringify(meta, null, 2)}</pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                } else {
+                  return (
+                    <div className="text-center py-12 text-slate-500 font-semibold italic">
+                      Console stream empty or no logs matching filter parameters
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DETAILED TRIP PLAN DIALOG/MODAL (READONLY) */}
       {selectedTrip && (

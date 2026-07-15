@@ -290,7 +290,27 @@ async function searchHotelbedsContentHotels(
     if (FOREIGN_SIGNALS.some(sig => combined.includes(sig))) return false;
 
     const hasDestinationSignal = destKeywords.some((keyword) => combined.includes(keyword));
-    return hasDestinationSignal;
+    if (!hasDestinationSignal) return false;
+
+    // Filter out restaurant/eatery places that don't offer room staying (Indian context)
+    const EATERY_KEYWORDS = [
+      'restaurant', 'eatery', 'dhaba', 'mess', 'caterer', 'bakery', 'sweet',
+      'cafe', 'bhojanalaya', 'dining', 'caffe', 'coffee', 'veg', 'tiffin',
+      'bhavan', 'bhawan', 'meals', 'kitchen', 'caterers', 'sweets', 'bazaar',
+      'canteen', 'tea house', 'bistro', 'food court', 'juice', 'ice cream', 'parlour'
+    ];
+    const LODGING_KEYWORDS = [
+      'lodge', 'lodging', 'stay', 'residency', 'resort', 'inn', 'guest house',
+      'guesthouse', 'homestay', 'villa', 'palace', 'apartment', 'suites', 'dorm',
+      'hostel', 'cottage', 'houseboat', 'heritage', 'retreat', 'castle', 'manor'
+    ];
+    const hasEateryKeyword = EATERY_KEYWORDS.some(k => hotelName.includes(k));
+    const hasLodgingKeyword = LODGING_KEYWORDS.some(k => hotelName.includes(k));
+    if (hasEateryKeyword && !hasLodgingKeyword) {
+      return false;
+    }
+
+    return true;
   });
 
   console.log(`[bookingMCP] ? ${relevant.length} destination-relevant hotels after geographic filter for ${destination}`);

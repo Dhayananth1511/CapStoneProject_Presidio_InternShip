@@ -29,18 +29,21 @@ async function generateAccommodationFallback(
   );
 
   const systemPrompt = `You are a helpful travel assistant.
-Generate exactly 6 popular tourist hotels/lodging places in "${destination}" (actual real properties, e.g. for Goa: "The Leela Goa", "Taj Exotica Resort & Spa", "Park Hyatt Goa Resort and Spa", "Resort Rio", "Marriott Resort", etc.).
+Generate exactly 6 popular tourist lodging/staying places (where guests book rooms and sleep overnight) in "${destination}" (actual real properties, e.g. for Goa: "The Leela Goa", "Taj Exotica Resort & Spa", "Resort Rio", "Marriott Resort", etc.).
+
+CRITICAL RULE FOR INDIA: In India/Indian cities, the word "Hotel" is frequently used to refer to a restaurant or eating place (popularly called "eating hotels" or "mess" or "veg hotel", e.g., "Hotel Saravana Bhavan"). You MUST NOT generate restaurants, eateries, or dining-only places. Every property you generate MUST be a room-staying lodging / guest house / resort / hotel where travelers can book rooms for overnight stays.
+
 ${max_price_per_night && max_price_per_night > 0
-  ? `Since the user requested accommodations below ₹${max_price_per_night}/night, make sure the budget hotels you generate are strictly below ₹${max_price_per_night}/night. If it is impossible, generate the cheapest real local options (like hostels, guesthouses, or homestays).`
-  : 'Classify them evenly: 2 budget hotels (approx price per night: ₹2,000 to ₹4,500), 2 mid-range hotels (approx price per night: ₹5,000 to ₹14,000), and 2 luxury hotels (approx price per night: ₹15,050 to ₹45k).'
+  ? `Since the user requested accommodations below ₹${max_price_per_night}/night, make sure the budget lodging places you generate are strictly below ₹${max_price_per_night}/night. If it is impossible, generate the cheapest real local options (like hostels, guesthouses, or homestays).`
+  : 'Classify them evenly: 2 budget stays (approx price per night: ₹2,000 to ₹4,500), 2 mid-range stays (approx price per night: ₹5,000 to ₹14,000), and 2 luxury stays (approx price per night: ₹15,050 to ₹45k).'
 }
-For each hotel, provide:
-1. name (real actual name)
+For each stay, provide:
+1. name (real actual name of lodging/hotel)
 2. price_per_night_inr (numeric)
 3. rating (numeric between 3.5 and 5.0)
 4. amenities (array of strings, e.g. ["WiFi", "Pool", "Spa", "AC", "Restaurant"])
 5. address (string area, e.g. "Cavelossim beach, South Goa")
-6. description (1-sentence description)
+6. description (1-sentence description detailing the room stay experience)
 
 Return the response ONLY as a valid JSON array of objects. Do not wrap in markdown code blocks, do not explain.
 JSON Format:

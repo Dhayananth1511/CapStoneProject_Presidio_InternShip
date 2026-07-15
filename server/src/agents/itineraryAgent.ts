@@ -44,13 +44,13 @@ async function generateBatch(
 
   // Fallback: use simple attraction names if no enriched data
   const attractionsForPrompt = enrichedAttractions.length > 0
-    ? enrichedAttractions.slice(0, 15).map((a: any) => `${a.name} (${a.rating}★) [${a.source_type}]`)
-    : (activities?.attractions || []).slice(0, 15);
+    ? enrichedAttractions.slice(0, 30).map((a: any) => `${a.name} (${a.rating}★) [${a.source_type}]`)
+    : (activities?.attractions || []).slice(0, 30);
 
   const batchPrompt = `Trip: ${input.destination} | Travelers: ${input.travelers}
 Hotel: ${accommodation?.recommended || 'Hotel'} (${accommodation?.selected_category || 'mid_range'} category)
 Tourist Attractions: ${attractionsForPrompt.join('; ')}
-Restaurants: ${(activities?.restaurants || []).slice(0, 6).join(', ')}
+Restaurants: ${(activities?.restaurants || []).slice(0, 15).join(', ')}
 Daily budget: ₹${dailyBudget} (excluding accommodation)
 Transport arrival (Day 1 only): ${(transport as any)?.options?.[0]?.arrival || '14:00'}
 Weather: ${JSON.stringify(weatherSnippet)}
@@ -74,6 +74,7 @@ Schema (STRICTLY follow this, closing ALL braces/brackets):
       "day": 1,
       "date": "YYYY-MM-DD",
       "title": "Day title",
+      "description": "A short, one-line summary description of this day's sightseeing and activities (max 15 words)",
       "schedule": [
         { "time": "HH:MM", "activity": "description", "location": "exact place name", "cost_inr": 500, "duration_min": 60, "transport_note": "By auto ₹60" }
       ],
@@ -115,6 +116,7 @@ CRITICAL CONSTRAINT: You MUST construct the daily schedule items utilizing ONLY 
           day: d.day,
           date: d.date,
           title: `Day ${d.day} — ${input.destination}`,
+          description: `Savor the best local sightseeing and dining hotspots around ${input.destination}.`,
           schedule: [
             { time: '09:00', activity: fallbackAttractions[idx * 2] ? `${fallbackAttractions[idx * 2].source_type === 'llm_recommendation' ? 'Recommended visit' : 'Visit'} ${fallbackAttractions[idx * 2].name}` : 'Morning exploration', location: fallbackAttractions[idx * 2]?.name || input.destination, cost_inr: 200, duration_min: 120, transport_note: 'By auto ₹60' },
             { time: '13:00', activity: 'Lunch at local restaurant', location: (activities?.restaurants || [])[0] || input.destination, cost_inr: 400, duration_min: 60 },

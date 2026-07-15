@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import path from 'path';
+import fs from 'fs';
 import Trip from '../models/Trip';
 import User from '../models/User';
 
@@ -66,5 +68,36 @@ export const getAnalytics = async (_req: Request, res: Response): Promise<void> 
     });
   } catch (error) {
     res.status(500).json({ message: 'Analytics failed' });
+  }
+};
+
+// GET /api/admin/logs — Retrieve application logs (admin only)
+export const getSystemLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Number(req.query.limit) || 200;
+    const logFilePath = path.join(process.cwd(), 'logs', 'app.log');
+
+    if (!fs.existsSync(logFilePath)) {
+      res.json({ logs: [] });
+      return;
+    }
+
+    const fileContent = fs.readFileSync(logFilePath, 'utf8');
+    const lines = fileContent.trim().split('\n').filter(Boolean);
+    
+    // Get last N lines
+    const lastLines = lines.slice(-limit).reverse();
+    
+    const parsedLogs = lastLines.map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        return { message: line, timestamp: new Date().toISOString(), level: 'unknown' };
+      }
+    });
+
+    res.json({ logs: parsedLogs });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Failed to retrieve system logs', error: error.message });
   }
 };
