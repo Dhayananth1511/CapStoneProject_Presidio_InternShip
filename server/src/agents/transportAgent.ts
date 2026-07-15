@@ -9,6 +9,7 @@ import { getTransportOptions } from '../mcp-servers/transitMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
+import { getTransportReasoningPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -22,10 +23,7 @@ export const transportTool = tool(
     // Standalone LLM Reasoning Phase
     let reasoning = '';
     try {
-      const systemPrompt = `You are TripPlanner's Transport Routing Specialist Agent. 
-Analyze the travel transit options from ${origin} to ${destination} for ${travelers} traveler(s) on ${travel_date}.
-Options include flights, trains (various classes), and buses.
-Briefly explain the best option for speed vs cost, which class is recommended, and any transit tips in 2-3 sentences. Keep it short.`;
+      const systemPrompt = getTransportReasoningPrompt(origin, destination, travelers, travel_date);
       const llmRes = await withRetry(() => llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(JSON.stringify(data)),

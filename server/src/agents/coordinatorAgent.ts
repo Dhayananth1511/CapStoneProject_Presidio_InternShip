@@ -10,6 +10,7 @@ import { activityTool } from './activityAgent';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
+import { getRouterSystemPrompt, getSynthesizeTripPlanPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.5,
@@ -116,23 +117,16 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
   const priceCeilingMatch = userMessage.match(/(?:below|under|less than|within|max|maximum|upto|up to)\s*[₹]?\s*(\d+)/i);
   const userPriceCeiling = priceCeilingMatch ? parseInt(priceCeilingMatch[1], 10) : null;
 
-  const systemPrompt = `You are an intelligent travel supervisor. Based on the user query and current state, call the appropriate tools.
-Rules:
-1. If this is the initial planning session (i.e. context contains mostly empty fields or no weather/hotel/transit data is fetched), call ALL four tools:
-   - fetch_weather (requires destination, start_date, end_date)
-   - fetch_transport (requires origin, destination, travel_date, travelers)
-   - fetch_accommodation (requires destination, check_in, check_out, travelers)
-   - fetch_activities (requires destination, interests, days)
-2. If this is a modification (re-planning) request, call ONLY the tool(s) specific to the user's requirements:
-   - "change hotel" or "find different lodging" or choosing a cheaper hotel tier or requesting a specific hotel price/budget → call fetch_accommodation.
-   - "add food spots" or "new interests" → call ONLY fetch_activities.
-   - "change dates" → dates impact transit, accommodation, and weather, so call fetch_weather, fetch_transport, and fetch_accommodation.
-3. For fetch_accommodation, you must pass the optional "tier" parameter based on the user's details:
-   - If user asks to choose a cheaper hotel tier, save money on lodging, or requests budget/cheap options or a specific low price ceiling (e.g. "below ₹1000", "under ₹2000 per night"), pass tier="budget".
-   - If user requests luxury, high-end, premium, or expensive options, pass tier="luxury".
-   - If user requests normal, mid-range, average, or moderate options, pass tier="mid-range".
-Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}.${userPriceCeiling ? `
-Note: The user has explicitly requested a maximum hotel price of ₹${userPriceCeiling}/night. When calling fetch_accommodation, you must pass tier="budget" and max_price_per_night=${userPriceCeiling} to restrict results.` : ''}`;
+  const systemPrompt = getRouterSystemPrompt(
+    input.destination || '',
+    input.origin || '',
+    input.start_date || '',
+    input.end_date || '',
+    input.travelers || 0,
+    days,
+    input.interests || [],
+    userPriceCeiling
+  );
 
   const response = await withRetry(() => routerLlm.invoke([
     new SystemMessage(systemPrompt),
@@ -234,12 +228,7 @@ Note: The user has explicitly requested a maximum hotel price of ₹${userPriceC
 }
 
 export async function synthesizeTripPlan(context: TripContext): Promise<string> {
-  const systemPrompt = `You are a travel content writer. Create a beautiful, structured markdown travel plan.
-Include: trip overview, weather summary, transport details, hotel description, day-by-day schedule overview, 
-budget breakdown table, and packing tips. Use emojis and professional formatting.
-IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.
-IMPORTANT: In the cost breakdown table, you MUST explicitly include a row for each item in the budget: Transit/Transport, Lodging/Accommodation, Food, Activities, Local Transport (or Commutes), Emergency Fund, Total Cost, and Remaining Budget.
-Note: If the compactContext contains an "accommodation_notice", you MUST output it clearly at the very top of your document (e.g. using a warning or info emoji) to inform the user about the hotel price/constraint situation.`;
+  const systemPrompt = getSynthesizeTripPlanPrompt();
 
   // Create a highly compact, token-efficient summary of the context.
   // Dumping the raw context string causes prompt token bloat, triggering 429 Rate Limits and LLM response truncation.

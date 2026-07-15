@@ -8,6 +8,7 @@ import { getWeatherForecast } from '../mcp-servers/weatherMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
+import { getWeatherReasoningPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -27,10 +28,7 @@ export const weatherTool = tool(
     let reasoning = '';
     try {
       const isHistorical = weatherData.source === 'historical';
-      const systemPrompt = `You are TripPlanner's Climate Specialist Agent. 
-Analyze the following raw weather forecast data for ${destination} from ${start_date} to ${end_date}.
-${isHistorical ? 'Note: Since these dates are far in the future, the daily data provided above represents actual historical weather observations recorded for these exact days last year. Please explain this context explicitly in a helpful way.' : ''}
-Briefly explain if the conditions are favorable for travel, note the average temperature, and give minor clothing/packing advice in 2-3 friendly sentences. Keep it short.`;
+      const systemPrompt = getWeatherReasoningPrompt(destination, start_date, end_date, isHistorical);
       const llmRes = await withRetry(() => llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(JSON.stringify(weatherData)),

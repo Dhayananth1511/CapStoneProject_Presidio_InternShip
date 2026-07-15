@@ -6,6 +6,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { TripContext } from './plannerAgent';
 import { withRetry } from '../utils/retry';
 import { createChatModel } from '../utils/llm';
+import { getDestinationRecPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.7,
@@ -16,12 +17,7 @@ export async function runDestinationRecAgent(
   longTermMemory: string
 ): Promise<{ recommendedDestinations: string[]; reasoning: string; selectedDestination: string }> {
   const response = await withRetry(() => llm.invoke([
-    new SystemMessage(
-      `You are a travel expert. Recommend exactly 3 Indian travel destinations.
-       Return ONLY valid JSON:
-       { "destinations": ["dest1", "dest2", "dest3"], "reasoning": "brief explanation", "top_pick": "dest1" }
-       Consider budget, interests, and season.`
-    ),
+    new SystemMessage(getDestinationRecPrompt()),
     new HumanMessage(
       `Budget: ₹${context.input.budget_inr}, Interests: ${context.input.interests?.join(', ')}, 
        Travel period: ${context.input.start_date} to ${context.input.end_date}, 
