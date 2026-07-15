@@ -131,3 +131,73 @@ export async function getDistanceMatrix(
   });
 }
 
+/**
+ * Fetches restaurants that are physically near the selected hotel.
+ * This ensures that dining options are convenient and realistic for the traveler.
+ */
+export async function getRestaurantsNearHotel(
+  hotelName: string,
+  destination: string
+): Promise<{
+  restaurants: string[];
+  restaurant_options: Array<{ name: string; rating: number; price_level?: number; user_ratings_total?: number; source_type?: string }>;
+}> {
+  const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+  if (!GOOGLE_API_KEY || GOOGLE_API_KEY.includes('REPLACE_WITH')) {
+    console.warn('[mapsMCP] Google Maps API Key is missing. Skipping fetching restaurants near hotel.');
+    return { restaurants: [], restaurant_options: [] };
+  }
+
+  return withRetry(async () => {
+    try {
+      // Geocode the hotel and destination together to get the hotel's exact coordinates
+      const query = `${hotelName}, ${destination}`;
+      const geoRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`
+      );
+      const geoData: any = await geoRes.json();
+      let location = geoData.results[0]?.geometry?.location;
+
+      // Fallback: If hotel geocoding failed, try geocoding just the destination center
+      if (!location) {
+        const destGeoRes = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${GOOGLE_API_KEY}`
+        );
+        const destGeoData: any = await destGeoRes.json();
+        location = destGeoData.results[0]?.geometry?.location;
+      }
+
+      if (!location) {
+        throw new Error(`Could not geocode location: ${query}`);
+      }
+
+      // Search for restaurants within a 3km radius (walking or very short auto/cab ride)
+      const restRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=3000&type=restaurant&key=${GOOGLE_API_KEY}`
+      );
+      const restData: any = await restRes.json();
+
+      const restaurantOptions = restData.results?.slice(0, 6).map((p: any) => ({
+        name: p.name,
+        rating: p.rating || 0,
+        price_level: p.price_level,
+        user_ratings_total: p.user_ratings_total,
+        source_type: 'google_places',
+      })) || [];
+
+      const restaurants = restaurantOptions.map((r: any) => r.name);
+
+      return {
+        restaurants,
+        restaurant_options: restaurantOptions
+      };
+    } catch (err: any) {
+      console.warn(`[mapsMCP] Failed to fetch restaurants near hotel: ${err.message}. Returning empty results.`);
+      return {
+        restaurants: [],
+        restaurant_options: []
+      };
+    }
+  });
+}
+

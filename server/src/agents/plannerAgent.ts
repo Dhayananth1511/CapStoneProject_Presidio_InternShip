@@ -12,6 +12,7 @@ import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
 import { runBudgetAgent } from './budgetAgent';
 import { runItineraryAgent } from './itineraryAgent';
 import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
+import { getRestaurantsNearHotel } from '../mcp-servers/mapsMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { validateTripDates, clampTravelers, clampBudget } from '../utils/inputSanitizer';
@@ -350,6 +351,25 @@ You MUST invoke exactly one tool.`;
 
   // Trigger parallel API data-retrievals dynamically routed by the coordinator LLM
   updatedContext = await runParallelAgents(updatedContext, userMessage);
+
+  // If a hotel is selected/recommended, fetch restaurants near it to replace general destination dining options
+  const hotelQueryName = updatedContext.accommodation?.recommended || updatedContext.accommodation?.selected_hotel?.name;
+  if (hotelQueryName && hotelQueryName !== 'Self Arranged' && updatedContext.input.destination) {
+    try {
+      logger.info(`Supervisor: Fetching restaurants near selected hotel: ${hotelQueryName}`);
+      const nearHotel = await getRestaurantsNearHotel(hotelQueryName, updatedContext.input.destination);
+      if (nearHotel && nearHotel.restaurants && nearHotel.restaurants.length > 0) {
+        updatedContext.activities = {
+          ...(updatedContext.activities || {}),
+          restaurants: nearHotel.restaurants,
+          restaurant_options: nearHotel.restaurant_options,
+        };
+        logger.info(`Supervisor: Enriched activities with ${nearHotel.restaurants.length} restaurants near ${hotelQueryName}`);
+      }
+    } catch (e: any) {
+      logger.warn('Failed to fetch restaurants near hotel, using destination defaults', { error: e.message });
+    }
+  }
 
   // Evaluate budget feasibility programmatically
   const budgetBreakdown = await runBudgetAgent(updatedContext);
