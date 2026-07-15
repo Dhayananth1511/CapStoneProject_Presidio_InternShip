@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
+  timeout: 180000, // 180 seconds — agent swarm takes ~60-90s on cold start after AWS deployment
   headers: {
     'Content-Type': 'application/json',
   },

@@ -471,6 +471,13 @@ resource "aws_cloudfront_distribution" "frontend" {
       https_port             = 443
       origin_protocol_policy = "http-only"  # EC2 speaks plain HTTP on port 5000
       origin_ssl_protocols   = ["TLSv1.2"]
+
+      # CRITICAL: Increase timeouts beyond the 60-second default.
+      # The AI agent swarm (LLM calls + parallel MCP tools) can take 60-90s.
+      # Without this the first request always gets a CloudFront 504 error,
+      # then succeeds on refresh because MongoDB already has the result.
+      origin_read_timeout      = 180  # seconds (max CloudFront allows)
+      origin_keepalive_timeout = 60   # seconds
     }
   }
 

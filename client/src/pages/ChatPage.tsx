@@ -244,8 +244,11 @@ export default function ChatPage() {
     onError: (err: any) => {
       setActiveStep(null);
       const isOffline = !navigator.onLine || err.code === 'ERR_NETWORK';
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
       const errMessage = isOffline
         ? 'Connection lost. Please check your internet and try again.'
+        : isTimeout
+        ? 'The AI agent swarm is warming up on the server. Please click Send again — it will work on the next attempt.'
         : err.response?.data?.message || 'Connection to the agent swarm timed out. Please try again.';
       setMessages((prev) => [
         ...prev,
@@ -255,6 +258,7 @@ export default function ChatPage() {
         },
       ]);
       if (isOffline) toast.error('You appear to be offline.');
+      if (isTimeout) toast('The server is warming up — please send your message again.', { icon: '🔄', duration: 5000 });
     },
   });
 
@@ -1766,6 +1770,123 @@ export default function ChatPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* ── DINING OPTIONS ── */}
+                    {(() => {
+                      const selectedHotel = context.accommodation?.selected_hotel ||
+                        (context.accommodation?.hotels?.[0] ?? null);
+                      const hotelAmenities: string[] = Array.isArray(selectedHotel?.amenities)
+                        ? selectedHotel.amenities
+                        : [];
+
+                      const diningKeywords = ['restaurant', 'room service', 'dining', 'breakfast', 'bar', 'buffet', 'café', 'cafe', 'food', 'kitchen', 'meal'];
+                      const inHotelDining = hotelAmenities.filter((a: string) =>
+                        diningKeywords.some(kw => a.toLowerCase().includes(kw))
+                      );
+
+                      const hasRoomService = hotelAmenities.some((a: string) => a.toLowerCase().includes('room service'));
+                      const hasRestaurant = hotelAmenities.some((a: string) =>
+                        ['restaurant', 'dining', 'café', 'cafe', 'buffet'].some(kw => a.toLowerCase().includes(kw))
+                      );
+                      const hasBreakfast = hotelAmenities.some((a: string) => a.toLowerCase().includes('breakfast'));
+
+                      const nearbyRestaurants = Array.isArray(context.activities?.restaurant_options)
+                        ? context.activities.restaurant_options.slice(0, 5)
+                        : (Array.isArray(context.activities?.restaurants)
+                          ? context.activities.restaurants.slice(0, 5).map((name: string) => ({ name }))
+                          : []);
+
+                      const hasDiningData = inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast || nearbyRestaurants.length > 0;
+                      if (!hasDiningData) return null;
+
+                      return (
+                        <div className={`mt-3 rounded-xl border p-3 space-y-3 ${
+                          isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-white'
+                        }`}>
+                          <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                            isDark ? 'text-slate-400' : 'text-slate-500'
+                          }`}>
+                            🍽️ Dining Options
+                          </p>
+
+                          {/* In-hotel Dining */}
+                          {(inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast) && (
+                            <div className="space-y-1.5">
+                              <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
+                                isDark ? 'text-indigo-400' : 'text-indigo-600'
+                              }`}>🏨 In-Hotel Dining ({selectedHotel?.name || 'Selected Hotel'})</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {hasRoomService && (
+                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                                    isDark ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  }`}>
+                                    🛎️ Room Service
+                                  </span>
+                                )}
+                                {hasRestaurant && (
+                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                                    isDark ? 'bg-amber-950/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700'
+                                  }`}>
+                                    🍴 On-Site Restaurant
+                                  </span>
+                                )}
+                                {hasBreakfast && (
+                                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                                    isDark ? 'bg-sky-950/30 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
+                                  }`}>
+                                    ☕ Breakfast Included
+                                  </span>
+                                )}
+                                {inHotelDining.filter((a: string) => !['room service', 'restaurant', 'breakfast'].some(k => a.toLowerCase().includes(k))).map((amenity: string, i: number) => (
+                                  <span key={i} className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
+                                    isDark ? 'bg-slate-950/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
+                                  }`}>
+                                    {amenity}
+                                  </span>
+                                ))}
+                              </div>
+                              {!hasRoomService && !hasRestaurant && !hasBreakfast && (
+                                <p className={`text-[9.5px] italic ${
+                                  isDark ? 'text-slate-500' : 'text-slate-400'
+                                }`}>No in-hotel dining amenities listed — verify with hotel on check-in.</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Nearby Restaurants */}
+                          {nearbyRestaurants.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
+                                isDark ? 'text-amber-400' : 'text-amber-700'
+                              }`}>📍 Nearby Restaurants</p>
+                              <div className="flex flex-col gap-1">
+                                {nearbyRestaurants.map((r: any, i: number) => (
+                                  <a
+                                    key={i}
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.name || r) + ' restaurant ' + (context.input?.destination || ''))}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`flex items-center justify-between p-1.5 rounded-lg border text-[10px] transition hover:shadow-sm ${
+                                      isDark
+                                        ? 'bg-slate-900/50 border-slate-850 hover:border-amber-700/30 text-slate-300 hover:text-white'
+                                        : 'bg-slate-50 border-slate-200 hover:border-amber-300 text-slate-700'
+                                    }`}
+                                  >
+                                    <span className="font-semibold line-clamp-1">{r.name || r}</span>
+                                    <span className="flex items-center gap-1 shrink-0 ml-2">
+                                      {r.rating && (
+                                        <span className="text-amber-500 text-[9px] font-bold">★ {r.rating}</span>
+                                      )}
+                                      <ArrowUpRight className="h-3 w-3 text-slate-400 shrink-0" />
+                                    </span>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

@@ -101,9 +101,15 @@ export const accommodationTool = tool(
     // Standalone LLM Reasoning Phase
     let reasoning = '';
     try {
-      const systemPrompt = `You are TripPlanner's Lodging & Accommodation Specialist Agent. 
-Analyze the accommodation choices in ${destination} checking in on ${check_in} and out on ${check_out} for ${travelers} guests.
-Briefly explain if the hotels are suitable, what amenities or lodging tiers are interesting, and safety/convenience ratings in 2-3 sentences. Keep it short.`;
+      const systemPrompt = `You are TripPlanner's Lodging & Accommodation Specialist Agent.
+Analyze the hotel accommodation choices in ${destination} (check-in: ${check_in}, check-out: ${check_out}) for ${travelers} guests.
+Your analysis MUST focus on:
+1. Whether the hotels are suitable for the destination and number of guests.
+2. What in-hotel dining options each hotel offers (room service availability, on-site restaurant, breakfast included, etc.) — based on the hotel amenities listed.
+3. Convenience, safety, and overall value ratings.
+
+DO NOT recommend external restaurants. ONLY mention in-hotel dining (room service, hotel restaurant, breakfast policy).
+Keep the response to 2-3 sentences. Be specific about in-hotel dining based on amenities listed.`;
       const llmRes = await withRetry(() => llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(JSON.stringify(data)),
