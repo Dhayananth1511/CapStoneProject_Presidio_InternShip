@@ -8,26 +8,40 @@ export async function runBookingAgent(
   context: TripContext,
   userEmail: string
 ): Promise<{ bookingRefs: any; confirmed: boolean }> {
-  // Create Google Calendar events for the trip dates (uses real calendarMCP)
-  const calendarResult = await createCalendarEvent(
-    context.input.destination || 'India Tour',
-    context.input.start_date!,
-    context.input.end_date!,
-    userEmail
-  );
+  let calendarEventId = 'No calendar synced';
 
-  const hotelName = context.accommodation?.recommended || 'Cozy Lodge';
-  const transportMode = context.transport?.options?.[0]?.mode || 'Train';
-  const transportOperator = context.transport?.options?.[0]?.operator || 'Indian Railways';
+  // Create Google Calendar events for the trip dates (uses real calendarMCP)
+  try {
+    const calendarResult = await createCalendarEvent(
+      context.input.destination || 'India Tour',
+      context.input.start_date!,
+      context.input.end_date!,
+      userEmail
+    );
+    if (calendarResult.success && calendarResult.eventId) {
+      calendarEventId = calendarResult.eventId;
+    }
+  } catch (calendarErr) {
+    console.error('Gracefully skipped Google Calendar event creation due to integration/auth error:', calendarErr);
+  }
+
+  const selectedHotelName = context.accommodation?.selected_hotel?.name || context.accommodation?.recommended || 'Cozy Lodge';
+  const selectedTransportOption = context.transport?.selected_option || context.transport?.options?.[0];
+  const transportMode = selectedTransportOption?.mode || 'Train';
+  const transportOperator = selectedTransportOption?.operator || 'Indian Railways';
 
   // Generate realistic confirmation reference codes based on selection
-  const hotelRef = `HB-HTL-${hotelName.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
-  const transportRef = `PNR-${transportMode.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase()}-${transportOperator.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+  const cleanHotel = String(selectedHotelName).replace(/[^A-Za-z0-9]/g, '');
+  const hotelRef = `HB-HTL-${(cleanHotel || 'HTL').substring(0, 4).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const cleanMode = String(transportMode).replace(/[^A-Za-z0-9]/g, '');
+  const cleanOperator = String(transportOperator).replace(/[^A-Za-z0-9]/g, '');
+  const transportRef = `PNR-${(cleanMode || 'TRN').substring(0, 3).toUpperCase()}-${(cleanOperator || 'OPR').substring(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
   return {
     bookingRefs: {
       hotel: hotelRef,
-      calendar: calendarResult.eventId || 'No calendar synced',
+      calendar: calendarEventId,
       transport: transportRef,
     },
     confirmed: true,
