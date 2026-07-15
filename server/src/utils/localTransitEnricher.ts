@@ -210,10 +210,14 @@ export async function enrichItineraryWithLocalTransport(
 
   // Update alternatives if infeasible
   if (!isFeasible) {
+    // Add a 10% safety buffer on top of the already-computed final total (which includes local
+    // transport) so that clicking "Increase limit" always results in a feasible budget, even if
+    // the LLM regenerates slightly different cost estimates on the next planning run.
+    const safeIncreaseSuggestion = Math.ceil(newTotalCost * 1.1);
     updatedBudget.alternatives = [
       `Choose a cheaper hotel tier (saves approx. ₹${Math.round(currentAccommodation * 0.4)})`,
       `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round((currentFood / Math.max(1, updatedDays.length)) * 1.5)})`,
-      `Increase limit to ₹${newTotalCost} for comfortable traveling accommodations`,
+      `Increase limit to ₹${safeIncreaseSuggestion} for comfortable traveling accommodations`,
     ];
   }
 

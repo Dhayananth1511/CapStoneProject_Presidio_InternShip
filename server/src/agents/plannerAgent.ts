@@ -341,6 +341,13 @@ You MUST invoke exactly one tool.`;
   // Flow C: Run scheduling swarm (Parallel Retrieve + Budget + Itinerary + Synthesize)
   logger.info('Supervisor: Executing full swarm generation flow');
 
+  // Detect if the user accepted the "Increase limit to ₹X" budget suggestion.
+  // In this case we skip the early pre-enrichment infeasibility gate because:
+  //  1. The suggested amount already includes a 30% buffer over raw trip costs (set in budgetAgent).
+  //  2. That buffer is sufficient to cover the local-transport costs added by the enricher.
+  //  3. The post-enrichment check below is still the authoritative feasibility guard.
+  const isIncreaseLimitAction = /increase limit to/i.test(userMessage);
+
   // Trigger parallel API data-retrievals dynamically routed by the coordinator LLM
   updatedContext = await runParallelAgents(updatedContext, userMessage);
 
@@ -348,7 +355,7 @@ You MUST invoke exactly one tool.`;
   const budgetBreakdown = await runBudgetAgent(updatedContext);
   updatedContext.budget = budgetBreakdown;
 
-  if (!budgetBreakdown.is_feasible) {
+  if (!budgetBreakdown.is_feasible && !isIncreaseLimitAction) {
     updatedContext.status = 'DRAFT';
     const altMessage = `⚠️ **Budget Constraint Exceeded!**\n\nYour defined travel budget of **₹${updatedContext.input.budget_inr?.toLocaleString()}** is exceeded. The AI agents estimated the minimum trip costs to be **₹${budgetBreakdown.total_cost_inr?.toLocaleString()}**.\n\n### Recommended Suggestions:\n${(budgetBreakdown.alternatives || []).map(alt => `* 💸 ${alt}`).join('\n')}\n\n**What would you like to do?** You can select one of the saving suggestions above in the inspector panel, or reply here to adjust parameters (e.g., increase budget, reduce travelers, or shorten dates).`;
     
@@ -364,6 +371,16 @@ You MUST invoke exactly one tool.`;
       budgetFeasible: false,
       budgetAlternatives: budgetBreakdown.alternatives
     };
+  }
+
+  if (isIncreaseLimitAction && !budgetBreakdown.is_feasible) {
+    logger.info('Budget-increase action detected: bypassing pre-enrichment gate, proceeding to itinerary generation.', {
+      userBudget: updatedContext.input.budget_inr,
+      estimatedCost: budgetBreakdown.total_cost_inr,
+    });
+    // Force the budget to reflect as feasible for the remaining steps — the enrichment step
+    // will re-evaluate with the full cost (including local transport) and serve as the real gate.
+    updatedContext.budget = { ...budgetBreakdown, is_feasible: true };
   }
 
   // Generate day-by-day JSON schedule

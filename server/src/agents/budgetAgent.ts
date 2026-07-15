@@ -198,10 +198,15 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
 
   // If way over budget, suggest realistic alternatives
   if (!isFeasible) {
+    // Add a 30% buffer to account for local transport commute costs that are added by the
+    // itinerary enrichment step (localTransitEnricher) which runs AFTER this budget agent.
+    // Without this buffer the user would be caught in an infinite loop: click the suggested
+    // amount, enricher bumps the total above that amount, a new (higher) suggestion appears.
+    const suggestedBudgetWithBuffer = Math.ceil(totalCost * 1.3);
     breakdown.alternatives = [
       `Choose a cheaper hotel tier (saves approx. ₹${Math.round(accommodationSelection.cost * 0.4)})`,
       `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round((foodSelection.cost / Math.max(1, days)) * 1.5)})`,
-      `Increase limit to ₹${totalCost} for comfortable traveling accommodations`,
+      `Increase limit to ₹${suggestedBudgetWithBuffer} for comfortable traveling accommodations`,
     ];
   }
 
