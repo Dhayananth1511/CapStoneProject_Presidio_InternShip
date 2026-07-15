@@ -200,6 +200,8 @@ export async function runPlannerAgent(
     travelers: z.number().optional().nullable(),
     budget_inr: z.number().optional().nullable(),
     interests: z.array(z.string()).optional().nullable(),
+    duration_days: z.number().optional().nullable(),
+    max_price_per_night: z.number().optional().nullable(),
   });
 
   const validateTripInputsTool = tool(async () => {}, {
