@@ -238,6 +238,7 @@ export async function synthesizeTripPlan(context: TripContext): Promise<string> 
 Include: trip overview, weather summary, transport details, hotel description, day-by-day schedule overview, 
 budget breakdown table, and packing tips. Use emojis and professional formatting.
 IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.
+IMPORTANT: In the cost breakdown table, you MUST explicitly include a row for each item in the budget: Transit/Transport, Lodging/Accommodation, Food, Activities, Local Transport (or Commutes), Emergency Fund, Total Cost, and Remaining Budget.
 Note: If the compactContext contains an "accommodation_notice", you MUST output it clearly at the very top of your document (e.g. using a warning or info emoji) to inform the user about the hotel price/constraint situation.`;
 
   // Create a highly compact, token-efficient summary of the context.

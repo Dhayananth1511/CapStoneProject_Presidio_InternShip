@@ -4,6 +4,8 @@ import { runBookingAgent } from '../agents/bookingAgent';
 import { runReplanningAgent } from '../agents/replanningAgent';
 import { runBudgetAgent } from '../agents/budgetAgent';
 import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
+import { runItineraryAgent } from '../agents/itineraryAgent';
+import { synthesizeTripPlan } from '../agents/coordinatorAgent';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
@@ -111,6 +113,45 @@ export const approveTrip = async (req: Request, res: Response): Promise<void> =>
 
     const user = await User.findById(userId);
     const context = trip.toObject() as any;
+
+    // Ensure itinerary exists prior to final booking & approval!
+    if (!trip.itinerary || !trip.itinerary.days || trip.itinerary.days.length === 0) {
+      logger.info('Itinerary is missing/empty during trip approval; generating now.');
+      try {
+        const generatedItinerary = await runItineraryAgent(context);
+        const enrichment = await enrichItineraryWithLocalTransport(generatedItinerary, context);
+        trip.itinerary = enrichment.itinerary;
+        trip.budget = enrichment.budget;
+        trip.local_transport = enrichment.local_transport;
+        
+        context.itinerary = enrichment.itinerary;
+        context.budget = enrichment.budget;
+        context.local_transport = enrichment.local_transport;
+        
+        // Regenerate markdown plan overview
+        const newFormattedPlan = await synthesizeTripPlan(context);
+        trip.formattedPlan = newFormattedPlan;
+        
+        if (Array.isArray(trip.conversationHistory)) {
+          let updatedPlanInHistory = false;
+          for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
+            if (trip.conversationHistory[i].role === 'assistant' && 
+                (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
+                 trip.conversationHistory[i].content.includes('## ✈️') ||
+                 trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
+              trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
+              updatedPlanInHistory = true;
+              break;
+            }
+          }
+          if (!updatedPlanInHistory) {
+            trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
+          }
+        }
+      } catch (err: any) {
+        logger.error('Failed to generate itinerary during trip approval stage', err);
+      }
+    }
 
     const booking = await runBookingAgent(context, user?.email || '');
 
@@ -315,6 +356,21 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
     }
     trip.accommodation = accommodation;
 
+    // Update hotel name in existing itinerary and formattedPlan BEFORE running transport enrichment
+    if (oldHotelName && oldHotelName !== hotelName && trip.itinerary) {
+      try {
+        let itineraryStr = JSON.stringify(trip.itinerary);
+        itineraryStr = itineraryStr.split(oldHotelName).join(hotelName);
+        trip.itinerary = JSON.parse(itineraryStr);
+      } catch (e) {
+        logger.error('Failed to update itinerary hotel name programmatically', e);
+      }
+
+      if (trip.formattedPlan) {
+        trip.formattedPlan = trip.formattedPlan.split(oldHotelName).join(hotelName);
+      }
+    }
+
     // Enrich itinerary with local transportation costs & calibrate the budget to match the new hotel!
     let updatedItinerary = trip.itinerary;
     let finalBudget = trip.budget;
@@ -323,6 +379,14 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
     try {
       const tempContext = trip.toObject() as any;
       tempContext.budget = await runBudgetAgent(tempContext);
+      
+      // If the itinerary is missing/undefined (e.g. planner aborted due to infeasible budget initially),
+      // we must run runItineraryAgent now since we now have a feasible hotel choice!
+      if (!updatedItinerary || !updatedItinerary.days || updatedItinerary.days.length === 0) {
+        logger.info('Itinerary is missing/undefined in select-hotel. Running Itinerary Agent.');
+        updatedItinerary = await runItineraryAgent(tempContext);
+        tempContext.itinerary = updatedItinerary;
+      }
       
       const enrichment = await enrichItineraryWithLocalTransport(updatedItinerary, tempContext);
       updatedItinerary = enrichment.itinerary;
@@ -353,17 +417,36 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
       trip.conversationHistory.push({ role: 'assistant', content: successMessage });
     }
 
-    // Programmatically update the itinerary and formattedPlan text, avoiding full LLM regeneration
-    if (oldHotelName && oldHotelName !== hotelName) {
-      try {
-        let itineraryStr = JSON.stringify(trip.itinerary);
-        itineraryStr = itineraryStr.split(oldHotelName).join(hotelName);
-        trip.itinerary = JSON.parse(itineraryStr);
-      } catch (e) {
-        logger.error('Failed to update itinerary hotel name programmatically', e);
-      }
+    // Regenerate travel plan markdown to reflect the selected hotel and final budget calculation
+    try {
+      const tempContext = trip.toObject() as any;
+      tempContext.itinerary = updatedItinerary;
+      tempContext.budget = finalBudget;
+      tempContext.local_transport = finalLocalTransport;
+      
+      const newFormattedPlan = await synthesizeTripPlan(tempContext);
+      trip.formattedPlan = newFormattedPlan;
 
-      if (trip.formattedPlan) {
+      // Find the last assistant message and update it
+      let updatedPlanInHistory = false;
+      if (Array.isArray(trip.conversationHistory)) {
+        for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
+          if (trip.conversationHistory[i].role === 'assistant' && 
+              (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
+               trip.conversationHistory[i].content.includes('## ✈️') ||
+               trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
+            trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
+            updatedPlanInHistory = true;
+            break;
+          }
+        }
+        if (!updatedPlanInHistory) {
+          trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
+        }
+      }
+    } catch (synthErr) {
+      logger.error('Failed to synthesize plan in select-hotel', synthErr);
+      if (oldHotelName && oldHotelName !== hotelName && trip.formattedPlan) {
         trip.formattedPlan = trip.formattedPlan.split(oldHotelName).join(hotelName);
       }
     }
@@ -417,48 +500,93 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    let selectedOption: any;
     const transport = trip.transport || {};
     const options = Array.isArray(transport.options) ? transport.options : [];
-    const selectedOption = options.find((opt: any) => opt.operator === operator && opt.mode === mode);
 
-    if (!selectedOption) {
-      res.status(400).json({ message: `Transport option "${operator}" (${mode}) was not found in the search options for this trip.` });
-      return;
+    if (operator === 'Self Arranged' && mode === 'skipped') {
+      selectedOption = {
+        operator: 'Self Arranged',
+        mode: 'Self Arranged',
+        cost_inr: 0,
+        cost_per_traveler: 0,
+        departure: 'N/A',
+        arrival: 'N/A',
+        duration_hrs: 0,
+        source: 'Self Arranged'
+      };
+      
+      const cleanOptions = options.filter((opt: any) => opt.operator !== 'Self Arranged');
+      cleanOptions.unshift(selectedOption);
+      
+      transport.selected_option = selectedOption;
+      transport.options = cleanOptions;
+      trip.transport = transport;
+    } else {
+      selectedOption = options.find((opt: any) => opt.operator === operator && opt.mode === mode);
+
+      if (!selectedOption) {
+        res.status(400).json({ message: `Transport option "${operator}" (${mode}) was not found in the search options for this trip.` });
+        return;
+      }
+
+      // Update transport values
+      transport.selected_option = selectedOption;
+
+      // Shift selected option to the front of options list
+      const originalIdx = options.findIndex((opt: any) => opt.operator === selectedOption.operator && opt.mode === selectedOption.mode);
+      if (originalIdx > -1) {
+        const [removed] = options.splice(originalIdx, 1);
+        options.unshift(removed);
+      }
+      transport.options = options;
+      trip.transport = transport;
     }
-
-    // Update transport values
-    transport.selected_option = selectedOption;
-
-    // Shift selected option to the front of options list
-    const originalIdx = options.findIndex((opt: any) => opt.operator === selectedOption.operator && opt.mode === selectedOption.mode);
-    if (originalIdx > -1) {
-      const [removed] = options.splice(originalIdx, 1);
-      options.unshift(removed);
-    }
-    transport.options = options;
-    trip.transport = transport;
 
     // Re-run budget agent on the updated context and preserve local transport cost
     const contextObj = trip.toObject() as any;
-    const newBudget = await runBudgetAgent(contextObj);
+
+    let isItineraryGeneratedNow = false;
+    if (!contextObj.itinerary || !contextObj.itinerary.days || contextObj.itinerary.days.length === 0) {
+      try {
+        logger.info('Itinerary is missing/undefined in select-transport. Running Itinerary Agent.');
+        contextObj.budget = await runBudgetAgent(contextObj);
+        const generated = await runItineraryAgent(contextObj);
+        const enrichment = await enrichItineraryWithLocalTransport(generated, contextObj);
+        contextObj.itinerary = enrichment.itinerary;
+        contextObj.budget = enrichment.budget;
+        contextObj.local_transport = enrichment.local_transport;
+        isItineraryGeneratedNow = true;
+      } catch (err: any) {
+        logger.error('Failed to generate or enrich itinerary in select-transport', err);
+      }
+    }
+
+    const newBudget = isItineraryGeneratedNow ? contextObj.budget : await runBudgetAgent(contextObj);
     
-    const existingLocalTransportCost = Number(trip.local_transport?.distances_from_hotel ? trip.budget?.local_transport : 0) || 0;
-    if (existingLocalTransportCost > 0) {
-      newBudget.local_transport = existingLocalTransportCost;
-      const subtotal = (newBudget.transport || 0) + (newBudget.accommodation || 0) + (newBudget.food || 0) + (newBudget.activities || 0) + existingLocalTransportCost;
-      newBudget.emergency_fund = Math.round(subtotal * 0.1);
-      newBudget.total_cost_inr = subtotal + newBudget.emergency_fund;
-      newBudget.remaining_budget_inr = (trip.input.budget_inr || 30000) - newBudget.total_cost_inr;
-      newBudget.is_feasible = newBudget.total_cost_inr <= (trip.input.budget_inr || 30000);
-      if (!newBudget.is_feasible) {
-        newBudget.alternatives = [
-          `Choose a cheaper hotel tier (saves approx. ₹${Math.round((newBudget.accommodation || 0) * 0.4)})`,
-          `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((newBudget.food || 0) / Math.max(1, (trip.itinerary?.days?.length || 5))) * 1.5)})`,
-          `Increase limit to ₹${newBudget.total_cost_inr} for comfortable traveling accommodations`,
-        ];
+    if (!isItineraryGeneratedNow) {
+      const existingLocalTransportCost = Number(trip.local_transport?.distances_from_hotel ? trip.budget?.local_transport : 0) || 0;
+      if (existingLocalTransportCost > 0) {
+        newBudget.local_transport = existingLocalTransportCost;
+        const subtotal = (newBudget.transport || 0) + (newBudget.accommodation || 0) + (newBudget.food || 0) + (newBudget.activities || 0) + existingLocalTransportCost;
+        newBudget.emergency_fund = Math.round(subtotal * 0.1);
+        newBudget.total_cost_inr = subtotal + newBudget.emergency_fund;
+        newBudget.remaining_budget_inr = (trip.input.budget_inr || 30000) - newBudget.total_cost_inr;
+        newBudget.is_feasible = newBudget.total_cost_inr <= (trip.input.budget_inr || 30000);
+        if (!newBudget.is_feasible) {
+          newBudget.alternatives = [
+            `Choose a cheaper hotel tier (saves approx. ₹${Math.round((newBudget.accommodation || 0) * 0.4)})`,
+            `Reduce duration of trip by 1 or 2 days (saves approx. ₹${Math.round(((newBudget.food || 0) / Math.max(1, (trip.itinerary?.days?.length || 5))) * 1.5)})`,
+            `Increase limit to ₹${newBudget.total_cost_inr} for comfortable traveling accommodations`,
+          ];
+        }
       }
     }
     trip.budget = newBudget;
+    if (isItineraryGeneratedNow) {
+      trip.itinerary = contextObj.itinerary;
+      trip.local_transport = contextObj.local_transport;
+    }
 
     if (!newBudget.is_feasible) {
       trip.status = 'DRAFT';
@@ -470,6 +598,37 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
       trip.conversationHistory.push({ role: 'assistant', content: successMessage });
     }
 
+    // Regenerate travel plan markdown to reflect the selected transport and final budget calculation
+    try {
+      const tempContext = trip.toObject() as any;
+      tempContext.itinerary = trip.itinerary;
+      tempContext.budget = trip.budget;
+      tempContext.local_transport = trip.local_transport;
+      
+      const newFormattedPlan = await synthesizeTripPlan(tempContext);
+      trip.formattedPlan = newFormattedPlan;
+
+      // Find the last assistant message and update it
+      let updatedPlanInHistory = false;
+      if (Array.isArray(trip.conversationHistory)) {
+        for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
+          if (trip.conversationHistory[i].role === 'assistant' && 
+              (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
+               trip.conversationHistory[i].content.includes('## ✈️') ||
+               trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
+            trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
+            updatedPlanInHistory = true;
+            break;
+          }
+        }
+        if (!updatedPlanInHistory) {
+          trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
+        }
+      }
+    } catch (synthErr) {
+      logger.error('Failed to regenerate travel plan synthesized markdown in selectTransport', synthErr);
+    }
+
     // Save changes to database
     await Trip.findOneAndUpdate(
       { sessionId: tripId },
@@ -477,6 +636,9 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
         status: trip.status,
         transport: trip.transport,
         budget: trip.budget,
+        itinerary: trip.itinerary,
+        local_transport: trip.local_transport,
+        formattedPlan: trip.formattedPlan,
         conversationHistory: trip.conversationHistory
       }
     );

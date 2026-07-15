@@ -107,6 +107,28 @@ export default function ChatPage() {
   const [showInterestPicker, setShowInterestPicker] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showConfirmBookingModal, setShowConfirmBookingModal] = useState(false);
+  
+  const getChosenHotelName = () => {
+    if (context?.accommodation?.selected_category === 'skipped' || context?.accommodation?.selected_hotel?.name === 'Self Arranged') {
+      return 'Self Arranged / Skipped';
+    }
+    return context?.accommodation?.selected_hotel?.name || context?.accommodation?.recommended || 'Self Arranged';
+  };
+
+  const getChosenTransportName = () => {
+    if (context?.transport?.selected_option?.operator === 'Self Arranged') {
+      return 'Self Arranged (skipped)';
+    }
+    if (context?.transport?.selected_option) {
+      return `${context.transport.selected_option.operator} (${context.transport.selected_option.mode})`;
+    }
+    if (context?.transport?.options?.[0]) {
+      return `${context.transport.options[0].operator} (${context.transport.options[0].mode})`;
+    }
+    return 'Self Arranged';
+  };
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch existing trip on mount if tripId query param is present
@@ -535,7 +557,11 @@ export default function ChatPage() {
       if (selectedHotelName && selectedHotelName !== 'Self Arranged' && selectedHotelName !== 'Hotel') {
         doc.setTextColor(79, 70, 229); // indigo link color
         let truncatedHotelName = selectedHotelName.length > 22 ? selectedHotelName.substring(0, 20) + '...' : selectedHotelName;
-        const hotelCardMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedHotelName + ' ' + (context.input?.destination || ''))}`;
+        const hotelCardMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          context.accommodation?.selected_hotel?.vicinity 
+            ? `${selectedHotelName}, ${context.accommodation.selected_hotel.vicinity}` 
+            : `${selectedHotelName} ${context.input?.destination || ''}`
+        )}`;
         doc.textWithLink(truncatedHotelName, 148, y + 10, { url: hotelCardMapsUrl });
         
         // draw underline
@@ -694,7 +720,11 @@ export default function ChatPage() {
             doc.setFontSize(9);
             doc.setTextColor(79, 70, 229); // clickable link style
             
-            const hotelMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedHotelName + ' ' + (context.input?.destination || ''))}`;
+            const hotelMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+              context.accommodation?.selected_hotel?.vicinity 
+                ? `${selectedHotelName}, ${context.accommodation.selected_hotel.vicinity}` 
+                : `${selectedHotelName} ${context.input?.destination || ''}`
+            )}`;
             doc.textWithLink(selectedHotelName, 24, y, { url: hotelMapsUrl });
             
             const hotelLinkWidth = doc.getTextWidth(selectedHotelName);
@@ -761,7 +791,11 @@ export default function ChatPage() {
               if (action.location) {
                 locationName = action.location;
                 const placeQuery = action.location;
-                mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeQuery + ' ' + (context.input?.destination || ''))}`;
+                const matchOpt = context.activities?.attraction_options?.find((opt: any) => opt.name?.toLowerCase() === locationName.toLowerCase());
+                const queryStr = matchOpt?.vicinity && !matchOpt.vicinity.includes('Hotelbeds')
+                  ? `${placeQuery}, ${matchOpt.vicinity}`
+                  : `${placeQuery}, ${context.input?.destination || ''}`;
+                mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
                 hasLink = true;
                 
                 if (!activityText.toLowerCase().includes(locationName.toLowerCase())) {
@@ -1620,7 +1654,10 @@ export default function ChatPage() {
                                     onClick={(e) => {
                                       const target = e.target as HTMLElement;
                                       if (target.tagName !== 'BUTTON' && !target.closest('button') && target.tagName !== 'A' && !target.closest('a')) {
-                                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (context.input?.destination || ''))}`, '_blank');
+                                        const queryHotel = hotel.vicinity && !hotel.vicinity.includes('Hotelbeds')
+                                          ? `${hotel.name}, ${hotel.vicinity}`
+                                          : `${hotel.name}, ${context.input?.destination || ''}`;
+                                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryHotel)}`, '_blank');
                                       }
                                     }}
                                   >
@@ -1636,7 +1673,11 @@ export default function ChatPage() {
                                             </span>
                                           )}
                                           <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (context.input?.destination || ''))}`}
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                              hotel.vicinity && !hotel.vicinity.includes('Hotelbeds')
+                                                ? `${hotel.name}, ${hotel.vicinity}`
+                                                : `${hotel.name}, ${context.input?.destination || ''}`
+                                            )}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             title="View on Google Maps"
@@ -1923,6 +1964,31 @@ export default function ChatPage() {
                   <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
                     isDark ? 'bg-indigo-955/20 border-slate-800' : 'bg-slate-50 border-slate-205'
                   }`}>
+                    {context.status !== 'CONFIRMED' && (
+                      <button
+                        type="button"
+                        disabled={selectTransportMutation.isPending}
+                        onClick={() => handleSelectTransport('Self Arranged', 'skipped')}
+                        className={`w-full mb-2.5 py-1.5 rounded-lg text-[10.5px] font-bold border transition text-center flex items-center justify-center gap-1 select-none cursor-pointer ${
+                          context.transport.selected_option?.operator === 'Self Arranged'
+                            ? isDark
+                              ? 'bg-amber-500/10 border-amber-500/50 text-amber-300'
+                              : 'bg-amber-55 border-amber-300 text-amber-800'
+                            : isDark
+                              ? 'bg-slate-900/55 hover:bg-amber-500/10 border-slate-800 text-slate-400 hover:text-amber-300 hover:border-amber-500/30'
+                              : 'bg-white hover:bg-amber-50/50 border-slate-205 text-slate-505 hover:text-amber-850 hover:border-amber-250'
+                        }`}
+                      >
+                        {context.transport.selected_option?.operator === 'Self Arranged' ? (
+                          <>
+                            <Check className="h-3 w-3 text-amber-500 animate-fadeIn" /> Skipped: Arranging Transit Myself
+                          </>
+                        ) : (
+                          'Skip Transit (Arrange commuter travel myself)'
+                        )}
+                      </button>
+                    )}
+
                     {Array.isArray(context.transport.options) && context.transport.options.length > 0 ? (
                       <div className="space-y-3">
                         <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -2140,8 +2206,11 @@ export default function ChatPage() {
                             const ratingValue = Math.min(5, Math.max(0, item.rating || 0));
                             const stars = Array.from({ length: 5 }, (_, i) => i < Math.round(ratingValue));
                             
-                            // Build direct search query for Google Maps using name and destination
-                            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + (context.input?.destination || ''))}${item.place_id ? `&query_place_id=${item.place_id}` : ''}`;
+                            // Build direct search query for Google Maps using name, vicinity and destination
+                            const queryStr = item.vicinity && !item.vicinity.includes('Hotelbeds')
+                              ? `${item.name}, ${item.vicinity}`
+                              : `${item.name}, ${context.input?.destination || ''}`;
+                            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}${item.place_id ? `&query_place_id=${item.place_id}` : ''}`;
                             
                                                         // Image source: Proxy server endpoint or fallback Unsplash URL
                             const fallbackImages = [
@@ -2175,7 +2244,10 @@ export default function ChatPage() {
                                 }`}
                                 onClick={() => {
                                   if (item.is_llm_recommended) {
-                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + (context.input?.destination || ''))}`, '_blank');
+                                    const queryName = item.vicinity && !item.vicinity.includes('Hotelbeds')
+                                      ? `${item.name}, ${item.vicinity}`
+                                      : `${item.name}, ${context.input?.destination || ''}`;
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryName)}`, '_blank');
                                   }
                                 }}
                               >
@@ -2411,6 +2483,24 @@ export default function ChatPage() {
                                 </div>
                               )}
 
+                              {/* Daily Transit summary, if local travel commutes have estimated expenses */}
+                              {(() => {
+                                const dayTravelTotal = dayItem.schedule?.reduce((acc: number, action: any) => acc + (action.travel_cost_inr || 0), 0) || 0;
+                                if (dayTravelTotal > 0) {
+                                  return (
+                                    <div className={`text-[11px] px-2.5 py-1.5 rounded border transition-colors flex items-center justify-between ${
+                                      isDark 
+                                        ? 'text-sky-305 bg-sky-955/15 border-sky-900/30' 
+                                        : 'text-sky-900 bg-sky-50 border-sky-100'
+                                    }`}>
+                                      <span className="flex items-center gap-1">🚏 <strong>Local Transit:</strong> Est. daily commute expenses from lodging</span>
+                                      <span className="font-bold text-sky-500">₹{dayTravelTotal.toLocaleString()}</span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+
                               {/* Activities list */}
                               {((dayItem.schedule && dayItem.schedule.length > 0) || (hotelName && hotelName !== 'Self Arranged' && hotelName !== 'Hotel')) ? (
                                 <div className="space-y-4">
@@ -2441,7 +2531,11 @@ export default function ChatPage() {
                                         <h5 className={`text-xs font-semibold leading-normal ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                                           Base Stay at{' '}
                                           <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotelName + ' ' + (context.input?.destination || ''))}`}
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                              context.accommodation?.selected_hotel?.vicinity 
+                                                ? `${hotelName}, ${context.accommodation.selected_hotel.vicinity}` 
+                                                : `${hotelName} ${context.input?.destination || ''}`
+                                            )}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             title={`Search "${hotelName}" on Google Maps`}
@@ -2473,7 +2567,11 @@ export default function ChatPage() {
 
                                     const formattedTime = formatTimeAndPeriod(action.time) || action.time;
                                     const placeQuery = action.location || action.activity;
-                                    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(placeQuery + ' ' + (context.input?.destination || ''))}`;
+                                    const matchOpt = context.activities?.attraction_options?.find((opt: any) => opt.name?.toLowerCase() === (action.location || '').toLowerCase());
+                                    const queryStr = matchOpt?.vicinity && !matchOpt.vicinity.includes('Hotelbeds')
+                                      ? `${placeQuery}, ${matchOpt.vicinity}`
+                                      : `${placeQuery}, ${context.input?.destination || ''}`;
+                                    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
 
                                     return (
                                       <div
@@ -2734,22 +2832,35 @@ export default function ChatPage() {
 
           {/* HITL approval panels */}
           {context && context.status === 'PLANNED' && !activeStep && (
-            <div className={`p-4 border-t backdrop-blur-sm space-y-3 shrink-0 ${isDark ? 'border-card-border bg-slate-900/40' : 'border-slate-200 bg-white/90'}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1 glow-text">
-                  <Sparkles className="h-3 w-3" />
-                  Plan Ready for Approval
-                </span>
+            <div className={`p-4 border-t backdrop-blur-sm space-y-3 shrink-0 ${isDark ? 'border-card-border bg-slate-900/40' : 'border-slate-205 bg-white/90'}`}>
+              <div className={`p-3 rounded-xl border border-dashed text-xs space-y-1.5 transition-colors ${
+                isDark ? 'bg-indigo-955/20 border-indigo-500/30' : 'bg-indigo-50/50 border-indigo-200'
+              }`}>
+                <p className={`font-bold flex items-center gap-1.5 ${isDark ? 'text-indigo-400' : 'text-indigo-700'}`}>
+                  📋 check all and approve
+                </p>
+                <p className={`text-[10px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Before confirming, please review all details above (hotel choice, intercity transit, daily sightseeing schedule, local transport commutes, and the total budget assessment).
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => approveMutation.mutate()}
+                  onClick={() => setShowConfirmBookingModal(true)}
                   disabled={approveMutation.isPending || rejectMutation.isPending}
                   className="flex items-center gap-1 px-3 py-2 rounded-lg bg-accent-teal hover:bg-emerald-600 text-xs font-bold text-white transition active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
-                  <Check className="h-3.5 w-3.5" />
-                  Approve & Confirm
+                  {approveMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Approving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Approve & Confirm
+                    </>
+                  )}
                 </button>
 
                 <button
@@ -2906,6 +3017,65 @@ export default function ChatPage() {
                 className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-bold text-white transition active:scale-95 cursor-pointer"
               >
                 Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmBookingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className={`premium-card rounded-2xl max-w-md w-full p-6 mx-4 border shadow-2xl space-y-4 ${
+            isDark ? 'border-card-border/80 bg-card-bg/95' : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-indigo-500/10 rounded-xl flex items-center justify-center border border-indigo-500/20">
+                <Check className="h-5 w-5 text-indigo-400 font-bold" />
+              </div>
+              <div>
+                <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Confirm Booking Details</h3>
+                <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Please check the lodging and transit choices before verifying booking.</p>
+              </div>
+            </div>
+
+            <div className={`p-3.5 rounded-xl space-y-2.5 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
+              <div className="flex justify-between items-start text-xs">
+                <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>🏨 Accommodation Choice:</span>
+                <span className={`font-bold text-right max-w-[60%] ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                  {getChosenHotelName()}
+                </span>
+              </div>
+              <div className="border-t border-dashed border-slate-550/10 dark:border-slate-100/10 my-2" />
+              <div className="flex justify-between items-start text-xs">
+                <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>✈️ Transport Selected:</span>
+                <span className={`font-bold text-right max-w-[60%] ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                  {getChosenTransportName()}
+                </span>
+              </div>
+            </div>
+
+            <p className={`text-xs text-center font-bold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              Can you continue with booking?
+            </p>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => setShowConfirmBookingModal(false)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 cursor-pointer text-center ${
+                  isDark ? 'bg-slate-805 hover:bg-slate-705 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                No, Go Back
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmBookingModal(false);
+                  approveMutation.mutate();
+                }}
+                disabled={approveMutation.isPending}
+                className="flex-1 py-1.5 rounded-lg bg-accent-teal hover:bg-emerald-600 text-xs font-bold text-white transition active:scale-95 cursor-pointer text-center flex items-center justify-center gap-1"
+              >
+                Yes, Book Now
               </button>
             </div>
           </div>
