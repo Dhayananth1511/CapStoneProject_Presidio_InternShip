@@ -111,13 +111,19 @@ export const accommodationTool = tool(
     );
 
     // ── STRICT PRICE-BASED CATEGORY THRESHOLDS ──────────────────────────────
-    // Budget: price_per_night_inr < 5000
-    // Mid-Range: 5000 <= price_per_night_inr <= 15000
-    // Luxury: price_per_night_inr > 15000
-    const BUDGET_MAX = 4999;
-    const MID_MIN = 5000;
-    const MID_MAX = 15000;
-    const LUXURY_MIN = 15001;
+    // Default categories: Budget (<₹5000/night), Mid-Range (₹5000-₹15000/night), Luxury (>₹15000/night)
+    // If a max_price_per_night constraint is provided, thresholds scale dynamically relative to it.
+    let BUDGET_MAX = 4999;
+    let MID_MIN = 5000;
+    let MID_MAX = 15000;
+    let LUXURY_MIN = 15001;
+
+    if (max_price_per_night && max_price_per_night > 0) {
+      BUDGET_MAX = Math.round(max_price_per_night * 0.4);
+      MID_MIN = BUDGET_MAX + 1;
+      MID_MAX = Math.round(max_price_per_night * 0.85);
+      LUXURY_MIN = MID_MAX + 1;
+    }
 
     // Sort all fetched hotels by price
     const hotelsList = [...(data.hotels || [])].sort((a, b) => a.price_per_night_inr - b.price_per_night_inr);
@@ -140,6 +146,11 @@ export const accommodationTool = tool(
       }
     });
 
+    // Within each price category, sort the list by rating (descending) so the highest-rated stay is recommended first.
+    categories.budget.sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0));
+    categories.mid_range.sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0));
+    categories.luxury.sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0));
+
     // Limit each category to max 3 options
     categories.budget = categories.budget.slice(0, 3);
     categories.mid_range = categories.mid_range.slice(0, 3);
@@ -156,6 +167,21 @@ export const accommodationTool = tool(
     let selectedCategory: 'budget' | 'mid_range' | 'luxury' = 'mid_range';
     if (tier === 'budget') selectedCategory = 'budget';
     else if (tier === 'luxury') selectedCategory = 'luxury';
+
+    // If a max_price_per_night constraint is set, overall pre-select the category with the absolute highest-rated hotel.
+    if (max_price_per_night && max_price_per_night > 0) {
+      let bestRating = -1;
+      let targetCat: 'budget' | 'mid_range' | 'luxury' = 'budget';
+      const catKeys: Array<'budget' | 'mid_range' | 'luxury'> = ['budget', 'mid_range', 'luxury'];
+      catKeys.forEach(cat => {
+        const topHotel = categories[cat][0];
+        if (topHotel && (topHotel.rating || 0) > bestRating) {
+          bestRating = topHotel.rating || 0;
+          targetCat = cat;
+        }
+      });
+      selectedCategory = targetCat;
+    }
 
     // Safeguard: if the preferred category is empty, fall back
     if (categories[selectedCategory].length === 0) {

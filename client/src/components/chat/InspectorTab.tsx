@@ -404,11 +404,12 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                           {(['budget', 'mid_range', 'luxury'] as const).map((tab) => {
                             const optionsCount = (context.accommodation.categories[tab] || []).length;
                             if (optionsCount === 0) return null;
+                            const thresholds = context.accommodation.category_thresholds || {};
                             const tabLabel = tab === 'budget' 
-                              ? 'Budget (<5k)' 
+                              ? (thresholds.budget ? `Budget (${thresholds.budget.replace('/night', '')})` : 'Budget (<5k)') 
                               : tab === 'mid_range' 
-                              ? 'Mid-Range (5k-15k)' 
-                              : 'Luxury (>15k)';
+                              ? (thresholds.mid_range ? `Mid-Range (${thresholds.mid_range.replace('/night', '')})` : 'Mid-Range (5k-15k)') 
+                              : (thresholds.luxury ? `Luxury (${thresholds.luxury.replace('/night', '')})` : 'Luxury (>15k)');
                             const isActive = lodgingCategoryTab === tab;
                             return (
                               <button

@@ -182,6 +182,11 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
     } else if (toolName === 'fetch_accommodation') {
       if (input.start_date) args.check_in = input.start_date;
       if (input.end_date) args.check_out = input.end_date;
+      const finalMaxPrice = userPriceCeiling || input.max_price_per_night;
+      if (finalMaxPrice) {
+        args.max_price_per_night = finalMaxPrice;
+        args.tier = 'budget';
+      }
     } else if (toolName === 'fetch_activities') {
       args.days = days;
     }

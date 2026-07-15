@@ -57,6 +57,7 @@ export interface TripContext {
     budget_inr?: number;
     interests?: string[];
     duration_days?: number;
+    max_price_per_night?: number;
   };
   weather?: any;
   transport?: any;
@@ -118,6 +119,23 @@ export async function runPlannerAgent(
     };
   } catch (err: any) {
     logger.warn('Failed to parse json slots inside Supervisor extractor', { error: err.message, rawContent: extractionResponse.content.toString() });
+  }
+
+  // Programmatically extract lodging price ceiling from userMessage
+  const priceCeilingMatch = userMessage.match(/(?:below|under|less than|within|max|maximum|upto|up to)\s*[₹]?\s*(\d+)/i);
+  if (priceCeilingMatch) {
+    const parsedVal = parseInt(priceCeilingMatch[1], 10);
+    // Only lock to hotel price constraint if the message indicates lodging/hotels/stay
+    if (/(?:hotel|stay|night|accommodation|lodging|room)/i.test(userMessage.toLowerCase())) {
+      logger.info(`Context update: Set max_price_per_night programmatically to ₹${parsedVal}`);
+      updatedInput.max_price_per_night = parsedVal;
+    }
+  }
+
+  // Clear max_price_per_night if they explicitly ask for luxury or mid-range
+  if (/(?:luxury|mid-range|mid range|premium|expensive|high end|five star|5 star)/i.test(userMessage.toLowerCase())) {
+    logger.info(`Context update: Clearing max_price_per_night programmatically since dynamic tier change requested`);
+    delete updatedInput.max_price_per_night;
   }
 
   let updatedContext: TripContext = {

@@ -22,6 +22,7 @@ Slot definitions to extract:
 - budget_inr: Overall total budget limit/cap in INR (integer). MUST be the absolute budget ceiling. Do NOT extract savings estimates, cost reductions, or difference values. Only extract when a new overall absolute limit is explicitly set, such as "increase limit to ₹35000" or "my total budget is ₹25000".
 - interests: User interests (array of strings).
 - duration_days: The number of days of the trip (integer). E.g. a "5-day trip" is 5 days.
+- max_price_per_night: The upper limit/ceiling for hotel price per night in INR (integer). Extract this when the user explicitly requests hotels/stays/accommodations below/under a specific price (e.g. "below ₹1000", "under 1500 hotel").
 
 Crucial Rules:
 0. **Destination Override (HIGHEST PRIORITY):** If the user explicitly states they want to travel TO a specific named city or place — using phrases like "I want to go to X", "take me to X", "plan a trip to X", "destination is X", "X instead", "change to X", "I prefer X" — you MUST extract that place as the "destination", overriding any previously set destination. This applies even if a destination is already set in the current known parameters.
@@ -44,7 +45,8 @@ Crucial Rules:
   "travelers": number or 0,
   "budget_inr": number or 0,
   "interests": ["array", "of", "strings"],
-  "duration_days": number or 0
+  "duration_days": number or 0,
+  "max_price_per_night": number or 0
 }
 
 Current known parameters: ${JSON.stringify(contextInput)}
