@@ -20,7 +20,8 @@ async function generateAccommodationFallback(
   destination: string,
   check_in: string,
   check_out: string,
-  travelers: number
+  travelers: number,
+  max_price_per_night?: number
 ): Promise<any[]> {
   const nights = Math.max(
     1,
@@ -29,7 +30,10 @@ async function generateAccommodationFallback(
 
   const systemPrompt = `You are a helpful travel assistant.
 Generate exactly 6 popular tourist hotels/lodging places in "${destination}" (actual real properties, e.g. for Goa: "The Leela Goa", "Taj Exotica Resort & Spa", "Park Hyatt Goa Resort and Spa", "Resort Rio", "Marriott Resort", etc.).
-Classify them evenly: 2 budget hotels (approx price per night: ₹2,000 to ₹4,500), 2 mid-range hotels (approx price per night: ₹5,000 to ₹14,000), and 2 luxury hotels (approx price per night: ₹15,000 to ₹45k).
+${max_price_per_night && max_price_per_night > 0
+  ? `Since the user requested accommodations below ₹${max_price_per_night}/night, make sure the budget hotels you generate are strictly below ₹${max_price_per_night}/night. If it is impossible, generate the cheapest real local options (like hostels, guesthouses, or homestays).`
+  : 'Classify them evenly: 2 budget hotels (approx price per night: ₹2,000 to ₹4,500), 2 mid-range hotels (approx price per night: ₹5,000 to ₹14,000), and 2 luxury hotels (approx price per night: ₹15,050 to ₹45k).'
+}
 For each hotel, provide:
 1. name (real actual name)
 2. price_per_night_inr (numeric)
@@ -89,13 +93,28 @@ JSON Format:
 }
 
 export const accommodationTool = tool(
-  async ({ destination, check_in, check_out, travelers, tier }) => {
-    logger.debug('Accommodation tool fetching from MCP', { destination, check_in, check_out, travelers, tier });
+  async ({ destination, check_in, check_out, travelers, tier, max_price_per_night }) => {
+    logger.debug('Accommodation tool fetching from MCP', { destination, check_in, check_out, travelers, tier, max_price_per_night });
     const data = await searchHotels(destination, check_in, check_out, travelers);
 
     if (!data.hotels || data.hotels.length === 0) {
       logger.info('No API hotel matches for destination; triggering LLM fallback recommendations', { destination });
-      data.hotels = await generateAccommodationFallback(destination, check_in, check_out, travelers);
+      data.hotels = await generateAccommodationFallback(destination, check_in, check_out, travelers, max_price_per_night);
+    }
+
+    // If the user specified a strict price ceiling, pre-filter hotels to respect it.
+    // If no hotels are found under the ceiling, keep all hotels but mark the constraint notice.
+    let priceConstraintNotice = '';
+    if (max_price_per_night && max_price_per_night > 0) {
+      const underCeiling = (data.hotels || []).filter((h: any) => (h.price_per_night_inr || 0) <= max_price_per_night);
+      if (underCeiling.length > 0) {
+        logger.info(`Filtering hotels to max ₹${max_price_per_night}/night — retained ${underCeiling.length} of ${data.hotels.length}`);
+        data.hotels = underCeiling;
+      } else {
+        logger.warn(`No hotels at or below ₹${max_price_per_night}/night found. Showing cheapest available options.`);
+        data.hotels = [...(data.hotels || [])].sort((a: any, b: any) => a.price_per_night_inr - b.price_per_night_inr).slice(0, 6);
+        priceConstraintNotice = `⚠️ No hotels found below ₹${max_price_per_night}/night in ${destination}. Showing the cheapest available options instead.`;
+      }
     }
 
     // Standalone LLM Reasoning Phase
@@ -202,6 +221,7 @@ Keep the response to 2-3 sentences. Be specific about in-hotel dining based on a
         luxury: `Above ₹${MID_MAX}/night`,
       },
       reasoning,
+      ...(priceConstraintNotice ? { price_constraint_notice: priceConstraintNotice } : {}),
     };
 
     return JSON.stringify(finalResult);
@@ -214,7 +234,8 @@ Keep the response to 2-3 sentences. Be specific about in-hotel dining based on a
       check_in: z.string().describe('Check-in travel date (YYYY-MM-DD)'),
       check_out: z.string().describe('Check-out travel date (YYYY-MM-DD)'),
       travelers: z.number().describe('Number of guests/travelers'),
-      tier: z.enum(['luxury', 'mid-range', 'budget']).optional().describe('Hotel budget tier preference. Use budget for <₹5000/night, mid-range for ₹5000-₹15000/night, luxury for >₹15000/night.')
+      tier: z.enum(['luxury', 'mid-range', 'budget']).optional().describe('Hotel budget tier preference. Use budget for <₹5000/night, mid-range for ₹5000-₹15000/night, luxury for >₹15000/night.'),
+      max_price_per_night: z.number().optional().describe('Optional strict price ceiling in INR per night. When provided, only hotels at or below this price will be returned.')
     }),
   }
 );

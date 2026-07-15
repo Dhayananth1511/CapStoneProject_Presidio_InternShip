@@ -39,7 +39,19 @@ function isBudgetOnlyAdjustment(userMessage: string): boolean {
 
 function isAccommodationChangeRequest(userMessage: string): boolean {
   const message = userMessage.toLowerCase();
-  return /(change hotel|different hotel|cheaper hotel|find hotel|find cheaper|change accommodation|different accommodation|change lodging|change stay|budget hotel|luxury hotel|mid-range hotel)/.test(message);
+  // Detect any message that asks for a hotel change, different tier, or a specific price constraint.
+  // Note: /x flag not supported in JS — use new RegExp() instead.
+  const pattern = new RegExp(
+    'change hotel|different hotel|cheaper hotel|find hotel|find cheaper|' +
+    'change accommodation|different accommodation|change lodging|change stay|' +
+    'budget hotel|luxury hotel|mid-range hotel|' +
+    'hotel price|hotel under|hotel below|hotel less than|hotel within|' +
+    'hotel.{0,20}per night|per night.{0,20}hotel|price.{0,10}night|night.{0,10}price|' +
+    'stay under|stay below|accommodation under|lodging under|' +
+    'cheap hotel|cheap stay|cheap room|cheap lodging|' +
+    'hotel.{0,10}\\d{3,}|\\d{3,}.{0,10}hotel|\\d{3,}.{0,10}night'
+  );
+  return pattern.test(message);
 }
 
 function preserveSelectedHotel(existingAccommodation: any, fetchedAccommodation: any, userMessage: string): any {
@@ -105,6 +117,10 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
 
   logger.info('Starting Dynamic LLM Tool router analysis', { userMessage });
 
+  // Extract explicit price ceiling from user message if present (e.g. "below 1000/night", "under ₹2000")
+  const priceCeilingMatch = userMessage.match(/(?:below|under|less than|within|max|maximum|upto|up to)\s*[₹]?\s*(\d+)/i);
+  const userPriceCeiling = priceCeilingMatch ? parseInt(priceCeilingMatch[1], 10) : null;
+
   const systemPrompt = `You are an intelligent travel supervisor. Based on the user query and current state, call the appropriate tools.
 Rules:
 1. If this is the initial planning session (i.e. context contains mostly empty fields or no weather/hotel/transit data is fetched), call ALL four tools:
@@ -113,14 +129,15 @@ Rules:
    - fetch_accommodation (requires destination, check_in, check_out, travelers)
    - fetch_activities (requires destination, interests, days)
 2. If this is a modification (re-planning) request, call ONLY the tool(s) specific to the user's requirements:
-   - "change hotel" or "find different lodging" or choosing a cheaper hotel tier -> call fetch_accommodation.
-   - "add food spots" or "new interests" -> call ONLY fetch_activities.
-   - "change dates" -> dates impact transit, accommodation, and weather, so call fetch_weather, fetch_transport, and fetch_accommodation.
+   - "change hotel" or "find different lodging" or choosing a cheaper hotel tier or requesting a specific hotel price/budget → call fetch_accommodation.
+   - "add food spots" or "new interests" → call ONLY fetch_activities.
+   - "change dates" → dates impact transit, accommodation, and weather, so call fetch_weather, fetch_transport, and fetch_accommodation.
 3. For fetch_accommodation, you must pass the optional "tier" parameter based on the user's details:
-   - If user asks to choose a cheaper hotel tier, save money on lodging, or requests budget/cheap options, pass tier="budget".
+   - If user asks to choose a cheaper hotel tier, save money on lodging, or requests budget/cheap options or a specific low price ceiling (e.g. "below ₹1000", "under ₹2000 per night"), pass tier="budget".
    - If user requests luxury, high-end, premium, or expensive options, pass tier="luxury".
    - If user requests normal, mid-range, average, or moderate options, pass tier="mid-range".
-Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}.`;
+Ensure you populate tool arguments using the current context: destination="${input.destination || ''}", origin="${input.origin || ''}", start_date="${input.start_date || ''}", end_date="${input.end_date || ''}", travelers=${input.travelers || 0}, days=${days}, interests=${JSON.stringify(input.interests || [])}.${userPriceCeiling ? `
+Note: The user has explicitly requested a maximum hotel price of ₹${userPriceCeiling}/night. When calling fetch_accommodation, you must pass tier="budget" and max_price_per_night=${userPriceCeiling} to restrict results.` : ''}`;
 
   const response = await withRetry(() => modelWithTools.invoke([
     new SystemMessage(systemPrompt),
@@ -197,7 +214,8 @@ export async function synthesizeTripPlan(context: TripContext): Promise<string> 
   const systemPrompt = `You are a travel content writer. Create a beautiful, structured markdown travel plan.
 Include: trip overview, weather summary, transport details, hotel description, day-by-day schedule overview, 
 budget breakdown table, and packing tips. Use emojis and professional formatting.
-IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.`;
+IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.
+Note: If the compactContext contains an "accommodation_notice", you MUST output it clearly at the very top of your document (e.g. using a warning or info emoji) to inform the user about the hotel price/constraint situation.`;
 
   // Create a highly compact, token-efficient summary of the context.
   // Dumping the raw context string causes prompt token bloat, triggering 429 Rate Limits and LLM response truncation.
@@ -209,6 +227,7 @@ IMPORTANT: Always structure your output with Day 1, Day 2, etc. sections.`;
     budget_breakdown: context.budget,
     weather_info: context.weather?.reasoning || 'Check local weather conditions on arrival.',
     accommodation: context.accommodation?.recommended || 'Comfortable local accommodation',
+    accommodation_notice: context.accommodation?.price_constraint_notice || '',
     transport: context.transport?.options?.[0]
       ? {
           provider: context.transport.options[0].provider,

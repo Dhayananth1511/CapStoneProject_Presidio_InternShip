@@ -77,7 +77,7 @@ Current plan context:
 - Travelers: ${context.input.travelers}
 
 Tool selection rules:
-1. Mentions cheaper hotel / different lodging / budget hotel → invoke "replan_accommodation"
+1. Mentions cheaper hotel / different lodging / budget hotel / hotel price / hotel below / hotel under / hotel within ₹X / price per night → invoke "replan_accommodation"
 2. Mentions change dates / different time / shorter trip / extend trip → invoke "replan_dates"
 3. Mentions increase budget / more money / different budget → invoke "replan_budget"
 4. Mentions different activities / sightseeing / restaurants / things to do → invoke "replan_activities"
