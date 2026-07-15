@@ -741,6 +741,10 @@ export default function ChatPage() {
               handleSelectHotel={handleSelectHotel}
               transportSaving={selectTransportMutation.isPending}
               handleSelectTransport={handleSelectTransport}
+              handleAlternativeSelect={(suggestion: string) => {
+                setMessages((prev) => [...prev, { role: 'user', content: `Adjust my plan: ${suggestion}` }]);
+                chatMutation.mutate({ message: `Adjust plan: ${suggestion}`, tripId });
+              }}
             />
           ) : (
             /* TAB 2: INTERACTIVE TIME LINE ITINERARY */

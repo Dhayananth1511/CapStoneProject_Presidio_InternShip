@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, CloudSun, AlertTriangle, ArrowUpRight, Check, Building2 } from 'lucide-react';
+import { Download, CloudSun, AlertTriangle, ArrowUpRight, Check, Building2, MapPin, Users, IndianRupee, CalendarDays } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { HotelCard } from './HotelCard';
@@ -18,6 +18,7 @@ interface InspectorTabProps {
   handleSelectHotel: (name: string, tier: string) => void;
   transportSaving: boolean;
   handleSelectTransport: (operator: string, mode: string) => void;
+  handleAlternativeSelect: (suggestion: string) => void;
 }
 
 export const InspectorTab: React.FC<InspectorTabProps> = ({
@@ -32,6 +33,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
   handleSelectHotel,
   transportSaving,
   handleSelectTransport,
+  handleAlternativeSelect,
 }) => {
   return (
     <div className="space-y-4">
@@ -64,6 +66,190 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         )}
       </div>
 
+      {/* CHECKED PARAMETERS CARD */}
+      {context.input && (
+        <div className="premium-card rounded-xl p-5 space-y-3.5">
+          <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+            isDark ? 'text-indigo-400' : 'text-indigo-700'
+          }`}>
+            <MapPin className="h-4.5 w-4.5 text-primary" /> Checked Parameters
+          </h4>
+          <div className="grid grid-cols-2 gap-3.5">
+            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Destination</span>
+              <span className={`text-xs font-semibold ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
+                {context.input.destination || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Pending...</em>}
+              </span>
+            </div>
+            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Origin</span>
+              <span className={`text-xs font-semibold ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
+                {context.input.origin || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Not selected</em>}
+              </span>
+            </div>
+            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Travelers</span>
+              <span className={`text-xs font-semibold flex items-center gap-1 ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
+                <Users className="h-3.5 w-3.5 text-primary" />
+                {context.input.travelers || 0}
+              </span>
+            </div>
+            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Cap Limit</span>
+              <span className="text-xs font-semibold text-emerald-500 flex items-center gap-0.5">
+                <IndianRupee className="h-3.5 w-3.5 text-emerald-500" />
+                {context.input.budget_inr ? context.input.budget_inr.toLocaleString() : 0}
+              </span>
+            </div>
+            <div className={`col-span-2 p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <span className={`text-[10px] block font-bold uppercase mb-0.5 font-sans ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Dates</span>
+              <span className={`text-xs font-semibold flex items-center gap-1.5 ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
+                <CalendarDays className="h-4.5 w-4.5 text-primary" />
+                {context.input.start_date || 'YYYY-MM-DD'} – {context.input.end_date || 'YYYY-MM-DD'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CORE BUDGET GUARDIAN SUMMARY */}
+      {context.budget && (
+        <div className="premium-card rounded-xl p-4 space-y-2">
+          <div className="flex justify-between items-center">
+            <h4 className={`text-xs font-bold uppercase tracking-widest ${
+              isDark ? 'text-emerald-400' : 'text-emerald-700'
+            }`}>
+              ⚖️ Budget Guardian Agent
+            </h4>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded leading-none border ${
+              context.budget.is_feasible
+                ? isDark
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                : isDark
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-red-50 border-red-100 text-red-700'
+            }`}>
+              {context.budget.is_feasible ? 'Feasible' : 'Exceeds Cap'}
+            </span>
+          </div>
+
+          <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
+            isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="grid grid-cols-2 gap-3.5">
+              <div>
+                <span className={`text-[10px] uppercase font-bold block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>ESTIMATED TOTAL</span>
+                <span className="font-extrabold text-sm text-emerald-500">
+                  ₹{(context.budget.total_cost_inr !== undefined ? context.budget.total_cost_inr : (context.budget.total_estimated_cost || 0)).toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span className={`text-[10px] uppercase font-bold block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>BUDGET LIMIT CAP</span>
+                <span className={`font-extrabold text-sm ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>
+                  ₹{(context.input?.budget_inr || 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowBudgetBreakdown(!showBudgetBreakdown)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition select-none cursor-pointer ${
+                  isDark
+                    ? 'bg-slate-900/60 hover:bg-slate-900 border-slate-800 text-indigo-300 hover:text-indigo-200'
+                    : 'bg-slate-105 hover:bg-slate-200 border-slate-200 text-indigo-600 hover:text-indigo-700'
+                }`}
+              >
+                <span className="flex items-center gap-1">
+                  📊 {showBudgetBreakdown ? 'Hide Details' : 'View Cost Breakdown'}
+                </span>
+                {showBudgetBreakdown ? '▲' : '▼'}
+              </button>
+
+              {showBudgetBreakdown && (
+                <div className={`rounded-lg border p-3 mt-2 overflow-x-auto animate-fadeIn ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className={`border-b text-[10px] uppercase font-bold ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
+                        <th className="pb-1.5 font-bold">Category</th>
+                        <th className="pb-1.5 text-right font-bold">Cost (INR)</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y font-medium ${isDark ? 'divide-slate-900' : 'divide-slate-100'}`}>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>✈️ Transit</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.transport || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>🏨 Lodging</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.accommodation || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>🍜 Food & Dining</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.food || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>🎟️ Sightseeing Entry</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.activities || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>🛺 Local Cab Rides</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.local_transport || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-655'}`}>🚨 Reserve Fund (10%)</td>
+                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                          ₹{(context.budget.emergency_fund || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Alternatives suggested by Budget Guardian */}
+            {!context.budget.is_feasible && context.budget.alternatives && context.budget.alternatives.length > 0 && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2 mt-2">
+                <div className="flex gap-1.5 text-red-400 text-xs font-semibold">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Plan exceeds your budget constraint!</span>
+                </div>
+                <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Select one of the alternatives computed by the Budget Agent:
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {context.budget.alternatives.map((altOption: string, idx: number) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleAlternativeSelect(altOption)}
+                      className={`w-full text-left border rounded px-2.5 py-1.5 text-xs transition animate-fadeIn cursor-pointer ${
+                        isDark
+                          ? 'bg-slate-900 hover:bg-[#1a1230] text-indigo-305 hover:text-indigo-300 border-indigo-900/30'
+                          : 'bg-white hover:bg-neutral-50 text-indigo-650 hover:text-indigo-705 border-indigo-200/50'
+                      }`}
+                    >
+                      💸 {altOption}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* WEATHER ANALYSIS SECTION */}
       {context.weather && (
         <div className="premium-card rounded-xl p-4 space-y-2">
@@ -75,7 +261,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
           <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
             isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
           }`}>
-            <div className={`font-bold ${isDark ? 'text-slate-205' : 'text-slate-800'}`}>
+            <div className={`font-bold ${isDark ? 'text-slate-205' : 'text-slate-805'}`}>
               🌤️ Climate Summary ({context.input?.destination || 'Destination'}):
             </div>
             
@@ -118,7 +304,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                         {Math.round(day.temp_high_c)}°C / <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'} font-normal`}>{Math.round(day.temp_low_c)}°C</span>
                       </p>
                       {day.rain_mm > 0 && (
-                        <p className={`text-[9px] font-bold mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                        <p className={`text-[9px] font-bold mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-650'}`}>
                           🌧️ {day.rain_mm} mm
                         </p>
                       )}
@@ -145,7 +331,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
 
             {context.weather.advisory && (
               <div className={`text-[10.5px] p-2.5 rounded-lg border flex gap-1.5 items-start mt-2 ${
-                isDark ? 'bg-amber-955/20 border-amber-900/30 text-amber-399' : 'bg-amber-50 border-amber-100/50 text-amber-800'
+                isDark ? 'bg-amber-955/20 border-amber-900/30 text-amber-399' : 'bg-amber-50 border-amber-105/50 text-amber-800'
               }`}>
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
                 <span>
@@ -156,6 +342,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
           </div>
         </div>
       )}
+
 
       {/* ACCOMMODATION / HOTELS COMPONENT SECTION */}
       {context.accommodation && (
@@ -394,7 +581,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                   {(inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast) && (
                     <div className="space-y-1.5">
                       <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
-                        isDark ? 'text-indigo-400' : 'text-indigo-650'
+                        isDark ? 'text-indigo-400' : 'text-indigo-655'
                       }`}>🔑 In-Hotel Dining ({selectedHotel?.name || 'Selected Hotel'})</p>
                       <div className="flex flex-wrap gap-1.5">
                         {hasRoomService && (
@@ -406,14 +593,14 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                         )}
                         {hasRestaurant && (
                           <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                            isDark ? 'bg-amber-950/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-emerald-700'
+                            isDark ? 'bg-amber-955/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-emerald-700'
                           }`}>
                             🍴 On-Site Restaurant
                           </span>
                         )}
                         {hasBreakfast && (
                           <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                            isDark ? 'bg-sky-950/30 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
+                            isDark ? 'bg-sky-955/35 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
                           }`}>
                             🍳 Breakfast Included
                           </span>
@@ -428,7 +615,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                       </div>
                       {!hasRoomService && !hasRestaurant && !hasBreakfast && (
                         <p className={`text-[9.5px] italic ${
-                          isDark ? 'text-slate-500' : 'text-slate-400'
+                          isDark ? 'text-slate-505' : 'text-slate-400'
                         }`}>No in-hotel dining amenities listed — verify with hotel on check-in.</p>
                       )}
                     </div>
@@ -450,7 +637,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                             className={`flex items-center justify-between p-1.5 rounded-lg border text-[10px] transition hover:shadow-sm ${
                               isDark
                                 ? 'bg-slate-900/50 border-slate-850 hover:border-amber-700/30 text-slate-350 hover:text-white'
-                                : 'bg-slate-50 border-slate-200 hover:border-amber-300 text-slate-700'
+                                : 'bg-slate-55 border-slate-200 hover:border-amber-300 text-slate-700'
                             }`}
                           >
                             <span className="font-semibold line-clamp-1">{r.name || r}</span>
@@ -472,116 +659,6 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         </div>
       )}
 
-      {/* CORE BUDGET GUARDIAN SUMMARY */}
-      {context.budget && (
-        <div className="premium-card rounded-xl p-4 space-y-2">
-          <div className="flex justify-between items-center">
-            <h4 className={`text-xs font-bold uppercase tracking-widest ${
-              isDark ? 'text-emerald-400' : 'text-emerald-700'
-            }`}>
-              ⚖️ Budget Guardian Agent
-            </h4>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded leading-none border ${
-              context.budget.is_feasible
-                ? isDark
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                  : 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                : isDark
-                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                  : 'bg-red-50 border-red-100 text-red-700'
-            }`}>
-              {context.budget.is_feasible ? 'Feasible' : 'Exceeds Cap'}
-            </span>
-          </div>
-
-          <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
-            isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
-          }`}>
-            <div className="grid grid-cols-2 gap-3.5">
-              <div>
-                <span className={`text-[10px] uppercase font-bold block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>ESTIMATED TOTAL</span>
-                <span className="font-extrabold text-sm text-emerald-500">
-                  ₹{(context.budget.total_cost_inr !== undefined ? context.budget.total_cost_inr : (context.budget.total_estimated_cost || 0)).toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className={`text-[10px] uppercase font-bold block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>BUDGET LIMIT CAP</span>
-                <span className={`font-extrabold text-sm ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>
-                  ₹{(context.input?.budget_inr || 0).toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowBudgetBreakdown(!showBudgetBreakdown)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-bold transition select-none cursor-pointer ${
-                  isDark
-                    ? 'bg-slate-900/60 hover:bg-slate-900 border-slate-800 text-indigo-300 hover:text-indigo-200'
-                    : 'bg-slate-105 hover:bg-slate-200 border-slate-200 text-indigo-600 hover:text-indigo-700'
-                }`}
-              >
-                <span className="flex items-center gap-1">
-                  📊 {showBudgetBreakdown ? 'Hide Details' : 'View Cost Breakdown'}
-                </span>
-                {showBudgetBreakdown ? '▲' : '▼'}
-              </button>
-
-              {showBudgetBreakdown && (
-                <div className={`rounded-lg border p-3 mt-2 overflow-x-auto animate-fadeIn ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className={`border-b text-[10px] uppercase font-bold ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400'}`}>
-                        <th className="pb-1.5 font-bold">Category</th>
-                        <th className="pb-1.5 text-right font-bold">Cost (INR)</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y font-medium ${isDark ? 'divide-slate-900' : 'divide-slate-100'}`}>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>✈️ Transit</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.transport || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🏨 Lodging</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.accommodation || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🍜 Food & Dining</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.food || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🎟️ Sightseeing Entry</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.activities || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🛺 Local Cab Rides</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.local_transport || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className={`py-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>🚨 Reserve Fund (10%)</td>
-                        <td className={`py-2 text-right ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                          ₹{(context.budget.emergency_fund || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* TRANSIT SPECIALIST DETAILS */}
       {context.transport && (
@@ -640,7 +717,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500 italic">No sightseeing coordinates mapped in this area.</p>
+            <p className="text-xs text-slate-550 italic">No sightseeing coordinates mapped in this area.</p>
           )}
         </div>
       )}
