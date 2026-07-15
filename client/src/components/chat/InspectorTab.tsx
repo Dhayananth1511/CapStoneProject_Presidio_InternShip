@@ -692,7 +692,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
               <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 📌 Curated Places of Interest
               </p>
-              <div className="grid grid-cols-1 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {context.activities.attraction_options.map((opt: any, idx: number) => {
                   // Only display real tourist places/attractions (exclude hotels showing on activities)
                   const nameStr = opt.name || '';
