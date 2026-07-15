@@ -1,5 +1,5 @@
 import { TripContext } from '../agents/plannerAgent';
-import { getDistanceMatrix } from '../mcp-servers/mapsMCP';
+import { getDistanceMatrix, getTransitDirections } from '../mcp-servers/mapsMCP';
 import logger from './logger';
 
 interface EnrichmentResult {
@@ -73,31 +73,37 @@ export async function enrichItineraryWithLocalTransport(
     }
   });
 
-  // Fetch distances in parallel
-  const distanceCache: Record<string, { distance_km: number; duration_min: number; cab_estimate_inr: number }> = {};
+  // Fetch routing and distances in parallel
+  const distanceCache: Record<string, any> = {};
   
   const promises = Array.from(locationsToResolve).map(async (locName) => {
     try {
-      // Query maps Matrix
-      const matrixResult = await getDistanceMatrix(hotelName, `${locName}, ${destination}`);
+      // Query Google Directions API with Transit mode
+      const transitResult = await getTransitDirections(hotelName, `${locName}, ${destination}`);
       
-      // If Distance Matrix API is bypassed, use the smart fallback instead of the default flat 15km
-      if (matrixResult.distance_km === 15.0 && matrixResult.cab_estimate_inr === 360) {
+      // If Directions API was bypassed or failed and returned default fallback coordinates
+      if (transitResult.distance_km === 10.0 && transitResult.transit_summary === 'Cab/Auto commute') {
         const smart = getSmartFallback(hotelName, locName);
         distanceCache[locName] = {
+          transit_summary: 'Cab/Auto commute',
+          steps: [`Commute from ${hotelName} to ${locName}`],
           distance_km: smart.distance_km,
           duration_min: smart.duration_min,
-          cab_estimate_inr: Math.round(smart.distance_km * 12 * 2), // Round trip cab rate
+          cab_estimate_inr: Math.round(smart.distance_km * 12 * 2),
+          mode: 'driving',
         };
       } else {
-        distanceCache[locName] = matrixResult;
+        distanceCache[locName] = transitResult;
       }
     } catch (err: any) {
       const smart = getSmartFallback(hotelName, locName);
       distanceCache[locName] = {
+        transit_summary: 'Cab/Auto commute',
+        steps: [`Commute from ${hotelName} to ${locName}`],
         distance_km: smart.distance_km,
         duration_min: smart.duration_min,
         cab_estimate_inr: Math.round(smart.distance_km * 14),
+        mode: 'driving',
       };
     }
   });
@@ -123,19 +129,39 @@ export async function enrichItineraryWithLocalTransport(
       const data = item.location ? distanceCache[item.location] : null;
 
       if (data && !isHotel) {
-        // Classify and calculate fare: Auto if short distance, Cab otherwise
         const distance = data.distance_km;
-        const mode = distance < 6.0 ? 'Auto' : 'Cab';
-        const baseFare = mode === 'Auto' ? 40 : 80;
-        const ratePerKm = mode === 'Auto' ? 10 : 15;
-        const travelExpense = Math.round(baseFare + distance * ratePerKm) * 2; // x2 for round trip commute from hotel
+        let travelExpense = 0;
+        let icon = '🚗';
+        let updatedTransitNote = '';
+        let routeNote = '';
+
+        if (data.mode === 'transit') {
+          icon = '🚌';
+          // Estimate transit ticket for all travelers (e.g. ₹25 per passenger per direction)
+          const ticketCost = 25 * (context.input.travelers || 1);
+          travelExpense = ticketCost * 2; // Round trip
+          updatedTransitNote = `${icon} Transit: ${data.transit_summary} (round-trip ticket: ₹${travelExpense})`;
+          routeNote = `${data.transit_summary} (~${data.duration_min} mins)`;
+        } else {
+          // driving / walking
+          const travelMode = data.mode === 'walking' ? 'Walking' : (distance < 6.0 ? 'Auto' : 'Cab');
+          icon = travelMode === 'Walking' ? '🚶' : (travelMode === 'Auto' ? '🛺' : '🚗');
+          
+          if (travelMode === 'Walking') {
+            travelExpense = 0;
+            updatedTransitNote = `${icon} Walk: ${distance} km, ~${data.duration_min} mins (free)`;
+            routeNote = `Walk ${distance} km (~${data.duration_min} mins)`;
+          } else {
+            const baseFare = travelMode === 'Auto' ? 40 : 80;
+            const ratePerKm = travelMode === 'Auto' ? 10 : 15;
+            travelExpense = Math.round(baseFare + distance * ratePerKm) * 2;
+            updatedTransitNote = `${icon} Commute: ${distance} km, ~${data.duration_min} mins via ${travelMode.toLowerCase()} (round-trip expense: ₹${travelExpense})`;
+            routeNote = `~${data.duration_min} mins via ${travelMode.toLowerCase()}`;
+          }
+        }
 
         totalLocalTransportCost += travelExpense;
         dayTotalInr += travelExpense;
-
-        // Construct a premium transport note showing exact distance and commute travel cost
-        const icon = mode === 'Auto' ? '🛺' : '🚗';
-        const updatedTransitNote = `${icon} Commute: ${distance} km, ~${data.duration_min} mins via ${mode.toLowerCase()} (round-trip expense: ₹${travelExpense})`;
 
         // Track distances for the local_transport panel
         if (!distancesFromHotelList.some(d => d.attraction === item.location)) {
@@ -143,7 +169,7 @@ export async function enrichItineraryWithLocalTransport(
             attraction: item.location,
             distance_km: distance,
             distance_text: `${distance} km`,
-            duration_text: `~${data.duration_min} mins via ${mode.toLowerCase()}`
+            duration_text: routeNote
           });
         }
 
@@ -151,6 +177,7 @@ export async function enrichItineraryWithLocalTransport(
           ...item,
           transport_note: updatedTransitNote,
           travel_cost_inr: travelExpense,
+          transit_steps: data.steps || [], // Store step-by-step route steps for UI/audit logs
         };
       }
 

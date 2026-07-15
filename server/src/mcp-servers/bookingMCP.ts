@@ -6,6 +6,7 @@
 
 import { createHash } from 'crypto';
 import { withRetry } from '../utils/retry';
+import { getHotelsNearby } from './mapsMCP';
 
 const HOTELBEDS_API_KEY = process.env.HOTELBEDS_API_KEY;
 const HOTELBEDS_API_SECRET = process.env.HOTELBEDS_API_SECRET;
@@ -335,11 +336,24 @@ export async function searchHotels(
     let hotels: HotelOption[] = [];
 
     try {
-      const contentHotels = await searchHotelbedsContentHotels(destination, nights);
-      if (contentHotels && contentHotels.length > 0) {
-        hotels = contentHotels;
-      } else {
-        console.warn(`[bookingMCP] No real hotel data found for '${destination}'. hotels list will be empty.`);
+      const isHotelbedsKeyConfigured = HOTELBEDS_API_KEY && !HOTELBEDS_API_KEY.includes('REPLACE_WITH');
+      if (isHotelbedsKeyConfigured) {
+        const contentHotels = await searchHotelbedsContentHotels(destination, nights);
+        if (contentHotels && contentHotels.length > 0) {
+          hotels = contentHotels;
+        }
+      }
+
+      // If Hotelbeds isn't configured or returned no results, query Google Places Lodgings
+      if (hotels.length === 0) {
+        console.info(`[bookingMCP] No Hotelbeds hotels resolved for '${destination}'. Querying Google Places for accommodation...`);
+        const googleHotels = await getHotelsNearby(destination, nights);
+        if (googleHotels && googleHotels.length > 0) {
+          hotels = googleHotels as any;
+          console.info(`[bookingMCP] Loaded ${hotels.length} hotels from Google Places API.`);
+        } else {
+          console.warn(`[bookingMCP] Google Places accommodation search returned 0 results for '${destination}'.`);
+        }
       }
     } catch (err: any) {
       console.warn(`[bookingMCP] Hotel search failed: ${err.message}`);
