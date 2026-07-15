@@ -1672,6 +1672,15 @@ export default function ChatPage() {
                                           <span className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                                             {hotel.name}
                                           </span>
+                                          {hotel.is_llm_recommended ? (
+                                            <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 dark:text-amber-400 leading-none uppercase tracking-wider">
+                                              💡 AI Recommendation
+                                            </span>
+                                          ) : (
+                                            <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-650 dark:text-emerald-400 leading-none uppercase tracking-wider">
+                                              🌐 Live Google Hotel
+                                            </span>
+                                          )}
                                           {isRecommended && (
                                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-white leading-none flex items-center gap-0.5 animate-fadeIn">
                                               <Check className="h-2.5 w-2.5" /> Selected
@@ -2267,6 +2276,18 @@ export default function ChatPage() {
                                                                         onError={(e) => {
                                       e.currentTarget.src = fallbackImages[idx % fallbackImages.length];
                                     }}                                  />
+                                  {/* Source Provenance Badge */}
+                                  <div className="absolute top-2 left-2 flex items-center">
+                                    {item.is_llm_recommended ? (
+                                      <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
+                                        💡 AI Recommendation
+                                      </span>
+                                    ) : (
+                                      <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
+                                        🌐 Live Google Place
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="absolute top-2 right-2 flex items-center gap-1">
                                     <a
                                       href={item.is_llm_recommended

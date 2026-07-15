@@ -34,7 +34,8 @@ Rules:
 - Use exactly ${attractionCount} attractions and ${restaurantCount} restaurants.
 - These are recommendations, not confirmed live listings.
 - Avoid generic placeholders like City Center, Old Town, Culinary Hub.
-- Keep names plausible and destination-specific.`;
+- Keep names plausible and destination-specific.
+- Suggest ONLY scenic, historic, cultural, recreational, or sightseeing tourist attractions. Do NOT suggest municipal utilities, government offices, emergency or transit hubs (e.g. police stations, fire stations, post offices, bus stands, or train stations).`;
 
   const response = await withRetry(() => llm.invoke([
     new SystemMessage(fallbackPrompt),

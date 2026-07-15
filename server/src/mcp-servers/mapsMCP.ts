@@ -71,10 +71,39 @@ export async function getPlacesNearby(
         }
       }
 
+      // Filter out non-tourist places (utility/transit/government/etc.)
+      const filteredAttractions = attractionResults.filter((p: any) => {
+        const nameLower = (p.name || '').toLowerCase();
+        const types = p.types || [];
+        
+        const EXCLUDED_TYPES = [
+          'police', 'fire_station', 'post_office', 'bus_station', 'train_station', 
+          'transit_station', 'hospital', 'health', 'doctor', 'dentist', 'pharmacy', 
+          'bank', 'atm', 'school', 'university', 'courthouse', 'embassy', 
+          'city_hall', 'local_government_office', 'cemetery', 'funeral_home', 
+          'gas_station', 'car_repair', 'car_wash', 'parking'
+        ];
+        
+        const hasExcludedType = types.some((t: string) => EXCLUDED_TYPES.includes(t));
+        if (hasExcludedType) return false;
+
+        const EXCLUDED_KEYWORDS = [
+          'police station', 'fire station', 'post office', 'bus stand', 'bus stop', 
+          'bus terminal', 'railway station', 'metro station', 'subway station', 
+          'train station', 'hospital', 'clinic', 'court house', 'cemetery', 
+          'gas station', 'petrol pump', 'toll plaza', 'parking lot'
+        ];
+        
+        const hasExcludedKeyword = EXCLUDED_KEYWORDS.some(k => nameLower.includes(k));
+        if (hasExcludedKeyword) return false;
+
+        return true;
+      });
+
       // Slice results based on the number of trip days.
       // For longer trips, we need more sightseeing options to distribute across different days.
       const attractionsCount = Math.max(12, Math.min(30, days * 4));
-      const slicedAttractions = attractionResults.slice(0, attractionsCount);
+      const slicedAttractions = filteredAttractions.slice(0, attractionsCount);
       const attractions = slicedAttractions.map((p: any) => p.name);
       const attractionOptions = slicedAttractions.map((p: any) => ({
         name: p.name,
