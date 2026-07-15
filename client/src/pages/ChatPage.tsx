@@ -35,6 +35,8 @@ import {
 import { jsPDF } from 'jspdf';
 import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
+import { HotelCard } from '../components/chat/HotelCard';
+import { AttractionCard } from '../components/chat/AttractionCard';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -1638,152 +1640,20 @@ export default function ChatPage() {
                             <div className="flex flex-col gap-2.5">
                               {hotelsList.map((hotel: any, idx: number) => {
                                 const isRecommended = hotel.name === context.accommodation.recommended;
-                                const ratingCount = Math.round(hotel.rating || 4.0);
-                                const stars = Array.from({ length: 5 }, (_, i) => i < ratingCount);
                                 const isSaving = selectHotelMutation.isPending;
 
                                 return (
-                                  <div
+                                  <HotelCard
                                     key={idx}
-                                    className={`p-3 rounded-xl border transition flex flex-col gap-2.5 cursor-pointer hover:shadow-md ${
-                                      isRecommended
-                                        ? isDark
-                                          ? 'bg-indigo-955/20 border-primary shadow-md shadow-primary/5'
-                                          : 'bg-indigo-50/40 border-indigo-400 shadow-md shadow-indigo-100/30'
-                                        : isDark
-                                        ? 'bg-slate-900/40 border-slate-850 hover:border-slate-700'
-                                        : 'bg-white border-slate-205 hover:border-slate-350'
-                                    }`}
-                                    onClick={(e) => {
-                                      const target = e.target as HTMLElement;
-                                      if (target.tagName !== 'BUTTON' && !target.closest('button') && target.tagName !== 'A' && !target.closest('a')) {
-                                        const queryHotel = hotel.address
-                                          ? `${hotel.name}, ${hotel.address}`
-                                          : (hotel.vicinity && !hotel.vicinity.includes('Hotelbeds')
-                                            ? `${hotel.name}, ${hotel.vicinity}`
-                                            : `${hotel.name}, ${context.input?.destination || ''}`);
-                                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryHotel)}`, '_blank');
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <div className="space-y-1 max-w-[70%]">
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <span className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                                            {hotel.name}
-                                          </span>
-                                          {hotel.is_llm_recommended ? (
-                                            <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 dark:text-amber-400 leading-none uppercase tracking-wider">
-                                              💡 AI Recommendation
-                                            </span>
-                                          ) : (
-                                            <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-650 dark:text-emerald-400 leading-none uppercase tracking-wider">
-                                              🌐 Live Google Hotel
-                                            </span>
-                                          )}
-                                          {isRecommended && (
-                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-white leading-none flex items-center gap-0.5 animate-fadeIn">
-                                              <Check className="h-2.5 w-2.5" /> Selected
-                                            </span>
-                                          )}
-                                          <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                              hotel.address
-                                                ? `${hotel.name}, ${hotel.address}`
-                                                : (hotel.vicinity && !hotel.vicinity.includes('Hotelbeds')
-                                                  ? `${hotel.name}, ${hotel.vicinity}`
-                                                  : `${hotel.name}, ${context.input?.destination || ''}`)
-                                            )}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            title="View on Google Maps"
-                                            className="text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors flex items-center p-0.5"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <ArrowUpRight className="h-3.5 w-3.5" />
-                                          </a>
-                                        </div>
-
-                                        {/* Star Ratings */}
-                                        <div className="flex items-center gap-1">
-                                          <span className="flex text-amber-500 text-[10px]">
-                                            {stars.map((filled, sIdx) => (
-                                              <span key={sIdx}>{filled ? '★' : '☆'}</span>
-                                            ))}
-                                          </span>
-                                          <span className={`text-[9.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                            ({hotel.rating || 4.0}/5 rating)
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div className="text-right">
-                                        <p className="text-xs font-bold text-emerald-500">
-                                          ₹{hotel.price_per_night_inr ? hotel.price_per_night_inr.toLocaleString() : 0} <span className={`text-[8.5px] font-normal ${isDark ? 'text-slate-450' : 'text-slate-500'}`}>/ night</span>
-                                        </p>
-                                        {hotel.total_cost_inr && (
-                                          <p className={`text-[9.5px] font-semibold mt-0.5 ${isDark ? 'text-slate-450' : 'text-slate-550'}`}>
-                                            ₹{hotel.total_cost_inr.toLocaleString()} total
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {hotel.address && (
-                                      <p className={`text-[10px] flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-505'}`}>
-                                        <MapPin className="h-3 w-3 shrink-0 text-indigo-455" /> {hotel.address}
-                                      </p>
-                                    )}
-
-                                    {hotel.description && (
-                                      <p className={`text-[10.5px] leading-relaxed italic ${isDark ? 'text-slate-350' : 'text-slate-600'}`}>
-                                        "{hotel.description}"
-                                      </p>
-                                    )}
-
-                                    {/* Amenities list */}
-                                    {Array.isArray(hotel.amenities) && hotel.amenities.length > 0 && (
-                                      <div className="flex flex-wrap gap-1">
-                                        {hotel.amenities.slice(0, 4).map((amenity: string, aIdx: number) => (
-                                          <span
-                                            key={aIdx}
-                                            className={`text-[8.5px] font-semibold px-2 py-0.5 rounded-full border ${
-                                              isDark
-                                                ? 'bg-slate-950/50 border-slate-800 text-slate-400'
-                                                : 'bg-slate-50 border-slate-205 text-slate-500'
-                                            }`}
-                                          >
-                                            {amenity}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {/* Select Button */}
-                                    {context.status !== 'CONFIRMED' && !isRecommended && (
-                                      <button
-                                        type="button"
-                                        disabled={isSaving || context.status === 'CONFIRMED'}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleSelectHotel(hotel.name, lodgingCategoryTab);
-                                        }}
-                                        className={`w-full py-1.5 rounded-lg text-xs font-bold border transition text-center flex items-center justify-center gap-1 cursor-pointer select-none ${
-                                          isDark
-                                            ? 'bg-indigo-950/40 hover:bg-primary/20 border-indigo-900/40 text-indigo-300 hover:text-white'
-                                            : 'bg-indigo-50/50 hover:bg-primary/10 border-indigo-200 text-indigo-700 hover:text-indigo-805'
-                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                      >
-                                        {isSaving ? (
-                                          <>
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Selecting Hotel...
-                                          </>
-                                        ) : (
-                                          'Choose Hotel'
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
+                                    hotel={hotel}
+                                    isDark={isDark}
+                                    isRecommended={isRecommended}
+                                    isSaving={isSaving}
+                                    lodgingCategoryTab={lodgingCategoryTab}
+                                    destination={context.input?.destination || ''}
+                                    handleSelectHotel={handleSelectHotel}
+                                    showSelectButton={context.status !== 'CONFIRMED'}
+                                  />
                                 );
                               })}
                             </div>
@@ -2218,138 +2088,15 @@ export default function ChatPage() {
                           📍 Core Sightseeing Destinations
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                          {context.activities.attraction_options.map((item: any, idx: number) => {
-                            const ratingValue = Math.min(5, Math.max(0, item.rating || 0));
-                            const stars = Array.from({ length: 5 }, (_, i) => i < Math.round(ratingValue));
-                            
-                            // Build direct search query for Google Maps using name, vicinity and destination
-                            const queryStr = item.vicinity && !item.vicinity.includes('Hotelbeds')
-                              ? `${item.name}, ${item.vicinity}`
-                              : `${item.name}, ${context.input?.destination || ''}`;
-                            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}${item.place_id ? `&query_place_id=${item.place_id}` : ''}`;
-                            
-                                                        // Image source: Proxy server endpoint or fallback Unsplash URL
-                            const fallbackImages = [
-                              'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&w=650&q=80',
-                              'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=650&q=80'
-                            ];
-                            const imgSrc = item.photo_reference
-                              ? (item.photo_reference.startsWith('http')
-                                ? item.photo_reference
-                                : `/api/trips/place-photo?photo_reference=${item.photo_reference}`)
-                              : fallbackImages[idx % fallbackImages.length];
-                            return (
-                              <div
-                                key={idx}
-                                className={`group p-2.5 rounded-xl border transition-all flex flex-col gap-2 relative overflow-hidden ${
-                                  item.is_llm_recommended
-                                    ? isDark
-                                      ? 'bg-amber-950/10 border-amber-800/30 hover:border-amber-600/50 hover:shadow-md cursor-pointer'
-                                      : 'bg-amber-50/40 border-amber-200 hover:border-amber-400/60 hover:shadow-md cursor-pointer'
-                                    : isDark
-                                      ? 'bg-slate-900/60 border-slate-850 hover:bg-slate-900/80 hover:border-slate-700 hover:shadow-lg'
-                                      : 'bg-white border-slate-205 hover:border-slate-350 hover:shadow-lg'
-                                }`}
-                                onClick={() => {
-                                  if (item.is_llm_recommended) {
-                                    const queryName = item.vicinity && !item.vicinity.includes('Hotelbeds')
-                                      ? `${item.name}, ${item.vicinity}`
-                                      : `${item.name}, ${context.input?.destination || ''}`;
-                                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryName)}`, '_blank');
-                                  }
-                                }}
-                              >
-                                {/* Image Container */}
-                                <div className="h-28 w-full relative rounded-lg overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-950">
-                                  <img
-                                    src={imgSrc}
-                                    alt={item.name}
-                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                                                        onError={(e) => {
-                                      e.currentTarget.src = fallbackImages[idx % fallbackImages.length];
-                                    }}                                  />
-                                  {/* Source Provenance Badge */}
-                                  <div className="absolute top-2 left-2 flex items-center">
-                                    {item.is_llm_recommended ? (
-                                      <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
-                                        💡 AI Recommendation
-                                      </span>
-                                    ) : (
-                                      <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
-                                        🌐 Live Google Place
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="absolute top-2 right-2 flex items-center gap-1">
-                                    <a
-                                      href={item.is_llm_recommended
-                                        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name + ' ' + (context.input?.destination || ''))}`
-                                        : mapsUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title={item.is_llm_recommended ? 'Search on Google Maps' : 'Open in Google Maps'}
-                                      className={`h-7 w-7 rounded-full flex items-center justify-center shadow-lg transition active:scale-90 scale-95 hover:scale-105 ${
-                                        isDark
-                                          ? 'bg-slate-955 text-indigo-400 hover:bg-primary/20 hover:text-white border border-slate-805'
-                                          : 'bg-white text-indigo-700 hover:bg-primary hover:text-white border border-slate-205'
-                                      }`}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <ArrowUpRight className="h-4 w-4" />
-                                    </a>
-                                  </div>
-                                </div>
-
-                                {/* Content Details */}
-                                <div className="flex flex-col flex-1 justify-between gap-1 px-0.5">
-                                  <div>
-                                    <h5 className={`font-bold text-[11.5px] leading-tight line-clamp-1 group-hover:text-primary transition-colors ${isDark ? 'text-slate-100' : 'text-slate-900'}`} title={item.name}>
-                                      {item.name}
-                                    </h5>
-                                                                        {item.vicinity && (
-                                      <p className={`text-[9.5px] line-clamp-1 mt-0.5 flex items-center gap-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                                        <MapPin className="h-2.5 w-2.5 shrink-0" />
-                                        {item.vicinity}
-                                      </p>
-                                    )}
-                                    {item.description && (
-                                      <p className={`text-[10px] leading-snug line-clamp-2 mt-1 italic ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                        "{item.description}"
-                                      </p>
-                                    )}                                  </div>
-
-                                  <div className="flex items-center justify-between gap-1.5 mt-1 pt-1 border-t border-slate-150/10 dark:border-slate-800">
-                                    {/* Star Rating */}
-                                    <div className="flex items-center gap-0.5">
-                                      <span className="flex text-amber-500 text-[8.5px]">
-                                        {stars.map((filled, sIdx) => (
-                                          <span key={sIdx}>{filled ? '★' : '☆'}</span>
-                                        ))}
-                                      </span>
-                                      <span className={`text-[9px] font-bold ml-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                        {ratingValue.toFixed(1)}
-                                      </span>
-                                    </div>
-                                    
-                                    {/* Reviews Count */}
-                                    {item.user_ratings_total !== undefined && item.user_ratings_total > 0 && (
-                                      <span className={`text-[8.5px] font-semibold font-mono ${isDark ? 'text-slate-500' : 'text-slate-455'}`}>
-                                        ({item.user_ratings_total.toLocaleString()} reviews)
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {context.activities.attraction_options.map((item: any, idx: number) => (
+                            <AttractionCard
+                              key={idx}
+                              item={item}
+                              idx={idx}
+                              isDark={isDark}
+                              destination={context.input?.destination || ''}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
