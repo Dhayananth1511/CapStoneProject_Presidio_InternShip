@@ -77,6 +77,7 @@ export default function ChatPage() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showConfirmBookingModal, setShowConfirmBookingModal] = useState(false);
+  const [bookingRefs, setBookingRefs] = useState<{ hotel?: string; transport?: string; calendar?: string } | null>(null);
   
   const getChosenHotelName = () => {
     if (context?.accommodation?.selected_category === 'skipped' || context?.accommodation?.selected_hotel?.name === 'Self Arranged') {
@@ -116,6 +117,10 @@ export default function ChatPage() {
           }
           if (trip.status === 'PLANNED' || trip.status === 'CONFIRMED') {
             setActiveTab('itinerary');
+          }
+          // Restore booking refs so the InspectorTab confirmation card renders correctly
+          if (trip.status === 'CONFIRMED' && trip.booking?.refs) {
+            setBookingRefs(trip.booking.refs);
           }
         }
         return trip;
@@ -338,6 +343,13 @@ export default function ChatPage() {
       } else if (context) {
         setContext({ ...context, status: 'CONFIRMED', booking: { refs: data.bookingRefs, confirmed_at: new Date().toISOString() } });
       }
+      // Cache booking refs in local state so InspectorTab card can display them immediately
+      if (data.bookingRefs) {
+        setBookingRefs(data.bookingRefs);
+      }
+      // Stay on Plan Details (inspector) tab post-approval so user sees the booking
+      // confirmation card with references. Only initial page-load auto-switches to itinerary.
+      setActiveTab('inspector');
     },
     onError: (err: any) => {
       toast.error(`Approval failed: ${err.response?.data?.message || err.message}`);
@@ -750,6 +762,7 @@ export default function ChatPage() {
                 setMessages((prev) => [...prev, { role: 'user', content: `Adjust my plan: ${suggestion}` }]);
                 chatMutation.mutate({ message: `Adjust plan: ${suggestion}`, tripId });
               }}
+              bookingRefs={bookingRefs}
             />
           ) : (
             /* TAB 2: INTERACTIVE TIME LINE ITINERARY */

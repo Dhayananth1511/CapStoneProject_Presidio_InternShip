@@ -3,8 +3,7 @@
 // It calls the calculateLocalTransit MCP tool in mapsMCP.ts.
 // It always re-runs when the hotel or itinerary changes.
 
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+
 import { TripContext } from './plannerAgent';
 import { getTransitDirections } from '../mcp-servers/mapsMCP';
 import logger from '../utils/logger';
@@ -234,20 +233,3 @@ export async function runLocalTransitAgent(
 
   return { itinerary: updatedItinerary, budget: updatedBudget, local_transport };
 }
-
-// ─── LangChain Tool wrapper (used by coordinatorAgent for optional re-runs) ──
-export const localTransitTool = tool(
-  async ({ hotel_name, destination }: { hotel_name: string; destination: string }) => {
-    // This lightweight tool is used only as a signal to the coordinator LLM.
-    // The heavy processing happens in runLocalTransitAgent called by plannerAgent.
-    return JSON.stringify({ hotel_name, destination, status: 'ready' });
-  },
-  {
-    name: 'calculate_local_transit',
-    description: 'Calculates walking/cab/auto distances and commute costs from the selected hotel to each tourist attraction in the itinerary. Always re-run after a hotel change.',
-    schema: z.object({
-      hotel_name: z.string().describe('Name of the selected hotel'),
-      destination: z.string().describe('Trip destination city'),
-    }),
-  }
-);

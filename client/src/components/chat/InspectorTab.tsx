@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, CloudSun, AlertTriangle, ArrowUpRight, Check, Building2, MapPin, Users, IndianRupee, CalendarDays } from 'lucide-react';
+import { Download, CloudSun, AlertTriangle, ArrowUpRight, Check, Building2, MapPin, Users, IndianRupee, CalendarDays, BadgeCheck, KeyRound } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { HotelCard } from './HotelCard';
@@ -19,6 +19,7 @@ interface InspectorTabProps {
   transportSaving: boolean;
   handleSelectTransport: (operator: string, mode: string) => void;
   handleAlternativeSelect: (suggestion: string) => void;
+  bookingRefs?: { hotel?: string; transport?: string; calendar?: string } | null;
 }
 
 export const InspectorTab: React.FC<InspectorTabProps> = ({
@@ -34,6 +35,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
   transportSaving,
   handleSelectTransport,
   handleAlternativeSelect,
+  bookingRefs,
 }) => {
   return (
     <div className="space-y-4">
@@ -65,6 +67,75 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
           </button>
         )}
       </div>
+
+      {/* BOOKING CONFIRMED CARD — only visible when trip is CONFIRMED */}
+      {context.status === 'CONFIRMED' && (
+        <div className={`rounded-xl border p-4 space-y-3 animate-fadeIn ${
+          isDark
+            ? 'bg-emerald-950/20 border-emerald-800/40'
+            : 'bg-emerald-50 border-emerald-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <BadgeCheck className="h-5 w-5 text-emerald-500 shrink-0" />
+            <h4 className={`text-xs font-bold uppercase tracking-widest ${
+              isDark ? 'text-emerald-400' : 'text-emerald-700'
+            }`}>
+              Booking Confirmed
+            </h4>
+            {context.booking?.confirmed_at && (
+              <span className={`ml-auto text-[10px] font-semibold ${
+                isDark ? 'text-slate-500' : 'text-slate-400'
+              }`}>
+                {new Date(context.booking.confirmed_at).toLocaleDateString('en-IN', {
+                  day: '2-digit', month: 'short', year: 'numeric'
+                })}
+              </span>
+            )}
+          </div>
+
+          <div className={`rounded-lg border p-3 space-y-2 ${
+            isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-emerald-100'
+          }`}>
+            <div className="flex items-center gap-2 text-xs">
+              <KeyRound className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Booking References</span>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              {/* Hotel Ref */}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[10.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>🏨 Hotel</span>
+                <code className={`text-[10.5px] font-bold px-2 py-0.5 rounded font-mono ${
+                  isDark ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {context.booking?.refs?.hotel || bookingRefs?.hotel || '—'}
+                </code>
+              </div>
+              {/* Transport Ref */}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[10.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>✈️ Transport</span>
+                <code className={`text-[10.5px] font-bold px-2 py-0.5 rounded font-mono ${
+                  isDark ? 'bg-slate-800 text-sky-400' : 'bg-sky-100 text-sky-800'
+                }`}>
+                  {context.booking?.refs?.transport || bookingRefs?.transport || '—'}
+                </code>
+              </div>
+              {/* Calendar Event Ref */}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[10.5px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>📅 Calendar Event</span>
+                <code className={`text-[10.5px] font-bold px-2 py-0.5 rounded font-mono max-w-[55%] truncate ${
+                  isDark ? 'bg-slate-800 text-indigo-400' : 'bg-indigo-100 text-indigo-800'
+                }`} title={context.booking?.refs?.calendar || bookingRefs?.calendar || '—'}>
+                  {context.booking?.refs?.calendar || bookingRefs?.calendar || 'Not synced'}
+                </code>
+              </div>
+            </div>
+          </div>
+
+          <p className={`text-[10px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            This trip is now locked. You can export a PDF itinerary using the button above. Chat modifications are disabled.
+          </p>
+        </div>
+      )}
 
       {/* CHECKED PARAMETERS CARD */}
       {context.input && (
