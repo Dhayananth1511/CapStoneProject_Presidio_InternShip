@@ -154,7 +154,17 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
   const activityVisits = Math.max(1, Math.min(attractionsCount || days, days));
   const activityCost = feePerPerson > 0 ? feePerPerson * travelers * activityVisits : 0;
 
-  const subtotal = transportSelection.cost + accommodationSelection.cost + foodSelection.cost + activityCost;
+  // Calculate local transport cost: either use existing calculated value or estimate as ₹350 per traveler per day.
+  let localTransportCost = 0;
+  if (context.local_transport?.daily_budget_estimate) {
+    localTransportCost = Number(context.budget?.local_transport) || (context.local_transport.daily_budget_estimate * days);
+  } else if (context.budget?.local_transport) {
+    localTransportCost = Number(context.budget.local_transport);
+  } else {
+    localTransportCost = 350 * travelers * days;
+  }
+
+  const subtotal = transportSelection.cost + accommodationSelection.cost + foodSelection.cost + activityCost + localTransportCost;
   
   // Emergency fund = 10% of subtotal for unexpected expenses
   const emergencyFund = Math.round(subtotal * 0.1);
@@ -166,6 +176,7 @@ export async function runBudgetAgent(context: TripContext): Promise<BudgetBreakd
     accommodation: accommodationSelection.cost,
     food: foodSelection.cost,
     activities: activityCost,
+    local_transport: localTransportCost,
     emergency_fund: emergencyFund,
     total_cost_inr: totalCost,
     remaining_budget_inr: budget - totalCost,

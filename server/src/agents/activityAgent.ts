@@ -7,7 +7,7 @@ import { isHotelbedsConfigured } from '../mcp-servers/hotelbedsClient';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
-import { getActivityFallbackPrompt, getActivityEnrichmentPrompt, getActivityReasoningPrompt, getActivityFilteringPrompt } from '../prompts';
+import { getActivityFallbackPrompt, getActivityReasoningPrompt, getActivityFilteringPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -99,6 +99,17 @@ export const activityTool = tool(
 
     data = data || {};
     data.attraction_options = Array.isArray(data.attraction_options) ? data.attraction_options : [];
+    data.restaurant_options = Array.isArray(data.restaurant_options) ? data.restaurant_options : [];
+
+    // Fall back to LLM recommendations if the live search returns no tourist attractions or no restaurants
+    if (data.attraction_options.length === 0 || data.restaurant_options.length === 0) {
+      logger.info('Live provider returned empty results. Generating high-quality LLM recommendation fallbacks.');
+      const fallbackData = await generateRecommendationFallback(destination, interests, days);
+      data.attraction_options = [...data.attraction_options, ...fallbackData.attraction_options];
+      data.restaurant_options = [...data.restaurant_options, ...fallbackData.restaurant_options];
+      data.restaurants = [...(data.restaurants || []), ...fallbackData.restaurants];
+      data.attractions = [...(data.attractions || []), ...fallbackData.attractions];
+    }
 
     // Track original API names before LLM filtering (to reliably tag source_type)
     const originalApiNames = new Set<string>(
