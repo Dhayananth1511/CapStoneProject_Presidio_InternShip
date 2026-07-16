@@ -166,6 +166,16 @@ export default function ChatPage() {
       toast.success('✅ Google Calendar connected!');
       
       const syncCalendarAfterRedirect = async () => {
+        // Refresh session to pull down updated user hasCalendarLinked flag
+        try {
+          const refreshRes = await api.post('/auth/refresh');
+          if (refreshRes.data.user) {
+            useAuthStore.getState().setAuth(refreshRes.data.user, refreshRes.data.accessToken);
+          }
+        } catch (err) {
+          console.error('Failed to sync session profile on calendar OAuth callback:', err);
+        }
+
         if (context?.status === 'CONFIRMED') {
           try {
             toast.loading('Syncing trip to Google Calendar...', { id: 'calendar-sync' });
@@ -873,13 +883,29 @@ export default function ChatPage() {
           
           {/* Sub Header back button with Discard option + Google Calendar connect */}
           <div className={`p-3 border-b flex items-center justify-between shrink-0 ${isDark ? 'bg-slate-950/25 border-card-border' : 'bg-white/90 border-slate-200'}`}>
-            <Link
-              to="/dashboard"
-              className={`flex items-center gap-1.5 text-xs transition ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              <ArrowLeft className={`h-4 w-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-              Back to Trips
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/dashboard"
+                className={`flex items-center gap-1 text-xs transition ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                title="Back to Trips"
+              >
+                <ArrowLeft className={`h-4 w-4 ${isDark ? 'text-slate-400' : 'text-slate-505'}`} />
+                <span className="hidden sm:inline">Back to Trips</span>
+                <span className="sm:hidden">Back</span>
+              </Link>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 border rounded cursor-pointer transition ${
+                  isDark
+                    ? 'text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-slate-900 border-indigo-900/30'
+                    : 'text-indigo-650 hover:text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 border-indigo-200'
+                }`}
+                title="Hide Chat"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Hide Chat</span>
+              </button>
+            </div>
             {context && (
               <div className="flex items-center gap-2">
                 {/* Sync to Google Calendar — visible on PLANNED and CONFIRMED */}
@@ -898,7 +924,11 @@ export default function ChatPage() {
                     }`}
                   >
                     <Calendar className="h-3 w-3 shrink-0" />
-                    {context.status === 'CONFIRMED' ? '📅 Re-sync Calendar' : 'Sync Calendar'}
+                    {context.status === 'CONFIRMED' ? (
+                      context.booking?.refs?.calendar && context.booking?.refs?.calendar !== 'No calendar synced'
+                        ? '📅 Re-sync Calendar'
+                        : '📅 Sync Calendar'
+                    ) : 'Sync Calendar'}
                   </button>
                 )}
                 <span className={`text-xs font-semibold px-2 py-0.5 border rounded ${
@@ -906,14 +936,16 @@ export default function ChatPage() {
                 }`}>
                   ✈️ {context.input?.destination || 'Options'}
                 </span>
-                <button
-                  onClick={handleDeleteTrip}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-red-450 hover:text-red-400 transition px-2 py-1 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 hover:border-red-500/20 rounded cursor-pointer"
-                  title="Discard Trip Design"
-                >
-                  <Trash2 className="h-3 w-3 shrink-0" />
-                  Discard
-                </button>
+                {context.status !== 'CONFIRMED' && (
+                  <button
+                    onClick={handleDeleteTrip}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-red-450 hover:text-red-400 transition px-2 py-1 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 hover:border-red-500/20 rounded cursor-pointer"
+                    title="Discard Trip Design"
+                  >
+                    <Trash2 className="h-3 w-3 shrink-0" />
+                    Discard
+                  </button>
+                )}
               </div>
             )}
           </div>

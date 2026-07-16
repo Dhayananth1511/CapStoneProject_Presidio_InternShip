@@ -79,7 +79,7 @@ export const TripCard: React.FC<TripCardProps> = ({
       {/* Action footer */}
       <div className={`p-4 border-t flex items-center justify-between ${isDark ? 'bg-slate-900/40 border-card-border' : 'bg-slate-100 border-slate-205'}`}>
         <div>
-          {trip.status !== 'CANCELLED' && (
+          {trip.status !== 'CANCELLED' && trip.status !== 'CONFIRMED' && (
             <button
               onClick={() => handleCancelTrip(trip.sessionId, trip.input.destination || '')}
               disabled={cancelPending}

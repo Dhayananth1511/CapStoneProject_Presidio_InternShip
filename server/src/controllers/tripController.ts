@@ -276,16 +276,18 @@ export const getTripById = async (req: Request, res: Response): Promise<void> =>
 // DELETE /api/trips/:tripId — Cancel a trip
 export const cancelTrip = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await Trip.findOneAndUpdate(
-      { sessionId: req.params.tripId, userId: req.user!.userId },
-      { status: 'CANCELLED' },
-      { new: true }
-    );
-    // Return 404 if the trip didn't exist or doesn't belong to this user
-    if (!result) {
+    const trip = await Trip.findOne({ sessionId: req.params.tripId, userId: req.user!.userId });
+    if (!trip) {
       res.status(404).json({ message: 'Trip not found or already removed.' });
       return;
     }
+    if (trip.status === 'CONFIRMED') {
+      res.status(400).json({ message: 'Confirmed and booked trips cannot be cancelled or discarded.' });
+      return;
+    }
+    
+    trip.status = 'CANCELLED';
+    await trip.save();
     res.json({ message: 'Trip cancelled' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to cancel trip' });

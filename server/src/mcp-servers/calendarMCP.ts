@@ -26,10 +26,10 @@ export async function createCalendarEvent(
     // 1. If tokens are not supplied directly, fetch them from the User record in DB
     if (!tokens) {
       const user = await User.findOne({ email: userEmail });
-      if (user && user.googleRefreshToken) {
+      if (user && user.googleCalendarRefreshToken) {
         tokens = {
-          access_token: user.googleAccessToken,
-          refresh_token: user.googleRefreshToken,
+          access_token: user.googleCalendarAccessToken,
+          refresh_token: user.googleCalendarRefreshToken,
         };
       }
     }

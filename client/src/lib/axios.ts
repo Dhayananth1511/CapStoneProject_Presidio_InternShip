@@ -32,8 +32,12 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         );
-        // Update token in Zustand memory state
-        useAuthStore.getState().setToken(data.accessToken);
+        // Update both token and user in Zustand memory state
+        if (data.user) {
+          useAuthStore.getState().setAuth(data.user, data.accessToken);
+        } else {
+          useAuthStore.getState().setToken(data.accessToken);
+        }
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(originalRequest);
       } catch {

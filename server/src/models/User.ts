@@ -11,6 +11,8 @@ export interface IUser extends Document {
   googleId?: string;          // Google account unique ID — set on Google Sign-In
   googleAccessToken?: string;
   googleRefreshToken?: string;
+  googleCalendarAccessToken?: string;
+  googleCalendarRefreshToken?: string;
   longTermMemory: string;
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +43,8 @@ const UserSchema = new Schema<IUser>(
     googleId: { type: String, sparse: true, index: true }, // sparse: only index documents that have this field
     googleAccessToken: { type: String },
     googleRefreshToken: { type: String },
+    googleCalendarAccessToken: { type: String },
+    googleCalendarRefreshToken: { type: String },
     longTermMemory: {
       type: String,
       default: 'User is a first-time traveler. No preferences recorded yet.',

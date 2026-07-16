@@ -98,7 +98,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
-        hasCalendarLinked: !!user.googleRefreshToken,
+        hasCalendarLinked: !!user.googleCalendarRefreshToken,
       },
     });
   } catch (error: any) {
@@ -162,7 +162,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
-        hasCalendarLinked: !!user.googleRefreshToken,
+        hasCalendarLinked: !!user.googleCalendarRefreshToken,
       },
     });
   } catch (error: any) {
@@ -212,7 +212,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
-        hasCalendarLinked: !!user.googleRefreshToken,
+        hasCalendarLinked: !!user.googleCalendarRefreshToken,
       },
     });
   } catch (error: any) {
@@ -439,7 +439,7 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
         name: user.name,
         email: user.email,
         role: user.role,
-        hasCalendarLinked: String(!!user.googleRefreshToken),
+        hasCalendarLinked: String(!!user.googleCalendarRefreshToken),
       });
       res.redirect(`${clientUrl}/auth/callback?${params.toString()}`);
       return;
@@ -455,10 +455,10 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
     }
 
     const updateData: any = {
-      googleAccessToken: tokens.access_token || '',
+      googleCalendarAccessToken: tokens.access_token || '',
     };
     if (tokens.refresh_token) {
-      updateData.googleRefreshToken = tokens.refresh_token;
+      updateData.googleCalendarRefreshToken = tokens.refresh_token;
     }
 
     await User.findByIdAndUpdate(userId, updateData);

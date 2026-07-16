@@ -24,7 +24,7 @@ const queryClient = new QueryClient({
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
-  const { setToken, logout, user } = useAuthStore();
+  const { logout } = useAuthStore();
   const [authReady, setAuthReady] = useState(false);
 
   const hasRestored = useRef(false);
@@ -50,12 +50,7 @@ export default function App() {
         );
         // Rehydrate both token AND user profile from the server response
         if (data.accessToken && data.user) {
-          setToken(data.accessToken);
-          // If user profile is missing from sessionStorage (e.g. after hard refresh),
-          // restore it from the server's refresh response
-          if (!user) {
-            useAuthStore.getState().setAuth(data.user, data.accessToken);
-          }
+          useAuthStore.getState().setAuth(data.user, data.accessToken);
         }
       } catch {
         // No valid refresh cookie — clear any stale session state and stay logged out
