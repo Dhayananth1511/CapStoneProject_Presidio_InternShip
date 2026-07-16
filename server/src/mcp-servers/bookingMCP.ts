@@ -6,7 +6,6 @@
 
 import { createHash } from 'crypto';
 import { withRetry } from '../utils/retry';
-import { getHotelsNearby } from './mapsMCP';
 
 const HOTELBEDS_API_KEY = process.env.HOTELBEDS_API_KEY;
 const HOTELBEDS_API_SECRET = process.env.HOTELBEDS_API_SECRET;
@@ -21,7 +20,7 @@ interface HotelOption {
   stars?: number;
   address?: string;
   description?: string;
-  source_type?: 'hotelbeds_api' | 'geoapify_places' | 'llm_recommendation';
+  source_type?: 'hotelbeds_api' | 'llm_recommendation';
 }
 
 // ---------------------------------------------------------------------------
@@ -366,16 +365,9 @@ export async function searchHotels(
         }
       }
 
-      // If Hotelbeds isn't configured or returned no results, query Geoapify for accommodation
+      // If Hotelbeds isn't configured or returned no results, fall through to LLM recommendations
       if (hotels.length === 0) {
-        console.info(`[bookingMCP] No Hotelbeds hotels resolved for '${destination}'. Querying Geoapify for accommodation...`);
-        const geoapifyHotels = await getHotelsNearby(destination, nights);
-        if (geoapifyHotels && geoapifyHotels.length > 0) {
-          hotels = geoapifyHotels.map((h: any) => ({ ...h, source_type: 'geoapify_places' as const }));
-          console.info(`[bookingMCP] Loaded ${hotels.length} hotels from Geoapify Places API.`);
-        } else {
-          console.warn(`[bookingMCP] Geoapify accommodation search returned 0 results for '${destination}'.`);
-        }
+        console.info(`[bookingMCP] No Hotelbeds hotels resolved for '${destination}'. LLM recommendations will be used.`);
       }
     } catch (err: any) {
       console.warn(`[bookingMCP] Hotel search failed: ${err.message}`);

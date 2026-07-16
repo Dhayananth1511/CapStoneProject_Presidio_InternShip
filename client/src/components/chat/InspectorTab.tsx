@@ -130,6 +130,9 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
               const attrLLM = (context.activities.attraction_options || []).some(
                 (a: any) => a.source_type === 'llm_recommendation' || a.is_llm_recommended
               );
+              const attrHB = (context.activities.attraction_options || []).some(
+                (a: any) => a.source_type === 'hotelbeds_api'
+              );
               return (
                 <div className="flex flex-col gap-1">
                   <span className={`text-[9px] font-bold uppercase ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>🎡 Places & Dining</span>
@@ -139,12 +142,17 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                         🗺️ Geoapify Places
                       </span>
                     )}
+                    {attrHB && (
+                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 border border-blue-400/30 text-blue-600 dark:text-blue-400 leading-none uppercase tracking-wide">
+                        🏨 Hotelbeds Activities
+                      </span>
+                    )}
                     {attrLLM && (
                       <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 text-amber-700 dark:text-amber-400 leading-none uppercase tracking-wide">
                         💡 LLM Fallback
                       </span>
                     )}
-                    {!attrSrc && !restSrc && !attrLLM && (
+                    {!attrSrc && !restSrc && !attrLLM && !attrHB && (
                       <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 leading-none uppercase tracking-wide">
                         Pending
                       </span>
@@ -674,10 +682,11 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
               );
               const hasBreakfast = hotelAmenities.some((a: string) => a.toLowerCase().includes('breakfast'));
 
+              // Merge restaurant options from all sources (Geoapify, Hotelbeds, LLM)
               const nearbyRestaurants = Array.isArray(context.activities?.restaurant_options)
-                ? context.activities.restaurant_options.slice(0, 5)
+                ? context.activities.restaurant_options.slice(0, 6)
                 : (Array.isArray(context.activities?.restaurants)
-                  ? context.activities.restaurants.slice(0, 5).map((name: string) => ({ name }))
+                  ? context.activities.restaurants.slice(0, 6).map((name: string) => ({ name, source_type: 'llm_recommendation' }))
                   : []);
 
               const hasDiningData = inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast || nearbyRestaurants.length > 0;
@@ -685,66 +694,87 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
 
               return (
                 <div className={`mt-3 rounded-xl border p-3 space-y-3 ${
-                  isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-205 bg-white'
-                }`}>
+                isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-205 bg-white'
+              }`}>
+                <div className="flex items-center justify-between">
                   <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
                     isDark ? 'text-slate-400' : 'text-slate-500'
                   }`}>
                     🍽️ Dining Options
                   </p>
+                  {/* Data source legend for dining */}
+                  <div className="flex gap-1 flex-wrap">
+                    {nearbyRestaurants.some((r: any) => r.source_type === 'geoapify_places') && (
+                      <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-700 dark:text-emerald-400 leading-none uppercase tracking-wide">
+                        🗺️ Geo
+                      </span>
+                    )}
+                    {nearbyRestaurants.some((r: any) => r.source_type === 'llm_recommendation' || !r.source_type) && (
+                      <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 text-amber-700 dark:text-amber-400 leading-none uppercase tracking-wide">
+                        💡 AI
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                  {/* In-hotel Dining */}
-                  {(inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast) && (
-                    <div className="space-y-1.5">
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
-                        isDark ? 'text-indigo-400' : 'text-indigo-655'
-                      }`}>🔑 In-Hotel Dining ({selectedHotel?.name || 'Selected Hotel'})</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {hasRoomService && (
-                          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                            isDark ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-450' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          }`}>
-                            🚪 Room Service
-                          </span>
-                        )}
-                        {hasRestaurant && (
-                          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                            isDark ? 'bg-amber-955/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-emerald-700'
-                          }`}>
-                            🍴 On-Site Restaurant
-                          </span>
-                        )}
-                        {hasBreakfast && (
-                          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                            isDark ? 'bg-sky-955/35 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
-                          }`}>
-                            🍳 Breakfast Included
-                          </span>
-                        )}
-                        {inHotelDining.filter((a: string) => !['room service', 'restaurant', 'breakfast'].some(k => a.toLowerCase().includes(k))).map((amenity: string, i: number) => (
-                          <span key={i} className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
-                            isDark ? 'bg-slate-950/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
-                          }`}>
-                            {amenity}
-                          </span>
-                        ))}
-                      </div>
-                      {!hasRoomService && !hasRestaurant && !hasBreakfast && (
-                        <p className={`text-[9.5px] italic ${
-                          isDark ? 'text-slate-505' : 'text-slate-400'
-                        }`}>No in-hotel dining amenities listed — verify with hotel on check-in.</p>
+                {/* In-hotel Dining */}
+                {(inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast) && (
+                  <div className="space-y-1.5">
+                    <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
+                      isDark ? 'text-indigo-400' : 'text-indigo-655'
+                    }`}>🔑 In-Hotel Dining ({selectedHotel?.name || 'Selected Hotel'})</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {hasRoomService && (
+                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                          isDark ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-450' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        }`}>
+                          🛊Room Service
+                        </span>
                       )}
+                      {hasRestaurant && (
+                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                          isDark ? 'bg-amber-955/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-emerald-700'
+                        }`}>
+                          🍴 On-Site Restaurant
+                        </span>
+                      )}
+                      {hasBreakfast && (
+                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                          isDark ? 'bg-sky-955/35 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
+                        }`}>
+                          🍳 Breakfast Included
+                        </span>
+                      )}
+                      {inHotelDining.filter((a: string) => !['room service', 'restaurant', 'breakfast'].some(k => a.toLowerCase().includes(k))).map((amenity: string, i: number) => (
+                        <span key={i} className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
+                          isDark ? 'bg-slate-950/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
+                        }`}>
+                          {amenity}
+                        </span>
+                      ))}
                     </div>
-                  )}
+                    {!hasRoomService && !hasRestaurant && !hasBreakfast && (
+                      <p className={`text-[9.5px] italic ${
+                        isDark ? 'text-slate-505' : 'text-slate-400'
+                      }`}>No in-hotel dining amenities listed — verify with hotel on check-in.</p>
+                    )}
+                  </div>
+                )}
 
-                  {/* Nearby Restaurants */}
-                  {nearbyRestaurants.length > 0 && (
-                    <div className="space-y-1.5">
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
-                        isDark ? 'text-amber-400' : 'text-amber-700'
-                      }`}>🍱 Nearby Restaurants</p>
-                      <div className="flex flex-col gap-1">
-                        {nearbyRestaurants.map((r: any, i: number) => (
+                {/* Nearby Restaurants — mixed sources */}
+                {nearbyRestaurants.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
+                      isDark ? 'text-amber-400' : 'text-amber-700'
+                    }`}>🍱 Nearby Restaurants</p>
+                    <div className="flex flex-col gap-1">
+                      {nearbyRestaurants.map((r: any, i: number) => {
+                        const srcBadge = r.source_type === 'geoapify_places'
+                          ? { label: '🗺️ Geo', cls: isDark ? 'bg-emerald-950/30 border-emerald-800/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700' }
+                          : r.source_type === 'hotelbeds_api'
+                          ? { label: '🏨 HB', cls: isDark ? 'bg-blue-950/30 border-blue-800/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-700' }
+                          : { label: '💡 AI', cls: isDark ? 'bg-amber-950/30 border-amber-800/30 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700' };
+                        return (
                           <a
                             key={i}
                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.name || r) + ' restaurant ' + (context.input?.destination || ''))}`}
@@ -761,16 +791,20 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
                               {r.rating && (
                                 <span className="text-amber-500 text-[9px] font-bold">⭐ {r.rating}</span>
                               )}
+                              <span className={`text-[7.5px] font-bold px-1 py-0.5 rounded border leading-none ${srcBadge.cls}`}>
+                                {srcBadge.label}
+                              </span>
                               <ArrowUpRight className="h-3 w-3 text-slate-400 shrink-0" />
                             </span>
                           </a>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           </div>
         </div>
       )}
@@ -945,16 +979,36 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
       {/* ACTIVITIES SPECIALIST ATTENTION */}
       {context.activities && (
         <div className="premium-card rounded-xl p-4 space-y-2">
-          <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
-            isDark ? 'text-indigo-400' : 'text-indigo-700'
-          }`}>
-            🎡 Sightseeing Specialist Agent
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
+              isDark ? 'text-indigo-400' : 'text-indigo-700'
+            }`}>
+              🎡 Sightseeing Specialist Agent
+            </h4>
+            {/* Source legend for sightseeing */}
+            <div className="flex gap-1 flex-wrap">
+              {(context.activities.attraction_options || []).some((a: any) => a.source_type === 'geoapify_places') && (
+                <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-700 dark:text-emerald-400 leading-none uppercase tracking-wide">
+                  🗺️ Geo
+                </span>
+              )}
+              {(context.activities.attraction_options || []).some((a: any) => a.source_type === 'hotelbeds_api') && (
+                <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-blue-500/15 border border-blue-400/30 text-blue-600 dark:text-blue-400 leading-none uppercase tracking-wide">
+                  🏨 HB
+                </span>
+              )}
+              {(context.activities.attraction_options || []).some((a: any) => a.source_type === 'llm_recommendation' || a.is_llm_recommended) && (
+                <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 text-amber-700 dark:text-amber-400 leading-none uppercase tracking-wide">
+                  💡 AI
+                </span>
+              )}
+            </div>
+          </div>
 
           {Array.isArray(context.activities.attraction_options) && context.activities.attraction_options.length > 0 ? (
             <div className="space-y-3 pt-1">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                📌 Curated Places of Interest
+                📍 Curated Places of Interest
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {context.activities.attraction_options.map((opt: any, idx: number) => {

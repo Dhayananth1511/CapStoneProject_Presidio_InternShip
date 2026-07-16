@@ -56,7 +56,7 @@ export async function getCoordinates(placeName: string): Promise<{ lat: number; 
       logger.warn(`[mapsMCP] Geoapify geocoding failed for '${placeName}': ${err.message}. Routing to LLM fallback.`);
     }
   }
-  
+
   // LLM fallback for Geocoding
   return await getCoordinatesFromLLM(placeName);
 }
@@ -66,7 +66,7 @@ async function getCoordinatesFromLLM(placeName: string): Promise<{ lat: number; 
     const systemPrompt = `You are a geographical data extractor. Given a place name, return its latitude and longitude. 
 Response must be a single, raw JSON object with exactly two keys: 'lat' and 'lon' (numbers). No markdown code block wraps, no explanation.
 Example: {"lat": 13.0827, "lon": 80.2707}`;
-    
+
     const response = await llm.invoke([
       new SystemMessage(systemPrompt),
       new HumanMessage(`Place: ${placeName}`)
@@ -88,20 +88,20 @@ export async function getPlacesNearby(
   destination: string,
   interests: string[],
   days: number
-): Promise<{ 
-  attractions: string[]; 
-  restaurants: string[]; 
-  restaurant_options: Array<{ name: string; rating: number; price_level?: number; user_ratings_total?: number; source_type?: string }>; 
+): Promise<{
+  attractions: string[];
+  restaurants: string[];
+  restaurant_options: Array<{ name: string; rating: number; price_level?: number; user_ratings_total?: number; source_type?: string }>;
   attraction_options: Array<{ name: string; rating: number; user_ratings_total?: number; photo_reference?: string | null; place_id?: string | null; vicinity?: string | null; types?: string[]; source_type?: string }>;
-  timings: string; 
-  entry_fees: string; 
+  timings: string;
+  entry_fees: string;
   source_status?: 'google_places_live' | 'live_fetch_failed';
 }> {
   const apiKey = process.env.GEOAPIFY_API_KEY;
   if (apiKey && !apiKey.includes('REPLACE_WITH')) {
     try {
       const coords = await getCoordinates(destination);
-      
+
       // Fetch restaurants
       const restUrl = `https://api.geoapify.com/v2/places?categories=catering.restaurant,catering.cafe&filter=circle:${coords.lon},${coords.lat},15000&limit=15&apiKey=${apiKey}`;
       const restRes = await fetch(restUrl);
@@ -279,7 +279,7 @@ Example: {"restaurants": ["Sangeetha Veg", "Saravana Bhavan"], "restaurant_optio
   } catch (err) {
     logger.error(`[mapsMCP] LLM restaurants fallback failed for ${hotelName} near ${destination}:`, err);
   }
-  
+
   return {
     restaurants: [],
     restaurant_options: []
@@ -303,12 +303,12 @@ export async function getHotelsNearby(
           const hotelOptions = data.features.filter((feat: any) => feat.properties.name).map((feat: any) => {
             const rating = parseFloat((3.8 + Math.random() * 1.1).toFixed(1));
             const stars = Math.min(5, Math.max(2, Math.round(rating)));
-            const price_per_night_inr = stars === 5 
+            const price_per_night_inr = stars === 5
               ? Math.round(15000 + Math.random() * 8000)
               : stars === 4
-              ? Math.round(7000 + Math.random() * 5000)
-              : Math.round(2500 + Math.random() * 3000);
-            
+                ? Math.round(7000 + Math.random() * 5000)
+                : Math.round(2500 + Math.random() * 3000);
+
             const amenities = ['WiFi', 'AC', 'Room Service'];
             if (stars >= 4) amenities.push('Restaurant', 'Parking');
             if (stars === 5) amenities.push('Pool', 'Spa', 'Gym');
@@ -321,7 +321,8 @@ export async function getHotelsNearby(
               total_cost_inr: price_per_night_inr * nights,
               stars,
               address: feat.properties.formatted || feat.properties.address_line2 || destination,
-              description: `A prime accommodation located in ${destination}`
+              description: `A prime accommodation located in ${destination}`,
+              source_type: 'geoapify_places' as const,
             };
           });
           if (hotelOptions.length > 0) {
@@ -381,12 +382,12 @@ export async function getTransitDirections(
 ): Promise<TransitDirectionsInfo> {
   const apiKey = process.env.GEOAPIFY_API_KEY;
   let result: { distance_km: number; duration_min: number; steps: string[] } | null = null;
-  
+
   if (apiKey && !apiKey.includes('REPLACE_WITH')) {
     try {
       const originCoords = await getCoordinates(origin);
       const destCoords = await getCoordinates(destination);
-      
+
       const waypoints = `${originCoords.lat},${originCoords.lon}|${destCoords.lat},${destCoords.lon}`;
       const url = `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${apiKey}`;
       const res = await fetch(url);
@@ -396,7 +397,7 @@ export async function getTransitDirections(
           const properties = data.features[0].properties;
           const distance_km = parseFloat((properties.distance / 1000).toFixed(1));
           const duration_min = Math.round(properties.time / 60);
-          
+
           const steps: string[] = [];
           if (Array.isArray(properties.legs)) {
             properties.legs.forEach((leg: any) => {
@@ -422,7 +423,7 @@ export async function getTransitDirections(
   }
 
   const cab_estimate_inr = Math.round(result.distance_km * 25);
-  
+
   return {
     transit_summary: `Commute via drive route (${result.distance_km} km)`,
     steps: result.steps,
@@ -466,13 +467,12 @@ Example: {"distance_km": 15.2, "duration_min": 32, "steps": ["Head north on Main
   } catch (err) {
     logger.error(`[mapsMCP] LLM routing fallback failed for ${origin} -> ${destination}:`, err);
   }
-  
-  // Deterministic backup if LLM fails
-  const mockDistance = 12.0;
-  const mockDuration = 25;
+
+  // Deterministic backup if LLM fails — use an LLM-agnostic estimate instead of a hard constant
+  // We return a minimal, honest placeholder — no fabricated distances.
   return {
-    distance_km: mockDistance,
-    duration_min: mockDuration,
-    steps: [`Commute from ${origin} to ${destination} via local auto/cab.`]
+    distance_km: 0,
+    duration_min: 0,
+    steps: [`Routing data unavailable. Please check directions from ${origin} to ${destination} locally.`]
   };
 }

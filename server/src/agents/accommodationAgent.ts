@@ -1,11 +1,8 @@
-// Accommodation Agent — search hotels and categorize by price tier.
-// Categories: Budget (<₹5000/night), Mid-Range (₹5000-₹15000/night), Luxury (>₹15000/night)
-// Only real API data is returned — no fallback templates.
-
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { searchHotels } from '../mcp-servers/bookingMCP';
+import { getHotelsNearby } from '../mcp-servers/mapsMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
@@ -58,6 +55,7 @@ async function generateAccommodationFallback(
         address: h.address || destination,
         description: h.description || 'A cozy local stay.',
         is_llm_recommended: true,
+        source_type: 'llm_recommendation' as const,
       }));
     }
   } catch (error) {
@@ -71,8 +69,28 @@ export const accommodationTool = tool(
     logger.debug('Accommodation tool fetching from MCP', { destination, check_in, check_out, travelers, tier, max_price_per_night });
     const data = await searchHotels(destination, check_in, check_out, travelers);
 
+    const nights = Math.max(
+      1,
+      (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Also fetch Geoapify hotels and merge them in (deduped by name)
+    let geoapifyHotels: any[] = [];
+    try {
+      geoapifyHotels = await getHotelsNearby(destination, nights);
+      logger.info(`[accommodationAgent] Geoapify returned ${geoapifyHotels.length} hotels for ${destination}`);
+    } catch (geoErr: any) {
+      logger.warn(`[accommodationAgent] Geoapify hotel lookup failed: ${geoErr.message}`);
+    }
+
+    // Merge: start from Hotelbeds, then add non-duplicate Geoapify hotels
+    const existingNames = new Set((data.hotels || []).map((h: any) => h.name.toLowerCase()));
+    const uniqueGeoapify = geoapifyHotels.filter((h: any) => !existingNames.has(h.name.toLowerCase()));
+    data.hotels = [...(data.hotels || []), ...uniqueGeoapify];
+
+    // If both Hotelbeds and Geoapify returned nothing, fall back to LLM recommendations
     if (!data.hotels || data.hotels.length === 0) {
-      logger.info('No API hotel matches for destination; triggering LLM fallback recommendations', { destination });
+      logger.info('No API hotel data from Hotelbeds or Geoapify; triggering LLM fallback recommendations', { destination });
       data.hotels = await generateAccommodationFallback(destination, check_in, check_out, travelers, max_price_per_night);
     }
 
@@ -104,11 +122,6 @@ export const accommodationTool = tool(
       logger.error('Accommodation Agent reasoning analysis failed', err);
       reasoning = 'Lodgings are chosen near primary destination routes.';
     }
-
-    const nights = Math.max(
-      1,
-      (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
-    );
 
     // ── STRICT PRICE-BASED CATEGORY THRESHOLDS ──────────────────────────────
     // Default categories: Budget (<₹5000/night), Mid-Range (₹5000-₹15000/night), Luxury (>₹15000/night)

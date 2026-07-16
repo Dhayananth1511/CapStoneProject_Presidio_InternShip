@@ -10,7 +10,8 @@ interface Attraction {
   photo_reference?: string;
   place_id?: string;
   is_llm_recommended?: boolean;
-  source_type?: 'geoapify_places' | 'llm_recommendation';
+  source_type?: 'geoapify_places' | 'llm_recommendation' | 'hotelbeds_api';
+  price_per_person_inr?: number;
 }
 
 interface AttractionCardProps {
@@ -91,11 +92,15 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
         <div className="absolute top-2 left-2 flex items-center">
           {(item.is_llm_recommended || item.source_type === 'llm_recommendation') ? (
             <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
-              💡 AI Recommendation
+              💡 AI Rec
+            </span>
+          ) : item.source_type === 'hotelbeds_api' ? (
+            <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-blue-600 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
+              🏨 Hotelbeds
             </span>
           ) : (
             <span className="text-[8px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-md uppercase tracking-wider backdrop-blur-sm bg-opacity-95">
-              🗺️ Geoapify Live
+              🗺️ Geoapify
             </span>
           )}
         </div>
@@ -166,8 +171,14 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
             </span>
           </div>
 
-          {/* Reviews Count */}
-          {item.user_ratings_total !== undefined && item.user_ratings_total > 0 && (
+          {/* Price per person if available */}
+          {item.price_per_person_inr ? (
+            <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border leading-none ${
+              isDark ? 'bg-emerald-950/30 border-emerald-800/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}>
+              ₹{item.price_per_person_inr.toLocaleString()}/person
+            </span>
+          ) : item.user_ratings_total !== undefined && item.user_ratings_total > 0 ? (
             <span
               className={`text-[8.5px] font-semibold font-mono ${
                 isDark ? 'text-slate-500' : 'text-slate-455'
@@ -175,7 +186,7 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
             >
               ({item.user_ratings_total.toLocaleString()} reviews)
             </span>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

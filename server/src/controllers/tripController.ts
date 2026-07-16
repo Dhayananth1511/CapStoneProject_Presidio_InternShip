@@ -412,45 +412,47 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
       trip.status = 'DRAFT';
       const altMessage = `⚠️ **Budget Constraint Exceeded with hotel selection!**\n\nYour selected hotel **${selectedHotel.name}** exceeds your budget limit of **₹${trip.input.budget_inr?.toLocaleString()}**. The updated total estimated cost is now **₹${newBudget.total_cost_inr?.toLocaleString()}**.\n\nYou can select a cheaper option or adjust your budget ceiling.`;
       trip.conversationHistory.push({ role: 'assistant', content: altMessage });
+      
+      trip.formattedPlan = `⚠️ **Budget Constraint Exceeded!**\n\nThe selected hotel **${selectedHotel.name}** exceeds your budget ceiling of **₹${trip.input.budget_inr?.toLocaleString()}** by **₹${Math.abs(newBudget.remaining_budget_inr || 0).toLocaleString()}**.\n\nPlease select a cheaper option or increase your budget size to resolve this and generate the plan properly.`;
     } else {
       trip.status = 'PLANNED';
       const successMessage = category === 'skipped'
         ? `🏨 Accommodation has been skipped (Self Arranged). The updated total trip cost is **₹${newBudget.total_cost_inr?.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`
         : `🏨 Selected **${selectedHotel.name}** (${category.toUpperCase()} tier). The updated total trip cost is **₹${newBudget.total_cost_inr.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`;
       trip.conversationHistory.push({ role: 'assistant', content: successMessage });
-    }
 
-    // Regenerate travel plan markdown to reflect the selected hotel and final budget calculation
-    try {
-      const tempContext = trip.toObject() as any;
-      tempContext.itinerary = updatedItinerary;
-      tempContext.budget = finalBudget;
-      tempContext.local_transport = finalLocalTransport;
-      
-      const newFormattedPlan = await synthesizeTripPlan(tempContext);
-      trip.formattedPlan = newFormattedPlan;
+      // Regenerate travel plan markdown to reflect the selected hotel and final budget calculation
+      try {
+        const tempContext = trip.toObject() as any;
+        tempContext.itinerary = updatedItinerary;
+        tempContext.budget = finalBudget;
+        tempContext.local_transport = finalLocalTransport;
+        
+        const newFormattedPlan = await synthesizeTripPlan(tempContext);
+        trip.formattedPlan = newFormattedPlan;
 
-      // Find the last assistant message and update it
-      let updatedPlanInHistory = false;
-      if (Array.isArray(trip.conversationHistory)) {
-        for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
-          if (trip.conversationHistory[i].role === 'assistant' && 
-              (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
-               trip.conversationHistory[i].content.includes('## ✈️') ||
-               trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
-            trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
-            updatedPlanInHistory = true;
-            break;
+        // Find the last assistant message and update it
+        let updatedPlanInHistory = false;
+        if (Array.isArray(trip.conversationHistory)) {
+          for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
+            if (trip.conversationHistory[i].role === 'assistant' && 
+                (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
+                 trip.conversationHistory[i].content.includes('## ✈️') ||
+                 trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
+              trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
+              updatedPlanInHistory = true;
+              break;
+            }
+          }
+          if (!updatedPlanInHistory) {
+            trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
           }
         }
-        if (!updatedPlanInHistory) {
-          trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
+      } catch (synthErr) {
+        logger.error('Failed to synthesize plan in select-hotel', synthErr);
+        if (oldHotelName && oldHotelName !== hotelName && trip.formattedPlan) {
+          trip.formattedPlan = trip.formattedPlan.split(oldHotelName).join(hotelName);
         }
-      }
-    } catch (synthErr) {
-      logger.error('Failed to synthesize plan in select-hotel', synthErr);
-      if (oldHotelName && oldHotelName !== hotelName && trip.formattedPlan) {
-        trip.formattedPlan = trip.formattedPlan.split(oldHotelName).join(hotelName);
       }
     }
 
@@ -595,41 +597,43 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
       trip.status = 'DRAFT';
       const altMessage = `⚠️ **Budget Constraint Exceeded with transport selection!**\n\nYour selected transport **${selectedOption.operator} (${selectedOption.mode})** exceeds your budget limit of **₹${trip.input.budget_inr?.toLocaleString()}**. The updated total estimated cost is now **₹${newBudget.total_cost_inr?.toLocaleString()}**.\n\nYou can select a cheaper option or adjust your budget ceiling.`;
       trip.conversationHistory.push({ role: 'assistant', content: altMessage });
+      
+      trip.formattedPlan = `⚠️ **Budget Constraint Exceeded!**\n\nThe selected transport **${selectedOption.operator} (${selectedOption.mode})** exceeds your budget ceiling of **₹${trip.input.budget_inr?.toLocaleString()}** by **₹${Math.abs(newBudget.remaining_budget_inr || 0).toLocaleString()}**.\n\nPlease select a cheaper option or increase your budget size to resolve this and generate the plan properly.`;
     } else {
       trip.status = 'PLANNED';
       const successMessage = `🎫 Selected **${selectedOption.operator} (${selectedOption.mode})**. The updated total trip cost is **₹${newBudget.total_cost_inr.toLocaleString()}** (within your ₹${trip.input.budget_inr?.toLocaleString()} budget).`;
       trip.conversationHistory.push({ role: 'assistant', content: successMessage });
-    }
 
-    // Regenerate travel plan markdown to reflect the selected transport and final budget calculation
-    try {
-      const tempContext = trip.toObject() as any;
-      tempContext.itinerary = trip.itinerary;
-      tempContext.budget = trip.budget;
-      tempContext.local_transport = trip.local_transport;
-      
-      const newFormattedPlan = await synthesizeTripPlan(tempContext);
-      trip.formattedPlan = newFormattedPlan;
+      // Regenerate travel plan markdown to reflect the selected transport and final budget calculation
+      try {
+        const tempContext = trip.toObject() as any;
+        tempContext.itinerary = trip.itinerary;
+        tempContext.budget = trip.budget;
+        tempContext.local_transport = trip.local_transport;
+        
+        const newFormattedPlan = await synthesizeTripPlan(tempContext);
+        trip.formattedPlan = newFormattedPlan;
 
-      // Find the last assistant message and update it
-      let updatedPlanInHistory = false;
-      if (Array.isArray(trip.conversationHistory)) {
-        for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
-          if (trip.conversationHistory[i].role === 'assistant' && 
-              (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
-               trip.conversationHistory[i].content.includes('## ✈️') ||
-               trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
-            trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
-            updatedPlanInHistory = true;
-            break;
+        // Find the last assistant message and update it
+        let updatedPlanInHistory = false;
+        if (Array.isArray(trip.conversationHistory)) {
+          for (let i = trip.conversationHistory.length - 1; i >= 0; i--) {
+            if (trip.conversationHistory[i].role === 'assistant' && 
+                (trip.conversationHistory[i].content.includes('Here is your trip plan:') || 
+                 trip.conversationHistory[i].content.includes('## ✈️') ||
+                 trip.conversationHistory[i].content.includes('## ✈️ Trip to'))) {
+              trip.conversationHistory[i].content = `Here is your trip plan:\n\n${newFormattedPlan}`;
+              updatedPlanInHistory = true;
+              break;
+            }
+          }
+          if (!updatedPlanInHistory) {
+            trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
           }
         }
-        if (!updatedPlanInHistory) {
-          trip.conversationHistory.push({ role: 'assistant', content: `Here is your trip plan:\n\n${newFormattedPlan}` });
-        }
+      } catch (synthErr) {
+        logger.error('Failed to regenerate travel plan synthesized markdown in selectTransport', synthErr);
       }
-    } catch (synthErr) {
-      logger.error('Failed to regenerate travel plan synthesized markdown in selectTransport', synthErr);
     }
 
     // Save changes to database

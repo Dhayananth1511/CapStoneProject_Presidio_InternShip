@@ -79,6 +79,7 @@ export const activityTool = tool(
           vicinity: `Hotelbeds Activity (${act.categories?.join(', ') || 'Sightseeing'})`,
           photo_reference: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80',
           price_per_person_inr: act.price_per_person_inr,
+          source_type: 'hotelbeds_api' as const,
         }));
         data = {
           ...hbData,
