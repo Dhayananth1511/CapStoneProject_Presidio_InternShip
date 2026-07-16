@@ -10,6 +10,7 @@ import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
 import { isMessageSafe } from '../utils/inputSanitizer';
+import { createCalendarEvent } from '../mcp-servers/calendarMCP';
 
 const cleanCityName = (value?: string): string | undefined => {
   if (!value) return undefined;
@@ -732,5 +733,70 @@ export const getPlacePhoto = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     logger.error('Failed to proxy place photo', { error });
     res.status(500).json({ message: 'Failed to proxy place photo.' });
+  }
+};
+
+// POST /api/trips/:tripId/sync-calendar — Sync already confirmed trip to Google Calendar
+export const syncCalendar = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { tripId } = req.params;
+    const userId = req.user!.userId;
+
+    const trip = await Trip.findOne({ sessionId: tripId, userId });
+    if (!trip) {
+      res.status(404).json({ success: false, message: 'Trip not found' });
+      return;
+    }
+
+    if (trip.status !== 'CONFIRMED') {
+      res.status(400).json({ success: false, message: 'Only confirmed trips can be synced to Google Calendar.' });
+      return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    const context = trip.toObject() as any;
+
+    try {
+      const calendarResult = await createCalendarEvent(
+        context.input.destination || 'India Tour',
+        context.input.start_date!,
+        context.input.end_date!,
+        user.email
+      );
+
+      if (calendarResult.success && calendarResult.eventId) {
+        // Update trip's booking references in database
+        const refs = trip.booking?.refs || {};
+        refs.calendar = calendarResult.eventId;
+        trip.booking = {
+          ...trip.booking,
+          refs,
+          confirmed_at: trip.booking?.confirmed_at || new Date(),
+        };
+        await trip.save();
+
+        res.json({
+          success: true,
+          message: calendarResult.message,
+          calendarEventId: calendarResult.eventId,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: calendarResult.message || 'Failed to sync calendar (account might not be connected).'
+        });
+      }
+    } catch (calendarErr: any) {
+      logger.error('Google Calendar event creation failed during manual sync', calendarErr);
+      res.status(500).json({ success: false, message: calendarErr.message || 'Calendar event creation failed.' });
+    }
+  } catch (error: any) {
+    logger.error('Failed to sync calendar', { error });
+    res.status(500).json({ success: false, message: 'Failed to sync calendar.' });
   }
 };

@@ -20,6 +20,7 @@ import {
 
 import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
+import { useAuthStore } from '../store/authStore';
 
 
 
@@ -156,8 +157,43 @@ export default function ChatPage() {
   // Handle Google OAuth callback query params (success/denied/error)
   useEffect(() => {
     const googleAuth = searchParams.get('google_auth');
+    if (!googleAuth) return;
+
     if (googleAuth === 'success') {
-      toast.success('✅ Google Calendar connected! Your trips will now sync automatically.');
+      // Wait for context to load if tripId is active
+      if (tripId && !context) return;
+
+      toast.success('✅ Google Calendar connected!');
+      
+      const syncCalendarAfterRedirect = async () => {
+        if (context?.status === 'CONFIRMED') {
+          try {
+            toast.loading('Syncing trip to Google Calendar...', { id: 'calendar-sync' });
+            const syncRes = await api.post(`/trips/${tripId}/sync-calendar`);
+            if (syncRes.data.success) {
+              toast.success('📅 Trip successfully synced to Google Calendar!', { id: 'calendar-sync' });
+              if (syncRes.data.calendarEventId) {
+                setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.data.calendarEventId } : { calendar: syncRes.data.calendarEventId });
+                setContext((prev: any) => prev ? {
+                  ...prev,
+                  booking: {
+                    ...prev.booking,
+                    refs: { ...prev.booking?.refs, calendar: syncRes.data.calendarEventId }
+                  }
+                } : prev);
+              }
+            } else {
+              toast.error(syncRes.data.message || 'Auto-sync failed.', { id: 'calendar-sync' });
+            }
+          } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Auto-sync failed.', { id: 'calendar-sync' });
+          }
+        } else {
+          toast('✅ Google Calendar connected! Your trip will sync automatically once confirmed.', { icon: '📅' });
+        }
+      };
+
+      syncCalendarAfterRedirect();
       setSearchParams((prev) => { prev.delete('google_auth'); return prev; });
     } else if (googleAuth === 'denied') {
       toast('Google Calendar connection was cancelled.', { icon: '🔕' });
@@ -166,7 +202,7 @@ export default function ChatPage() {
       toast.error('Google Calendar connection failed. Please try again.');
       setSearchParams((prev) => { prev.delete('google_auth'); return prev; });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, context, tripId]);
 
   // Scroll to bottom whenever messages update
   useEffect(() => {
@@ -448,10 +484,40 @@ export default function ChatPage() {
     chatMutation.mutate({ message: finalMessage, tripId });
   };
 
-  // Trigger Google Calendar OAuth flow
+  // Trigger Google Calendar OAuth flow or Sync immediately if already connected
   const handleConnectCalendar = async () => {
+    const user = useAuthStore.getState().user;
+    if (user?.hasCalendarLinked) {
+      if (context?.status === 'CONFIRMED') {
+        try {
+          toast.loading('Syncing trip to Google Calendar...', { id: 'calendar-sync-direct' });
+          const syncRes = await api.post(`/trips/${tripId}/sync-calendar`);
+          if (syncRes.data.success) {
+            toast.success('📅 Trip successfully synced to Google Calendar!', { id: 'calendar-sync-direct' });
+            if (syncRes.data.calendarEventId) {
+              setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.data.calendarEventId } : { calendar: syncRes.data.calendarEventId });
+              setContext((prev: any) => prev ? {
+                ...prev,
+                booking: {
+                  ...prev.booking,
+                  refs: { ...prev.booking?.refs, calendar: syncRes.data.calendarEventId }
+                }
+              } : prev);
+            }
+          } else {
+            toast.error(syncRes.data.message || 'Failed to sync calendar event.', { id: 'calendar-sync-direct' });
+          }
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || 'Failed to sync calendar event.', { id: 'calendar-sync-direct' });
+        }
+      } else {
+        toast('✅ Google Calendar is connected! The trip will sync automatically when you confirm booking.', { icon: '📅' });
+      }
+      return;
+    }
+
     try {
-      const res = await api.get('/auth/google');
+      const res = await api.get(`/auth/google${tripId ? `?tripId=${tripId}` : ''}`);
       if (res.data.authUrl) {
         window.location.href = res.data.authUrl;
       }

@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth';
 import {
   createOrUpdateTrip, approveTrip, rejectTrip,
   getUserTrips, getTripById, cancelTrip, selectHotel,
-  getPlacePhoto, selectTransport
+  getPlacePhoto, selectTransport, syncCalendar
 } from '../controllers/tripController';
 
 const router = Router();
@@ -21,6 +21,7 @@ router.post('/:tripId/approve', approveTrip);
 router.post('/:tripId/reject', rejectTrip);
 router.post('/:tripId/select-hotel', selectHotel);
 router.post('/:tripId/select-transport', selectTransport);
+router.post('/:tripId/sync-calendar', syncCalendar);
 router.delete('/:tripId', cancelTrip);
 
 export default router;

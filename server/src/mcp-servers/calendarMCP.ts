@@ -10,7 +10,7 @@ import User from '../models/User';
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CALENDAR_CLIENT_ID,
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-  process.env.CLIENT_URL || 'http://localhost:5173'
+  process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:5000/api/auth/google/callback'
 );
 
 export async function createCalendarEvent(

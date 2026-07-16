@@ -23,9 +23,10 @@ export default function GoogleCallbackPage() {
     const name = searchParams.get('name');
     const email = searchParams.get('email');
     const role = searchParams.get('role') as 'traveler' | 'admin';
+    const hasCalendarLinked = searchParams.get('hasCalendarLinked') === 'true';
 
     if (accessToken && id && name && email && role) {
-      setAuth({ id, name, email, role }, accessToken);
+      setAuth({ id, name, email, role, hasCalendarLinked }, accessToken);
       toast.success('Successfully signed in with Google! 🚀');
       navigate(role === 'admin' ? '/admin' : '/dashboard');
     } else {

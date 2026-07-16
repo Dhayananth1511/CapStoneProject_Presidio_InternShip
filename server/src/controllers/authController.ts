@@ -98,6 +98,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
+        hasCalendarLinked: !!user.googleRefreshToken,
       },
     });
   } catch (error: any) {
@@ -161,6 +162,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
+        hasCalendarLinked: !!user.googleRefreshToken,
       },
     });
   } catch (error: any) {
@@ -210,6 +212,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         role: user.role,
+        hasCalendarLinked: !!user.googleRefreshToken,
       },
     });
   } catch (error: any) {
@@ -283,7 +286,12 @@ export const googleOAuthInit = (req: Request, res: Response): void => {
     return;
   }
 
-  const state = Buffer.from(JSON.stringify({ type: 'calendar', userId: req.user?.userId })).toString('base64');
+  const { tripId } = req.query;
+  const state = Buffer.from(JSON.stringify({
+    type: 'calendar',
+    userId: req.user?.userId,
+    tripId: tripId || undefined
+  })).toString('base64');
   // Create a fresh client per request
   const client = createOAuth2Client();
   const authUrl = client.generateAuthUrl({
@@ -293,7 +301,7 @@ export const googleOAuthInit = (req: Request, res: Response): void => {
     state,
   });
 
-  logger.info('Google Calendar OAuth redirect initiated', { userId: req.user?.userId });
+  logger.info('Google Calendar OAuth redirect initiated', { userId: req.user?.userId, tripId });
   res.json({ success: true, authUrl });
 };
 
@@ -308,14 +316,14 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
   const { code, state: rawState, error } = req.query;
 
   // Decode the state JSON blob
-  let statePayload: { type: 'login' | 'register' | 'calendar'; userId?: string } = { type: 'login' };
+  let statePayload: { type: 'login' | 'register' | 'calendar'; userId?: string; tripId?: string } = { type: 'login' };
   try {
     statePayload = JSON.parse(Buffer.from(rawState as string, 'base64').toString());
   } catch {
     logger.warn('Google OAuth callback received invalid state param');
   }
 
-  const { type, userId } = statePayload;
+  const { type, userId, tripId } = statePayload;
 
   // Handle user denial
   if (error) {
@@ -325,7 +333,8 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
     } else if (type === 'register') {
       res.redirect(`${clientUrl}/register?google_auth=denied`);
     } else {
-      res.redirect(`${clientUrl}/dashboard?google_auth=denied`);
+      const dest = tripId ? `/dashboard/plan?tripId=${tripId}&google_auth=denied` : '/dashboard?google_auth=denied';
+      res.redirect(`${clientUrl}${dest}`);
     }
     return;
   }
@@ -430,6 +439,7 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
         name: user.name,
         email: user.email,
         role: user.role,
+        hasCalendarLinked: String(!!user.googleRefreshToken),
       });
       res.redirect(`${clientUrl}/auth/callback?${params.toString()}`);
       return;
@@ -439,24 +449,31 @@ export const googleOAuthCallback = async (req: Request, res: Response): Promise<
     // FLOW B: Google Calendar Link — store tokens on existing user
     // ============================================================
     if (!userId) {
-      res.redirect(`${clientUrl}/dashboard?google_auth=error`);
+      const dest = tripId ? `/dashboard/plan?tripId=${tripId}&google_auth=error` : '/dashboard?google_auth=error';
+      res.redirect(`${clientUrl}${dest}`);
       return;
     }
 
-    await User.findByIdAndUpdate(userId, {
+    const updateData: any = {
       googleAccessToken: tokens.access_token || '',
-      googleRefreshToken: tokens.refresh_token || '',
-    });
+    };
+    if (tokens.refresh_token) {
+      updateData.googleRefreshToken = tokens.refresh_token;
+    }
+
+    await User.findByIdAndUpdate(userId, updateData);
 
     logger.info('Google Calendar tokens stored successfully', { userId });
-    res.redirect(`${clientUrl}/dashboard?google_auth=success`);
+    const dest = tripId ? `/dashboard/plan?tripId=${tripId}&google_auth=success` : '/dashboard?google_auth=success';
+    res.redirect(`${clientUrl}${dest}`);
 
   } catch (err: any) {
     logger.error('Google OAuth callback failed', { error: err.message, type });
     if (type === 'login') {
       res.redirect(`${clientUrl}/login?google_auth=error`);
     } else {
-      res.redirect(`${clientUrl}/dashboard?google_auth=error`);
+      const dest = tripId ? `/dashboard/plan?tripId=${tripId}&google_auth=error` : '/dashboard?google_auth=error';
+      res.redirect(`${clientUrl}${dest}`);
     }
   }
 };
