@@ -40,3 +40,30 @@ export function getActivityReasoningPrompt(destination: string, interests: strin
 Analyze the suggested places in ${destination} for a ${days}-day trip matching traveler interests: ${interests.join(', ')}.
 Briefly explain if these matches fit traveler preferences, and highlight 2-3 key landmark recommendations in 2-3 sentences. Keep it short.`;
 }
+
+export function getActivityFilteringPrompt(destination: string): string {
+  return `You are TripPlanner's Sightseeing & Activities Specialist. You are given a list of tourist attractions in or near ${destination} retrieved from a local directory.
+Your task is to:
+1. Filter this list to prioritize the most famous, popular, and scenic tourist/sightseeing spots in or very close to ${destination}.
+2. Filter out any accommodations (hotels, resorts, stays, B&B), municipal utilities/offices, transit hubs (bus stations, railway stops), or unremarkable local shops/facilities.
+3. Provide realistic ratings (1.0 to 5.0) and review counts (user_ratings_total) based on real-world popularity and fame of each attraction.
+4. Provide a short description (max 12 words) for each.
+5. If the directory list has fewer than 8 good tourist attractions, supplement the list with other famous sightseeing spots, historical landmarks, or monuments in ${destination} to always return at least 8-12 high-quality tourist choices.
+6. Sort the final list in descending order of rating/popularity.
+
+Format your reply ONLY as a valid JSON object of this structure:
+{
+  "attractions": [
+    {
+      "name": "Attraction Name",
+      "vicinity": "Address or area, ${destination}",
+      "rating": 4.8,
+      "user_ratings_total": 2450,
+      "description": "Short description here",
+      "place_id": "original_place_id",
+      "types": ["tourism.attraction"],
+      "source_type": "geoapify_places" // preserve geoapify_places or set to llm_recommendation if you added/supplemented it
+    }
+  ]
+}`;
+}

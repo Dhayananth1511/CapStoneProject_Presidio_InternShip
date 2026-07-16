@@ -120,7 +120,7 @@ export async function getPlacesNearby(
       }
 
       // Fetch attractions
-      const attrUrl = `https://api.geoapify.com/v2/places?categories=tourism.attraction,tourism.sights,entertainment,leisure&filter=circle:${coords.lon},${coords.lat},15000&limit=20&apiKey=${apiKey}`;
+      const attrUrl = `https://api.geoapify.com/v2/places?categories=tourism.attraction,tourism.sights&filter=circle:${coords.lon},${coords.lat},15000&limit=40&apiKey=${apiKey}`;
       const attrRes = await fetch(attrUrl);
       let attraction_options: any[] = [];
       if (attrRes.ok) {

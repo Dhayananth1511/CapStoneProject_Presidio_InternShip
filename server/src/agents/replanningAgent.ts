@@ -100,8 +100,10 @@ export async function runReplanningAgent(
     case 'replan_accommodation':
       updatedContext.accommodation = undefined;
       updatedContext.budget = undefined;
+      updatedContext.itinerary = undefined;         // itinerary references hotel — must regenerate
+      updatedContext.local_transport = undefined;   // transit is hotel-specific — always clear
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('accommodation', 'budget');
+      whatChanged.push('accommodation', 'budget', 'itinerary', 'local_transport');
       break;
 
     case 'replan_dates':
@@ -111,8 +113,9 @@ export async function runReplanningAgent(
       updatedContext.accommodation = undefined;
       updatedContext.budget = undefined;
       updatedContext.itinerary = undefined;
+      updatedContext.local_transport = undefined;   // dates affect itinerary → transit must reset
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('dates', 'weather', 'transport', 'accommodation', 'budget', 'itinerary');
+      whatChanged.push('dates', 'weather', 'transport', 'accommodation', 'budget', 'itinerary', 'local_transport');
       break;
 
     case 'replan_budget':
@@ -124,14 +127,16 @@ export async function runReplanningAgent(
     case 'replan_activities':
       updatedContext.activities = undefined;
       updatedContext.itinerary = undefined;
+      updatedContext.local_transport = undefined;   // activities affect itinerary locations → transit must reset
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('activities', 'itinerary');
+      whatChanged.push('activities', 'itinerary', 'local_transport');
       break;
 
     case 'replan_itinerary':
       updatedContext.itinerary = undefined;
+      updatedContext.local_transport = undefined;   // itinerary changed → transit must reset
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('itinerary');
+      whatChanged.push('itinerary', 'local_transport');
       break;
 
     case 'replan_full_trip':
@@ -142,15 +147,17 @@ export async function runReplanningAgent(
       updatedContext.activities = undefined;
       updatedContext.budget = undefined;
       updatedContext.itinerary = undefined;
+      updatedContext.local_transport = undefined;
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('destination', 'weather', 'transport', 'accommodation', 'activities', 'budget', 'itinerary');
+      whatChanged.push('destination', 'weather', 'transport', 'accommodation', 'activities', 'budget', 'itinerary', 'local_transport');
       break;
 
     default:
       // Safe fallback
       updatedContext.itinerary = undefined;
+      updatedContext.local_transport = undefined;
       updatedContext.formattedPlan = undefined;
-      whatChanged.push('itinerary');
+      whatChanged.push('itinerary', 'local_transport');
       logger.warn('ReplanningAgent: Unknown tool selected, defaulting to itinerary replan.', { selectedTool });
   }
 

@@ -3,7 +3,7 @@ import { planTrip } from '../services/plannerService';
 import { runBookingAgent } from '../agents/bookingAgent';
 import { runReplanningAgent } from '../agents/replanningAgent';
 import { runBudgetAgent } from '../agents/budgetAgent';
-import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
+import { runLocalTransitAgent } from '../agents/localTransitAgent';
 import { runItineraryAgent } from '../agents/itineraryAgent';
 import { synthesizeTripPlan } from '../agents/coordinatorAgent';
 import Trip from '../models/Trip';
@@ -119,14 +119,14 @@ export const approveTrip = async (req: Request, res: Response): Promise<void> =>
       logger.info('Itinerary is missing/empty during trip approval; generating now.');
       try {
         const generatedItinerary = await runItineraryAgent(context);
-        const enrichment = await enrichItineraryWithLocalTransport(generatedItinerary, context);
-        trip.itinerary = enrichment.itinerary;
-        trip.budget = enrichment.budget;
-        trip.local_transport = enrichment.local_transport;
+        const transitResult = await runLocalTransitAgent(generatedItinerary, context);
+        trip.itinerary = transitResult.itinerary;
+        trip.budget = transitResult.budget;
+        trip.local_transport = transitResult.local_transport;
         
-        context.itinerary = enrichment.itinerary;
-        context.budget = enrichment.budget;
-        context.local_transport = enrichment.local_transport;
+        context.itinerary = transitResult.itinerary;
+        context.budget = transitResult.budget;
+        context.local_transport = transitResult.local_transport;
         
         // Regenerate markdown plan overview
         const newFormattedPlan = await synthesizeTripPlan(context);
@@ -214,6 +214,7 @@ export const rejectTrip = async (req: Request, res: Response): Promise<void> => 
         activities: updatedContext.activities,
         budget: updatedContext.budget,
         itinerary: undefined,
+        local_transport: undefined,  // clear stale transit — LocalTransitAgent will repopulate
         formattedPlan: undefined,
       }
     );
@@ -391,10 +392,10 @@ export const selectHotel = async (req: Request, res: Response): Promise<void> =>
         tempContext.itinerary = updatedItinerary;
       }
       
-      const enrichment = await enrichItineraryWithLocalTransport(updatedItinerary, tempContext);
-      updatedItinerary = enrichment.itinerary;
-      finalBudget = enrichment.budget;
-      finalLocalTransport = enrichment.local_transport;
+      const transitResult = await runLocalTransitAgent(updatedItinerary, tempContext);
+      updatedItinerary = transitResult.itinerary;
+      finalBudget = transitResult.budget;
+      finalLocalTransport = transitResult.local_transport;
     } catch (enrichErr: any) {
       logger.error('Failed to re-enrich hotel local transport details', enrichErr);
       const tempContext = trip.toObject() as any;
@@ -557,10 +558,10 @@ export const selectTransport = async (req: Request, res: Response): Promise<void
         logger.info('Itinerary is missing/undefined in select-transport. Running Itinerary Agent.');
         contextObj.budget = await runBudgetAgent(contextObj);
         const generated = await runItineraryAgent(contextObj);
-        const enrichment = await enrichItineraryWithLocalTransport(generated, contextObj);
-        contextObj.itinerary = enrichment.itinerary;
-        contextObj.budget = enrichment.budget;
-        contextObj.local_transport = enrichment.local_transport;
+        const transitResult = await runLocalTransitAgent(generated, contextObj);
+        contextObj.itinerary = transitResult.itinerary;
+        contextObj.budget = transitResult.budget;
+        contextObj.local_transport = transitResult.local_transport;
         isItineraryGeneratedNow = true;
       } catch (err: any) {
         logger.error('Failed to generate or enrich itinerary in select-transport', err);

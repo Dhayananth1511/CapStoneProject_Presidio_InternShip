@@ -11,7 +11,7 @@ import { runDestinationRecAgent } from './destinationRecAgent';
 import { runParallelAgents, synthesizeTripPlan } from './coordinatorAgent';
 import { runBudgetAgent } from './budgetAgent';
 import { runItineraryAgent } from './itineraryAgent';
-import { enrichItineraryWithLocalTransport } from '../utils/localTransitEnricher';
+import { runLocalTransitAgent } from './localTransitAgent';
 import { getRestaurantsNearHotel } from '../mcp-servers/mapsMCP';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
@@ -371,14 +371,15 @@ export async function runPlannerAgent(
   // Generate day-by-day JSON schedule
   const itinerary = await runItineraryAgent(updatedContext);
   
-  // Enrich itinerary with local transportation costs & calibrate the budget to match!
+  // Run Local Transit Agent — calculates hotel→attraction distances and commute costs.
+  // Always re-runs so data stays consistent with the selected hotel and itinerary.
   try {
-    const enrichment = await enrichItineraryWithLocalTransport(itinerary, updatedContext);
-    updatedContext.itinerary = enrichment.itinerary;
-    updatedContext.budget = enrichment.budget;
-    updatedContext.local_transport = enrichment.local_transport;
-  } catch (enrichErr: any) {
-    logger.error('Failed to post-process local travel expenses for itinerary', { error: enrichErr.message });
+    const transitResult = await runLocalTransitAgent(itinerary, updatedContext);
+    updatedContext.itinerary = transitResult.itinerary;
+    updatedContext.budget = transitResult.budget;
+    updatedContext.local_transport = transitResult.local_transport;
+  } catch (transitErr: any) {
+    logger.error('[plannerAgent] LocalTransitAgent failed, using raw itinerary', { error: transitErr.message });
     updatedContext.itinerary = itinerary;
   }
 

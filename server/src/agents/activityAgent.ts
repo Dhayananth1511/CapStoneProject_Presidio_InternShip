@@ -7,7 +7,7 @@ import { isHotelbedsConfigured } from '../mcp-servers/hotelbedsClient';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
-import { getActivityFallbackPrompt, getActivityEnrichmentPrompt, getActivityReasoningPrompt } from '../prompts';
+import { getActivityFallbackPrompt, getActivityEnrichmentPrompt, getActivityReasoningPrompt, getActivityFilteringPrompt } from '../prompts';
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -97,63 +97,29 @@ export const activityTool = tool(
       data = await getPlacesNearby(destination, interests, days);
     }
 
-    const hasLivePlaces = Array.isArray(data?.attraction_options) && data.attraction_options.length > 0;
-    if (!hasLivePlaces) {
-      try {
-        const recommendationData = await generateRecommendationFallback(destination, interests, days);
-        data = {
-          ...data,
-          ...recommendationData,
-        };
-      } catch (fallbackError) {
-        logger.error('Activity Agent recommendation fallback failed', fallbackError);
-      }
-    }
+    data = data || {};
+    data.attraction_options = Array.isArray(data.attraction_options) ? data.attraction_options : [];
 
-    // Enrich attractions list with descriptions using LLM if descriptions are omitted/blank
-    if (Array.isArray(data?.attraction_options) && data.attraction_options.length > 0) {
-      try {
-        const names = data.attraction_options.filter((item: any) => !item.description).map((item: any) => item.name);
-        if (names.length > 0) {
-          const enrichmentPrompt = getActivityEnrichmentPrompt(destination, names);
+    // Filter, Supplement, Rate & Sort Attractions with LLM
+    try {
+      const filteringPrompt = getActivityFilteringPrompt(destination);
+      const filterRes = await withRetry(() => llm.invoke([
+        new SystemMessage(filteringPrompt),
+        new HumanMessage(`Raw list of attractions to filter and supplement: ${JSON.stringify(data.attraction_options)}`)
+      ]));
 
-          const enrichmentRes = await withRetry(() => llm.invoke([
-            new SystemMessage(enrichmentPrompt),
-          ]));
-          
-          let enrichText = enrichmentRes.content.toString().trim();
-          if (enrichText.startsWith("```json")) {
-             enrichText = enrichText.substring(7);
-          }
-          if (enrichText.startsWith("```")) {
-             enrichText = enrichText.substring(3);
-          }
-          if (enrichText.endsWith("```")) {
-            enrichText = enrichText.substring(0, enrichText.length - 3);
-          }
-          enrichText = enrichText.trim();
-          const descriptions = JSON.parse(enrichText);
-          
-          data.attraction_options = data.attraction_options.map((item: any) => ({
-            ...item,
-            description: item.description || descriptions[item.name] || `A popular local attraction in ${destination}.`
-          }));
-        } else {
-          data.attraction_options = data.attraction_options.map((item: any) => ({
-            ...item,
-            description: item.description || `A popular local attraction in ${destination}.`
-          }));
-        }
-      } catch (enrichErr) {
-        logger.error('Failed to enrich attraction descriptions', enrichErr);
-        data.attraction_options = data.attraction_options.map((item: any) => ({
-          ...item,
-          description: item.description || `A popular local attraction in ${destination}.`
-        }));
+      const parsed = extractJsonObject(filterRes.content.toString());
+      if (parsed && Array.isArray(parsed.attractions)) {
+        data.attraction_options = parsed.attractions;
+        data.attractions = parsed.attractions.map((a: any) => a.name);
       }
-    } else {
-      data = data || {};
-      data.attraction_options = [];
+    } catch (err) {
+      logger.error('Activity Agent failed to filter / supplement raw attractions', err);
+      // Fallback: if filtering fails, keep whatever attractions we had but ensure they have descriptions
+      data.attraction_options = data.attraction_options.map((item: any) => ({
+        ...item,
+        description: item.description || `A popular local attraction in ${destination}.`
+      }));
     }
 
     // Standalone LLM Reasoning Phase

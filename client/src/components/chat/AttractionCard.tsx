@@ -43,14 +43,23 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
   const ratingValue = Math.min(5, Math.max(0, item.rating || 0));
   const stars = Array.from({ length: 5 }, (_, i) => i < Math.round(ratingValue));
 
-  const queryStr = item.vicinity && !item.vicinity.includes('Hotelbeds')
+  const cleanDestination = destination ? destination.trim() : '';
+
+  const rawQuery = item.vicinity && !item.vicinity.includes('Hotelbeds')
     ? (item.vicinity.toLowerCase().startsWith(item.name.toLowerCase())
       ? item.vicinity
       : `${item.name}, ${item.vicinity}`)
-    : `${item.name}, ${destination}`;
+    : `${item.name}`;
 
+  // Make sure destination is appended to query string if not already present
+  const queryStr = cleanDestination && !rawQuery.toLowerCase().includes(cleanDestination.toLowerCase())
+    ? `${rawQuery}, ${cleanDestination}`
+    : rawQuery;
+
+  // Only use query_place_id if it's a valid Google Place ID (starts with ChI)
+  const isGooglePlaceId = item.place_id && item.place_id.startsWith('ChI');
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}${
-    item.place_id ? `&query_place_id=${item.place_id}` : ''
+    isGooglePlaceId ? `&query_place_id=${item.place_id}` : ''
   }`;
 
   const imgSrc = item.photo_reference
@@ -60,19 +69,17 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
     : fallbackImages[idx % fallbackImages.length];
 
   const handleCardClick = () => {
-    if (item.is_llm_recommended) {
-      window.open(mapsUrl, '_blank');
-    }
+    window.open(mapsUrl, '_blank');
   };
 
   return (
     <div
       onClick={handleCardClick}
-      className={`group p-2.5 rounded-xl border transition-all flex flex-col gap-2 relative overflow-hidden ${
-        item.is_llm_recommended
+      className={`group p-2.5 rounded-xl border transition-all flex flex-col gap-2 relative overflow-hidden cursor-pointer ${
+        item.is_llm_recommended || item.source_type === 'llm_recommendation'
           ? isDark
-            ? 'bg-amber-955/10 border-amber-800/30 hover:border-amber-600/50 hover:shadow-md cursor-pointer'
-            : 'bg-amber-50/40 border-amber-200 hover:border-amber-400/60 hover:shadow-md cursor-pointer'
+            ? 'bg-amber-955/10 border-amber-800/30 hover:border-amber-600/50 hover:shadow-md'
+            : 'bg-amber-50/40 border-amber-200 hover:border-amber-400/60 hover:shadow-md'
           : isDark
             ? 'bg-slate-900/60 border-slate-850 hover:bg-slate-900/80 hover:border-slate-700 hover:shadow-lg'
             : 'bg-white border-slate-205 hover:border-slate-350 hover:shadow-lg'
@@ -106,14 +113,10 @@ export const AttractionCard: React.FC<AttractionCardProps> = ({
         </div>
         <div className="absolute top-2 right-2 flex items-center gap-1">
           <a
-            href={item.is_llm_recommended
-              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                  item.name + ' ' + destination
-                )}`
-              : mapsUrl}
+            href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            title={item.is_llm_recommended ? 'Search on Google Maps' : 'Open in Google Maps'}
+            title="Open in Google Maps"
             className={`h-7 w-7 rounded-full flex items-center justify-center shadow-lg transition active:scale-90 scale-95 hover:scale-105 ${
               isDark
                 ? 'bg-slate-955 text-indigo-400 hover:bg-primary/20 hover:text-white border border-slate-805'
