@@ -2,6 +2,7 @@
 // Validates, clamps, and sanitizes trip parameters BEFORE they hit any LLM.
 // Called from tripController before delegating to plannerService.
 
+import { calculateDaysBetween } from './dateHelpers';
 import logger from './logger';
 
 // ======================================================
@@ -88,7 +89,7 @@ export function validateTripDates(
     return { valid: false, reason: `End date (${end_date}) must be after start date (${start_date}).` };
   }
 
-  const durationDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+  const durationDays = calculateDaysBetween(start, end);
   if (durationDays > 30) {
     return { valid: false, reason: `Trip duration of ${Math.round(durationDays)} days exceeds the 30-day maximum. Please shorten your trip.` };
   }

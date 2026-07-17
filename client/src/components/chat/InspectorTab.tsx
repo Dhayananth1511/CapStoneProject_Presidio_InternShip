@@ -1,10 +1,14 @@
 import React from 'react';
-import { Download, CloudSun, AlertTriangle, ArrowUpRight, Check, Building2, MapPin, Users, IndianRupee, CalendarDays, BadgeCheck, KeyRound } from 'lucide-react';
+import { Download, Check, Building2, BadgeCheck, KeyRound, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { HotelCard } from './HotelCard';
 import { TransportOptionsCard } from './TransportOptionsCard';
 import { AttractionCard } from './AttractionCard';
+import { CheckedParametersCard } from './CheckedParametersCard';
+import { WeatherSpecialistCard } from './WeatherSpecialistCard';
+import { DiningOptionsCard } from './DiningOptionsCard';
+import { LocalTransitCard } from './LocalTransitCard';
 
 interface InspectorTabProps {
   context: any;
@@ -141,51 +145,8 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         </div>
       )}
 
-      {/* CHECKED PARAMETERS CARD */}
-      {context.input && (
-        <div className="premium-card rounded-xl p-5 space-y-3.5">
-          <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1 ${
-            isDark ? 'text-indigo-400' : 'text-indigo-700'
-          }`}>
-            <MapPin className="h-4.5 w-4.5 text-primary" /> Checked Parameters
-          </h4>
-          <div className="grid grid-cols-2 gap-3.5">
-            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Destination</span>
-              <span className={`text-xs font-semibold ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
-                {context.input.destination || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Pending...</em>}
-              </span>
-            </div>
-            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Origin</span>
-              <span className={`text-xs font-semibold ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
-                {context.input.origin || <em className={isDark ? 'text-slate-600' : 'text-slate-400'}>Not selected</em>}
-              </span>
-            </div>
-            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Travelers</span>
-              <span className={`text-xs font-semibold flex items-center gap-1 ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
-                <Users className="h-3.5 w-3.5 text-primary" />
-                {context.input.travelers || 0}
-              </span>
-            </div>
-            <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className={`text-[10px] block font-bold uppercase mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Cap Limit</span>
-              <span className="text-xs font-semibold text-emerald-500 flex items-center gap-0.5">
-                <IndianRupee className="h-3.5 w-3.5 text-emerald-500" />
-                {context.input.budget_inr ? context.input.budget_inr.toLocaleString() : 0}
-              </span>
-            </div>
-            <div className={`col-span-2 p-2.5 rounded-lg border ${isDark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-              <span className={`text-[10px] block font-bold uppercase mb-0.5 font-sans ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Dates</span>
-              <span className={`text-xs font-semibold flex items-center gap-1.5 ${isDark ? 'text-slate-205' : 'text-slate-850'}`}>
-                <CalendarDays className="h-4.5 w-4.5 text-primary" />
-                {context.input.start_date || 'YYYY-MM-DD'} – {context.input.end_date || 'YYYY-MM-DD'}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+            {/* CHECKED PARAMETERS CARD */}
+      <CheckedParametersCard context={context} isDark={isDark} />
       {/* CORE BUDGET GUARDIAN SUMMARY */}
       {context.budget && (
         <div className="premium-card rounded-xl p-4 space-y-2">
@@ -447,99 +408,8 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         </div>
       )}
 
-      {/* WEATHER ANALYSIS SECTION */}
-      {context.weather && (
-        <div className="premium-card rounded-xl p-4 space-y-2">
-          <h4 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-1.5 ${
-            isDark ? 'text-sky-400' : 'text-sky-700'
-          }`}>
-            <CloudSun className="h-4.5 w-4.5" /> Weather Specialist Agent
-          </h4>
-          <div className={`p-3 rounded-lg border text-xs space-y-3 transition-colors ${
-            isDark ? 'bg-indigo-950/20 border-slate-800' : 'bg-slate-50 border-slate-200'
-          }`}>
-            <div className={`font-bold ${isDark ? 'text-slate-205' : 'text-slate-805'}`}>
-              🌤️ Climate Summary ({context.input?.destination || 'Destination'}):
-            </div>
-            
-            {/* Horizontal daily weather forecast cards */}
-            {Array.isArray(context.weather.forecast) && context.weather.forecast.length > 0 && (
-              <div className="flex gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-thin">
-                {context.weather.forecast.map((day: any, idx: number) => {
-                  const getWeatherEmoji = (condition: string = '') => {
-                    const cond = condition.toLowerCase();
-                    if (cond.includes('clear') || cond.includes('sunny')) return '☀️';
-                    if (cond.includes('partly cloudy') || cond.includes('few clouds') || cond.includes('cast')) return '🌤️';
-                    if (cond.includes('cloudy') || cond.includes('overcast') || cond.includes('fog')) return '☁️';
-                    if (cond.includes('thunder') || cond.includes('storm')) return '🌩️';
-                    if (cond.includes('rain') || cond.includes('shower') || cond.includes('drizzle')) return '🌧️';
-                    if (cond.includes('snow') || cond.includes('hail') || cond.includes('sleet')) return '❄️';
-                    return '⛅';
-                  };
-
-                  const dateObj = new Date(day.date);
-                  const formattedDate = isNaN(dateObj.getTime())
-                    ? day.date
-                    : dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex-shrink-0 w-28 p-2.5 rounded-lg border text-center transition-all ${
-                        isDark
-                          ? 'bg-slate-900/60 border-slate-850 hover:border-slate-700'
-                          : 'bg-white border-slate-205 hover:border-slate-350 shadow-sm'
-                      }`}
-                    >
-                      <p className={`text-[10px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {formattedDate}
-                      </p>
-                      <div className="text-xl my-1">{getWeatherEmoji(day.condition)}</div>
-                      <p className={`text-[10px] font-semibold truncate mb-1 ${isDark ? 'text-slate-300' : 'text-slate-650'}`} title={day.condition}>
-                        {day.condition || 'Clear'}
-                      </p>
-                      <p className="text-[10.5px] font-bold text-primary">
-                        {Math.round(day.temp_high_c)}°C / <span className={`${isDark ? 'text-slate-400' : 'text-slate-500'} font-normal`}>{Math.round(day.temp_low_c)}°C</span>
-                      </p>
-                      {day.rain_mm > 0 && (
-                        <p className={`text-[9px] font-bold mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-650'}`}>
-                          🌧️ {day.rain_mm} mm
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {context.weather.reasoning && (
-              <div className={`mt-2 p-2.5 rounded border text-[11px] leading-relaxed transition-colors ${
-                isDark ? 'text-indigo-300 bg-indigo-950/45 border-indigo-900/40' : 'text-indigo-900 bg-indigo-50 border-indigo-120/40'
-              }`}>
-                <div className="flex items-start gap-1">
-                  <span className="text-[12px] shrink-0 mt-0.5">🧠</span>
-                  <div className={`prose max-w-none text-[11px] space-y-1 ${
-                    isDark ? 'prose-invert text-indigo-300' : 'text-indigo-900 prose-slate'
-                  }`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{context.weather.reasoning}</ReactMarkdown>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {context.weather.advisory && (
-              <div className={`text-[10.5px] p-2.5 rounded-lg border flex gap-1.5 items-start mt-2 ${
-                isDark ? 'bg-amber-955/20 border-amber-900/30 text-amber-399' : 'bg-amber-50 border-amber-105/50 text-amber-800'
-              }`}>
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
-                <span>
-                  <strong>Advisory:</strong> {context.weather.advisory}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
+            {/* WEATHER ANALYSIS SECTION */}
+      <WeatherSpecialistCard context={context} isDark={isDark} />
 
       {/* ACCOMMODATION / HOTELS COMPONENT SECTION */}
       {context.accommodation && (
@@ -758,147 +628,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
             )}
 
             {/*  DINING OPTIONS  */}
-            {(() => {
-              const selectedHotel = context.accommodation?.selected_hotel ||
-                (context.accommodation?.hotels?.[0] ?? null);
-              const hotelAmenities: string[] = Array.isArray(selectedHotel?.amenities)
-                ? selectedHotel.amenities
-                : [];
-
-              const diningKeywords = ['restaurant', 'room service', 'dining', 'breakfast', 'bar', 'buffet', 'caf', 'cafe', 'food', 'kitchen', 'meal'];
-              const inHotelDining = hotelAmenities.filter((a: string) =>
-                diningKeywords.some(kw => a.toLowerCase().includes(kw))
-              );
-
-              const hasRoomService = hotelAmenities.some((a: string) => a.toLowerCase().includes('room service'));
-              const hasRestaurant = hotelAmenities.some((a: string) =>
-                ['restaurant', 'dining', 'caf', 'cafe', 'buffet'].some(kw => a.toLowerCase().includes(kw))
-              );
-              const hasBreakfast = hotelAmenities.some((a: string) => a.toLowerCase().includes('breakfast'));
-
-              // Merge restaurant options from all sources (Geoapify, Hotelbeds, LLM)
-              const nearbyRestaurants = Array.isArray(context.activities?.restaurant_options)
-                ? context.activities.restaurant_options.slice(0, 6)
-                : (Array.isArray(context.activities?.restaurants)
-                  ? context.activities.restaurants.slice(0, 6).map((name: string) => ({ name, source_type: 'llm_recommendation' }))
-                  : []);
-
-              const hasDiningData = inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast || nearbyRestaurants.length > 0;
-              if (!hasDiningData) return null;
-
-              return (
-                <div className={`mt-3 rounded-xl border p-3 space-y-3 ${
-                isDark ? 'border-slate-800 bg-slate-900/30' : 'border-slate-205 bg-white'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                    isDark ? 'text-slate-400' : 'text-slate-500'
-                  }`}>
-                    🍽️ Dining Options
-                  </p>
-                  {/* Data source legend for dining */}
-                  <div className="flex gap-1 flex-wrap">
-                    {nearbyRestaurants.some((r: any) => r.source_type === 'geoapify_places') && (
-                      <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-700 dark:text-emerald-400 leading-none uppercase tracking-wide">
-                        🗺️ Geo
-                      </span>
-                    )}
-                    {nearbyRestaurants.some((r: any) => r.source_type === 'llm_recommendation' || !r.source_type) && (
-                      <span className="text-[7.5px] font-bold px-1 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 text-amber-700 dark:text-amber-400 leading-none uppercase tracking-wide">
-                        💡 AI
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* In-hotel Dining */}
-                {(inHotelDining.length > 0 || hasRoomService || hasRestaurant || hasBreakfast) && (
-                  <div className="space-y-1.5">
-                    <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
-                      isDark ? 'text-indigo-400' : 'text-indigo-655'
-                    }`}>🔑 In-Hotel Dining ({selectedHotel?.name || 'Selected Hotel'})</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {hasRoomService && (
-                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                          isDark ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-450' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                        }`}>
-                          🛊Room Service
-                        </span>
-                      )}
-                      {hasRestaurant && (
-                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                          isDark ? 'bg-amber-955/30 border-amber-800/40 text-amber-400' : 'bg-amber-50 border-amber-200 text-emerald-700'
-                        }`}>
-                          🍴 On-Site Restaurant
-                        </span>
-                      )}
-                      {hasBreakfast && (
-                        <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                          isDark ? 'bg-sky-955/35 border-sky-800/40 text-sky-400' : 'bg-sky-50 border-sky-200 text-sky-700'
-                        }`}>
-                          🍳 Breakfast Included
-                        </span>
-                      )}
-                      {inHotelDining.filter((a: string) => !['room service', 'restaurant', 'breakfast'].some(k => a.toLowerCase().includes(k))).map((amenity: string, i: number) => (
-                        <span key={i} className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border ${
-                          isDark ? 'bg-slate-950/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
-                        }`}>
-                          {amenity}
-                        </span>
-                      ))}
-                    </div>
-                    {!hasRoomService && !hasRestaurant && !hasBreakfast && (
-                      <p className={`text-[9.5px] italic ${
-                        isDark ? 'text-slate-505' : 'text-slate-400'
-                      }`}>No in-hotel dining amenities listed — verify with hotel on check-in.</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Nearby Restaurants — mixed sources */}
-                {nearbyRestaurants.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className={`text-[9.5px] font-bold uppercase tracking-wide ${
-                      isDark ? 'text-amber-400' : 'text-amber-700'
-                    }`}>🍱 Nearby Restaurants</p>
-                    <div className="flex flex-col gap-1">
-                      {nearbyRestaurants.map((r: any, i: number) => {
-                        const srcBadge = r.source_type === 'geoapify_places'
-                          ? { label: '🗺️ Geo', cls: isDark ? 'bg-emerald-950/30 border-emerald-800/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700' }
-                          : r.source_type === 'hotelbeds_api'
-                          ? { label: '🏨 HB', cls: isDark ? 'bg-blue-950/30 border-blue-800/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-700' }
-                          : { label: '💡 AI', cls: isDark ? 'bg-amber-950/30 border-amber-800/30 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-700' };
-                        return (
-                          <a
-                            key={i}
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.name || r) + ' restaurant ' + (context.input?.destination || ''))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex items-center justify-between p-1.5 rounded-lg border text-[10px] transition hover:shadow-sm ${
-                              isDark
-                                ? 'bg-slate-900/50 border-slate-850 hover:border-amber-700/30 text-slate-350 hover:text-white'
-                                : 'bg-slate-55 border-slate-200 hover:border-amber-300 text-slate-700'
-                            }`}
-                          >
-                            <span className="font-semibold line-clamp-1">{r.name || r}</span>
-                            <span className="flex items-center gap-1 shrink-0 ml-2">
-                              {r.rating && (
-                                <span className="text-amber-500 text-[9px] font-bold">⭐ {r.rating}</span>
-                              )}
-                              <span className={`text-[7.5px] font-bold px-1 py-0.5 rounded border leading-none ${srcBadge.cls}`}>
-                                {srcBadge.label}
-                              </span>
-                              <ArrowUpRight className="h-3 w-3 text-slate-400 shrink-0" />
-                            </span>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+            <DiningOptionsCard context={context} isDark={isDark} />
           </div>
         </div>
       )}
@@ -987,7 +717,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         </div>
       )}
 
-      {/* LOCAL TRANSIT — Hotel → Tourist Places (Geoapify-powered) */}
+            {/* LOCAL TRANSIT — Hotel → Tourist Places (Geoapify-powered) */}
       {context.local_transport && context.local_transport.distances_from_hotel && context.local_transport.distances_from_hotel.length > 0 && (
         <div className="premium-card rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -1000,157 +730,9 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
               🗺️ Geoapify Routing
             </span>
           </div>
-
-          <div className={`p-3 rounded-lg border text-xs space-y-3 ${
-            isDark ? 'bg-amber-950/10 border-slate-800' : 'bg-amber-50/60 border-amber-100'
-          }`}>
-            {/* Origin hotel label */}
-            {(context.accommodation?.recommended || context.accommodation?.selected_hotel?.name) && (
-              <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                <span>🏨</span>
-                <span>From: <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{context.accommodation?.recommended || context.accommodation?.selected_hotel?.name}</span></span>
-              </div>
-            )}
-
-            {/* Per-attraction distance rows */}
-            <div className="space-y-2">
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                📍 Distances to Tourist Spots
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {context.local_transport.distances_from_hotel.map((item: any, idx: number) => {
-                  const dist = Number(item.distance_km) || 0;
-                  const modeEmoji = dist === 0 ? '🚶' : dist < 2 ? '🚶' : dist < 6 ? '🛺' : '🚗';
-                  const modeLabel = dist === 0 ? 'Walking' : dist < 2 ? 'Walk' : dist < 6 ? 'Auto' : 'Cab';
-                  const baseFare = modeLabel === 'Auto' ? 40 : modeLabel === 'Cab' ? 80 : 0;
-                  const ratePerKm = modeLabel === 'Auto' ? 10 : modeLabel === 'Cab' ? 15 : 0;
-                  const estFare = modeLabel === 'Walking' || modeLabel === 'Walk'
-                    ? 0
-                    : Math.round((baseFare + dist * ratePerKm) * 2);
-                  const modeColor = modeLabel === 'Walk' || modeLabel === 'Walking'
-                    ? isDark ? 'text-emerald-400 bg-emerald-950/30 border-emerald-800/30' : 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                    : modeLabel === 'Auto'
-                    ? isDark ? 'text-amber-400 bg-amber-950/30 border-amber-800/30' : 'text-amber-700 bg-amber-50 border-amber-200'
-                    : isDark ? 'text-blue-400 bg-blue-950/30 border-blue-800/30' : 'text-blue-700 bg-blue-50 border-blue-200';
-
-                  const isHub = item.attraction?.includes('Entry/Exit Hub');
-                  const isFlightHub = item.attraction?.toLowerCase().includes('airport');
-                  const isTrainHub = item.attraction?.toLowerCase().includes('railway');
-                  const hubIcon = isFlightHub ? '🛫' : isTrainHub ? '🚆' : '🚌';
-
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex items-center justify-between rounded-lg border px-2.5 py-2 gap-2 transition-all hover:shadow-sm ${
-                        isHub
-                          ? isDark
-                            ? 'bg-indigo-950/20 border-indigo-500/35 hover:border-indigo-450/50'
-                            : 'bg-indigo-50/50 border-indigo-250 hover:border-indigo-300'
-                          : isDark
-                          ? 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {/* Attraction name */}
-                      <div className="flex items-start gap-1.5 min-w-0 flex-1">
-                        <span className="text-[11px] mt-0.5 shrink-0">{isHub ? hubIcon : '📌'}</span>
-                        <span className={`text-[10.5px] font-semibold line-clamp-2 leading-snug ${
-                          isHub
-                            ? isDark
-                              ? 'text-indigo-200 font-bold'
-                              : 'text-indigo-850 font-bold'
-                            : isDark
-                            ? 'text-slate-200'
-                            : 'text-slate-800'
-                        }`}>
-                          {item.attraction}
-                        </span>
-                      </div>
-
-                      {/* Stats chips */}
-                      <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                        {/* Distance */}
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none ${
-                          isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'
-                        }`}>
-                          {item.distance_km} km
-                        </span>
-
-                        {/* Mode */}
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none ${modeColor}`}>
-                          {modeEmoji} {modeLabel}
-                        </span>
-
-                        {/* Duration */}
-                        {item.duration_text && (
-                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border leading-none ${
-                            isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
-                          }`}>
-                            {item.duration_text}
-                          </span>
-                        )}
-
-                        {/* Fare */}
-                        {estFare > 0 ? (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none ${
-                            isDark ? 'bg-indigo-950/50 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                          }`}>
-                            ₹{estFare} RT
-                          </span>
-                        ) : (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border leading-none ${
-                            isDark ? 'bg-emerald-950/30 border-emerald-800/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          }`}>
-                            Free
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Daily average summary */}
-            {context.local_transport.daily_budget_estimate !== undefined && (
-              <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
-                isDark ? 'bg-indigo-950/20 border-indigo-900/30' : 'bg-indigo-50 border-indigo-100'
-              }`}>
-                <span className={`text-[10px] font-bold ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-                  📊 Est. Daily Commute Budget
-                </span>
-                <span className={`text-sm font-extrabold ${isDark ? 'text-indigo-200' : 'text-indigo-800'}`}>
-                  ₹{(context.local_transport.daily_budget_estimate || 0).toLocaleString()}
-                </span>
-              </div>
-            )}
-
-            {/* Cab rate reference table */}
-            {Array.isArray(context.local_transport.cab_estimates) && context.local_transport.cab_estimates.length > 0 && (
-              <div className="space-y-1.5">
-                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  💡 Local Fare Reference
-                </p>
-                <div className="flex flex-col gap-1">
-                  {context.local_transport.cab_estimates.map((rate: any, i: number) => (
-                    <div
-                      key={i}
-                      className={`flex items-center justify-between text-[9.5px] px-2.5 py-1.5 rounded border ${
-                        isDark ? 'bg-slate-900/40 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <span className="font-semibold">{rate.mode}</span>
-                      <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                        ₹{rate.base_fare} base + ₹{rate.rate_per_km}/km
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <LocalTransitCard context={context} isDark={isDark} />
         </div>
       )}
-    </div>
+      </div>
   );
 };

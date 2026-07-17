@@ -2,7 +2,7 @@
 // In a real production deployment, this would invoke real-world GDS / travel booking API integrations.
 
 import { createCalendarEvent } from '../mcp-servers/calendarMCP';
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 
 export async function runBookingAgent(
   context: TripContext,

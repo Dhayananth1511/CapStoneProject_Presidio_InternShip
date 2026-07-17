@@ -1,18 +1,6 @@
 import React from 'react';
 import { Check, ArrowUpRight, MapPin, Loader2 } from 'lucide-react';
-
-interface Hotel {
-  name: string;
-  rating?: number;
-  price_per_night_inr?: number;
-  total_cost_inr?: number;
-  address?: string;
-  vicinity?: string;
-  description?: string;
-  amenities?: string[];
-  is_llm_recommended?: boolean;
-  source_type?: 'hotelbeds_api' | 'geoapify_places' | 'llm_recommendation';
-}
+import type { Hotel } from '../../types';
 
 interface HotelCardProps {
   hotel: Hotel;

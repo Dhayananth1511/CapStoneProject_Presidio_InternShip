@@ -6,11 +6,14 @@
 // on longer trips). Results are merged into one consolidated itinerary.
 
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
 import { getItineraryBatchPrompt, getItinerarySystemPrompt } from '../prompts';
+import { extractJsonObject } from '../utils/jsonHelpers';
+import { calculateNights } from '../utils/dateHelpers';
+
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -108,10 +111,7 @@ async function generateBatch(
 
       const raw = response.content.toString().trim();
       const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON object found in response');
-
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = extractJsonObject(cleaned);
       if (!Array.isArray(parsed.days) || parsed.days.length === 0) {
         throw new Error('Parsed itinerary has empty days array');
       }
@@ -155,8 +155,7 @@ export async function runItineraryAgent(context: TripContext): Promise<{ days: a
 
   // Build the list of all trip days
   const startDate = new Date(input.start_date || new Date());
-  const endDate = new Date(input.end_date || new Date());
-  const totalDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const totalDays = calculateNights(input.start_date, input.end_date) + 1;
   const dailyBudget = Math.round((budget?.remaining_budget_inr || 10000) / totalDays);
 
   const allDays: { day: number; date: string }[] = [];

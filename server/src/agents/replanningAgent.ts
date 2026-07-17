@@ -7,7 +7,7 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';

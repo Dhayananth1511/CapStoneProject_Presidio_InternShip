@@ -4,7 +4,7 @@
 // It always re-runs when the hotel or itinerary changes.
 
 
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 import { getTransitDirections } from '../mcp-servers/mapsMCP';
 import logger from '../utils/logger';
 

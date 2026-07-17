@@ -1,19 +1,7 @@
 import React from 'react';
 import { Calendar, Users, IndianRupee, Eye, ArrowRight, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-interface TripSummary {
-  sessionId: string;
-  status: 'DRAFT' | 'PLANNED' | 'CONFIRMED' | 'CANCELLED';
-  createdAt: string;
-  input: {
-    destination?: string;
-    start_date?: string;
-    end_date?: string;
-    budget_inr?: number;
-    travelers?: number;
-  };
-}
+import type { TripSummary } from '../../types';
 
 interface TripCardProps {
   trip: TripSummary;

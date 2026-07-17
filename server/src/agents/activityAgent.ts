@@ -13,11 +13,8 @@ const llm = createChatModel({
   temperature: 0.3,
 });
 
-function extractJsonObject(text: string): any {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in LLM recommendation fallback');
-  return JSON.parse(match[0]);
-}
+import { extractJsonObject } from '../utils/jsonHelpers';
+
 
 async function generateRecommendationFallback(destination: string, interests: string[], days: number) {
   const attractionCount = Math.max(8, Math.min(80, days * 4));

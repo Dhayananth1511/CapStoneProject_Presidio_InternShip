@@ -22,63 +22,9 @@ const llm = createChatModel({
   temperature: 0.1,
 });
 
-function extractJson(text: string): any {
-  // Try to find all blocks starting with { and ending with } using non-greedy global search
-  const regex = /\{[\s\S]*?\}/g;
-  let match;
-  let lastParsed = null;
-  while ((match = regex.exec(text)) !== null) {
-    try {
-      lastParsed = JSON.parse(match[0]);
-    } catch (e) {
-      // ignore invalid json fragments
-    }
-  }
-  if (lastParsed) return lastParsed;
+import { TripContext, PlannerAgentResult } from '../types';
+import { extractJson } from '../utils/jsonHelpers';
 
-  // Fallback: try greedy matching if non-greedy didn't yield a valid object
-  const greedyMatch = text.match(/\{[\s\S]*\}/);
-  if (greedyMatch) {
-    return JSON.parse(greedyMatch[0]);
-  }
-  throw new Error("No valid JSON found in response");
-}
-
-export interface TripContext {
-  sessionId: string;
-  userId: string;
-  status: 'DRAFT' | 'PLANNED' | 'CONFIRMED' | 'CANCELLED';
-  input: {
-    destination?: string;
-    origin?: string;
-    start_date?: string;
-    end_date?: string;
-    travelers?: number;
-    budget_inr?: number;
-    interests?: string[];
-    duration_days?: number;
-    max_price_per_night?: number;
-  };
-  weather?: any;
-  transport?: any;
-  accommodation?: any;
-  activities?: any;
-  budget?: any;
-  itinerary?: any;
-  local_transport?: any;
-  booking?: any;
-  formattedPlan?: string;
-  conversationHistory: Array<{ role: string; content: string }>;
-}
-
-export interface PlannerAgentResult {
-  context: TripContext;
-  status: 'NEEDS_INFO' | 'PLANNED' | 'ERROR';
-  clarifyingQuestion?: string;
-  plan?: string;
-  budgetFeasible?: boolean;
-  budgetAlternatives?: string[];
-}
 
 export async function runPlannerAgent(
   userMessage: string,

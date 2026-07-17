@@ -3,20 +3,12 @@
 // Stage 0 (sequential) → Stage 1 (parallel) → Stage 2 (sequential) → HITL
 
 import { v4 as uuidv4 } from 'uuid';
-import { TripContext, runPlannerAgent } from '../agents/plannerAgent';
+import { TripContext, PlannerServiceResult } from '../types';
+import { runPlannerAgent } from '../agents/plannerAgent';
 import Trip from '../models/Trip';
 import User from '../models/User';
 import logger from '../utils/logger';
 
-export interface PlannerServiceResult {
-  status: 'NEEDS_INFO' | 'PLANNED' | 'ERROR';
-  clarifyingQuestion?: string;
-  tripId?: string;
-  plan?: string;
-  context?: TripContext;
-  budgetFeasible?: boolean;
-  budgetAlternatives?: string[];
-}
 
 export async function planTrip(
   userMessage: string,

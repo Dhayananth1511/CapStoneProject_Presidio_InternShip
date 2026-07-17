@@ -1,29 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronUp, ChevronDown, Clock, ArrowUpRight, CalendarCheck } from 'lucide-react';
-
-interface ActivityItem {
-  activity: string;
-  time: string;
-  location?: string;
-  duration_min?: number;
-  travel_cost_inr?: number;
-  cost_inr?: number;
-  transport_note?: string;
-}
-
-interface DayItem {
-  day: number;
-  date?: string;
-  title?: string;
-  daily_total_inr: number;
-  description?: string;
-  weather_note?: string;
-  schedule?: ActivityItem[];
-}
-
-interface ItineraryData {
-  days?: DayItem[];
-}
+import type { ItineraryData } from '../../types';
+import { formatTimeAndPeriod } from '../../utils/timeHelper';
 
 interface ItineraryTimelineProps {
   itinerary: ItineraryData;
@@ -44,30 +22,6 @@ interface ItineraryTimelineProps {
   destination: string;
   isDark: boolean;
   budget?: any;
-}
-
-function formatTimeAndPeriod(timeStr: string): string {
-  if (!timeStr) return '';
-  const parts = timeStr.split(':');
-  if (parts.length < 2) return timeStr;
-  const hour = parseInt(parts[0], 10);
-  const min = parseInt(parts[1], 10);
-  if (isNaN(hour) || isNaN(min)) return timeStr;
-
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  const displayMin = min < 10 ? `0${min}` : min;
-  const formattedTime = `${displayHour}:${displayMin} ${ampm}`;
-
-  let category = '';
-  if (hour < 5) category = 'Late Night';
-  else if (hour < 11) category = 'Morning';
-  else if (hour < 13) category = 'Late Morning';
-  else if (hour < 17) category = 'Afternoon';
-  else if (hour < 20) category = 'Evening';
-  else category = 'Night';
-
-  return `${category} (${formattedTime})`;
 }
 
 export const ItineraryTimeline: React.FC<ItineraryTimelineProps> = ({

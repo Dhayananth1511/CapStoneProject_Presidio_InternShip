@@ -2,7 +2,9 @@
 // agents and builds a breakdown. Adds 10% emergency fund. Checks if total is
 // within the user's stated budget. If over by >20%, returns alternatives.
 
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
+import { calculateNights } from '../utils/dateHelpers';
+import { parseFirstNumber } from '../utils/numberHelpers';
 
 export interface BudgetBreakdown {
   transport: number;
@@ -23,26 +25,11 @@ export interface BudgetBreakdown {
   };
 }
 
-function parseFirstNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
 
-  if (typeof value === 'string') {
-    const match = value.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
-    if (match) {
-      return Number(match[0]);
-    }
-  }
-
-  return 0;
-}
 
 function calculateTripDays(input: TripContext['input']): number {
   if (input.start_date && input.end_date) {
-    const diffMs = new Date(input.end_date).getTime() - new Date(input.start_date).getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    return Math.max(1, diffDays);
+    return calculateNights(input.start_date, input.end_date);
   }
 
   if (input.duration_days && input.duration_days > 0) {

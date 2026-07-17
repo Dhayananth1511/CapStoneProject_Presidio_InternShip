@@ -1,54 +1,22 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Compass, CalendarRange, AlertTriangle } from 'lucide-react';
-import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
 import { TripCard } from '../components/trips/TripCard';
-
-interface TripSummary {
-  sessionId: string;
-  status: 'DRAFT' | 'PLANNED' | 'CONFIRMED' | 'CANCELLED';
-  createdAt: string;
-  input: {
-    destination?: string;
-    start_date?: string;
-    end_date?: string;
-    budget_inr?: number;
-    travelers?: number;
-  };
-}
+import { useUserTripsQuery, useCancelTripMutation } from '../hooks/useTrips';
 
 export default function MyTripsPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState<'ALL' | 'PLANNED' | 'CONFIRMED' | 'DRAFTS' | 'CANCELLED'>('ALL');
   const [tripToCancel, setTripToCancel] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch traveler's trips list
-  const { data, isLoading, isError } = useQuery<{ trips: TripSummary[] }>({
-    queryKey: ['userTrips'],
-    queryFn: async () => {
-      const res = await api.get('/trips');
-      return res.data;
-    },
-  });
+  const { data, isLoading, isError } = useUserTripsQuery();
 
   // Mutation to cancel a trip (soft delete - updates status to CANCELLED)
-  const cancelMutation = useMutation({
-    mutationFn: async (tripId: string) => {
-      const res = await api.delete(`/trips/${tripId}`);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userTrips'] });
-    },
-    onError: (err: any) => {
-      alert(`Failed to cancel trip: ${err.message}`);
-    },
-  });
+  const cancelMutation = useCancelTripMutation();
 
   const handleCancelTrip = (tripId: string, destination: string) => {
     setTripToCancel({ id: tripId, name: destination || 'this destination' });

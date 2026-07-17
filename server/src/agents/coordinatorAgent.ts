@@ -2,7 +2,7 @@
 // Coordinates dynamic tool execution using LangChain Tool-Calling and compiles the Markdown plan.
 
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 import { weatherTool } from './weatherAgent';
 import { transportTool } from './transportAgent';
 import { accommodationTool } from './accommodationAgent';
@@ -10,6 +10,7 @@ import { activityTool } from './activityAgent';
 import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
+import { calculateNights } from '../utils/dateHelpers';
 import { getRouterSystemPrompt, getSynthesizeTripPlanPrompt } from '../prompts';
 
 const llm = createChatModel({
@@ -96,7 +97,7 @@ function preserveSelectedHotel(existingAccommodation: any, fetchedAccommodation:
 export async function runParallelAgents(context: TripContext, userMessage: string): Promise<TripContext> {
   const { input } = context;
   const days = input.start_date && input.end_date
-    ? (new Date(input.end_date).getTime() - new Date(input.start_date).getTime()) / (1000 * 60 * 60 * 24)
+    ? calculateNights(input.start_date, input.end_date)
     : 5;
 
   const hasExistingPlanData = !!(

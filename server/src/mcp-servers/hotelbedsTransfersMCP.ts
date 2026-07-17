@@ -1,4 +1,5 @@
 import { hotelbedsRequest, isHotelbedsConfigured } from './hotelbedsClient';
+import { parseFirstNumber } from '../utils/numberHelpers';
 
 export interface HotelbedsTransferOption {
   mode: 'Transfer';
@@ -9,14 +10,6 @@ export interface HotelbedsTransferOption {
   arrival: string;
 }
 
-function parseFirstNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const match = value.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
-    if (match) return Number(match[0]);
-  }
-  return 0;
-}
 
 function flattenItems(payload: any): any[] {
   const candidates = [payload?.transfers, payload?.data, payload?.items, payload?.result];

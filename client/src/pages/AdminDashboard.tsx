@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -22,11 +21,12 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
-import { TripDetailModal, type TripItem } from '../components/admin/TripDetailModal';
+import { TripDetailModal } from '../components/admin/TripDetailModal';
+import type { TripItem } from '../types';
 import { AdminStatCard } from '../components/admin/AdminStatCard';
 import { LogConsoleItem } from '../components/admin/LogConsoleItem';
+import { useAdminLogsQuery, useAdminAnalyticsQuery, useAdminTripsQuery } from '../hooks/useAdmin';
 
 // Register ChartJS modules
 ChartJS.register(
@@ -56,43 +56,17 @@ export default function AdminDashboard() {
 
 
   // React Query to fetch system logs
-  const { data: logsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
-    queryKey: ['adminLogs'],
-    queryFn: async () => {
-      const res = await api.get('/admin/logs');
-      return res.data;
-    },
-    enabled: activeTab === 'logs',
-    refetchInterval: 5000, // Poll logs every 5 seconds for a "live feed" feel
-  });
+  const { data: logsData, isLoading: logsLoading, refetch: refetchLogs } = useAdminLogsQuery(activeTab === 'logs');
 
   // React Query to fetch analytics dashboard summary data
-  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useQuery({
-    queryKey: ['adminAnalytics'],
-    queryFn: async () => {
-      const res = await api.get('/admin/analytics');
-      return res.data;
-    },
-    retry: 2,
-    staleTime: 20000,
-  });
+  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useAdminAnalyticsQuery();
 
   // React Query to fetch the list of trips
-  const { data: tripsData, isLoading: tripsLoading, refetch: refetchTrips } = useQuery({
-    queryKey: ['adminTrips', statusFilter, searchDestination, currentPage],
-    queryFn: async () => {
-      const res = await api.get('/admin/trips', {
-        params: {
-          status: statusFilter || undefined,
-          destination: searchDestination || undefined,
-          page: currentPage,
-          limit,
-        },
-      });
-      return res.data;
-    },
-    retry: 2,
-    staleTime: 20000,
+  const { data: tripsData, isLoading: tripsLoading, refetch: refetchTrips } = useAdminTripsQuery({
+    status: statusFilter || undefined,
+    destination: searchDestination || undefined,
+    page: currentPage,
+    limit,
   });
 
   // Hot polling database records every 20 seconds
@@ -101,7 +75,7 @@ export default function AdminDashboard() {
       refetchTrips();
     }, 20000);
     return () => clearInterval(timer);
-  }, []);
+  }, [refetchTrips]);
 
   // Format status count lists into Chart labels
   const statusData = {

@@ -1,36 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-export interface TripItem {
-  sessionId: string;
-  status: string;
-  createdAt: string;
-  userId?: {
-    name: string;
-    email: string;
-  };
-  input: {
-    destination?: string;
-    origin?: string;
-    start_date?: string;
-    end_date?: string;
-    travelers?: number;
-    budget_inr?: number;
-    interests?: string[];
-  };
-  budget?: {
-    total_cost_inr?: number;
-    total_estimated_cost?: number;
-    transport?: number;
-    accommodation?: number;
-    food?: number;
-    activities?: number;
-    local_transport?: number;
-    emergency_fund?: number;
-  };
-  formattedPlan?: string;
-}
+import type { TripItem } from '../../types';
 
 interface TripDetailModalProps {
   selectedTrip: TripItem;

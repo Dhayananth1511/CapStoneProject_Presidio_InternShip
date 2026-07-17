@@ -5,18 +5,18 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, User, Compass, AlertCircle } from 'lucide-react';
 import { registerSchema } from '../schemas/authSchemas';
 import type { RegisterFormData } from '../schemas/authSchemas';
-import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import toast from 'react-hot-toast';
-import api from '../lib/axios';
+import { authService } from '../services/authService';
+import { useRegisterMutation } from '../hooks/useAuth';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
   const [searchParams, setSearchParams] = useSearchParams();
   const lastStateRef = useRef('');
+  const registerMutation = useRegisterMutation();
 
   const {
     register,
@@ -43,25 +43,25 @@ export default function RegisterPage() {
 
   const handleGoogleLogin = async () => {
     try {
-      const res = await api.get('/auth/google-login?mode=register');
-      if (res.data.authUrl) window.location.href = res.data.authUrl;
+      const data = await authService.getGoogleLoginUrl('register');
+      if (data.authUrl) window.location.href = data.authUrl;
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Google Sign-In is temporarily offline.');
     }
   };
 
   const onSubmit = async (data: RegisterFormData) => {
-    try {
-      const res = await api.post('/auth/register', {
-        name: data.name,
-        email: data.email,
-        password: data.password,
-      });
-      setAuth(res.data.user, res.data.accessToken);
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError('root', { message: err.response?.data?.message || 'Registration failed. Email might already be taken.' });
-    }
+    registerMutation.mutate(
+      data,
+      {
+        onError: (err: any) => {
+          setError('root', { message: err.response?.data?.message || 'Registration failed. Email might already be taken.' });
+        },
+        onSuccess: () => {
+          navigate('/dashboard');
+        },
+      }
+    );
   };
 
   const labelClass = `block text-xs font-semibold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`;
@@ -189,10 +189,10 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || registerMutation.isPending}
               className="flex w-full justify-center rounded-lg bg-primary py-3 px-4 text-sm font-bold text-white transition hover:bg-opacity-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-primary/20 active:scale-[98%]"
             >
-              {isSubmitting ? 'Creating account…' : 'Create Account'}
+              {isSubmitting || registerMutation.isPending ? 'Creating account…' : 'Create Account'}
             </button>
           </form>
 

@@ -6,102 +6,19 @@
 
 import { createHash } from 'crypto';
 import { withRetry } from '../utils/retry';
+import { HotelOption } from '../types';
+import hotelbedsDestMap from '../constants/hotelbedsDestMap.json';
+import { calculateNights } from '../utils/dateHelpers';
 
 const HOTELBEDS_API_KEY = process.env.HOTELBEDS_API_KEY;
 const HOTELBEDS_API_SECRET = process.env.HOTELBEDS_API_SECRET;
 const HOTELBEDS_BASE_URL = process.env.HOTELBEDS_BASE_URL || 'https://api.test.hotelbeds.com';
 
-interface HotelOption {
-  name: string;
-  price_per_night_inr: number;
-  rating: number;
-  amenities: string[];
-  total_cost_inr: number;
-  stars?: number;
-  address?: string;
-  description?: string;
-  source_type?: 'hotelbeds_api' | 'llm_recommendation';
-}
+const HOTELBEDS_DEST_MAP: Record<string, string> = hotelbedsDestMap;
 
 // ---------------------------------------------------------------------------
 // Destination code map — Hotelbeds destination codes for Indian cities
 // ---------------------------------------------------------------------------
-const HOTELBEDS_DEST_MAP: Record<string, string> = {
-  'ooty': 'OOT',
-  'delhi': 'DEL',
-  'new delhi': 'DEL',
-  'mumbai': 'BOM',
-  'bombay': 'BOM',
-  'bangalore': 'BLR',
-  'bengaluru': 'BLR',
-  'chennai': 'CNN',
-  'madras': 'CNN',
-  'kolkata': 'CCU',
-  'calcutta': 'CCU',
-  'hyderabad': 'HYD',
-  'goa': 'GOO',
-  'panaji': 'GOO',
-  'jaipur': 'JAI',
-  'agra': 'AGR',
-  'shimla': 'SIM',
-  'manali': 'KUL',
-  'kochi': 'COK',
-  'cochin': 'COK',
-  'pune': 'PNQ',
-  'pondy': 'PNY',
-  'pondicherry': 'PNY',
-  'puducherry': 'PNY',
-  'alleppey': 'PYP',
-  'alappuzha': 'PYP',
-  'srinagar': 'SXR',
-  'kashmir': 'SXR',
-  'gulmarg': 'SXR',
-  'pahalgam': 'SXR',
-  'varanasi': 'VNS',
-  'banaras': 'VNS',
-  'kashi': 'VNS',
-  'udaipur': 'UDR',
-  'jodhpur': 'JDH',
-  'amritsar': 'ATQ',
-  'mysore': 'MYQ',
-  'mysuru': 'MYQ',
-  'kodaikanal': 'KOD',
-  'munnar': 'AZQ',
-  'darjeeling': 'DAR',
-  'gangtok': 'GAN',
-  'leh': 'IXL',
-  'ladakh': 'IXL',
-  'coimbatore': 'CJB',
-  'madurai': 'IXM',
-  'tiruchirappalli': 'TRZ',
-  'trichy': 'TRZ',
-  'tirupati': 'TIR',
-  'nashik': 'ISK',
-  'aurangabad': 'IXU',
-  'bhopal': 'BHO',
-  'indore': 'IDR',
-  'ahmedabad': 'AMD',
-  'surat': 'STV',
-  'chandigarh': 'IXC',
-  'lucknow': 'LKO',
-  'patna': 'PAT',
-  'bhubaneswar': 'BBI',
-  'raipur': 'RPR',
-  'visakhapatnam': 'VTZ',
-  'vijayawada': 'VGA',
-  'nainital': 'NTL',
-  'mussoorie': 'DED',
-  'rishikesh': 'DED',
-  'haridwar': 'HWI',
-  'mcleod ganj': 'DHM',
-  'dharamsala': 'DHM',
-  'kasol': 'KUL',
-  'spiti': 'KUL',
-  'coorg': 'CXB',
-  'wayanad': 'YNW',
-  'hampi': 'VGA',
-  'puri': 'PBH',
-};
 
 function buildHotelbedsSignature(): { timestamp: string; signature: string } {
   if (!HOTELBEDS_API_KEY || !HOTELBEDS_API_SECRET) {
@@ -349,10 +266,7 @@ export async function searchHotels(
   travelers: number
 ): Promise<{ hotels: HotelOption[]; recommended: string; price_per_night: number }> {
   return withRetry(async () => {
-    const nights = Math.max(
-      1,
-      (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const nights = calculateNights(check_in, check_out);
 
     let hotels: HotelOption[] = [];
 

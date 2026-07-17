@@ -1,23 +1,9 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-// Define the TypeScript structure (interface) for a User document
-export interface IUser extends Document {
-  name: string;
-  email: string;
-  password: string;
-  role: 'traveler' | 'admin';
-  refreshToken?: string;
-  googleId?: string;          // Google account unique ID — set on Google Sign-In
-  googleAccessToken?: string;
-  googleRefreshToken?: string;
-  googleCalendarAccessToken?: string;
-  googleCalendarRefreshToken?: string;
-  longTermMemory: string;
-  createdAt: Date;
-  updatedAt: Date;
-  comparePassword(candidatePassword: string): Promise<boolean>;
-}
+import { IUser } from '../types';
+import { UserRole } from '../constants/enums';
+
 
 // Define the database Schema rules
 const UserSchema = new Schema<IUser>(

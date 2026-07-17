@@ -24,6 +24,8 @@ This repository contains the architecture, workflow designs, and system integrat
 12. [Observability — Logging, Metrics & Health Checks](#13-observability--logging-metrics--health-checks)
 13. [Functional Execution Scenarios](#14-functional-execution-scenarios-simulated-outputs)
 14. [Tech Stack](#15-tech-stack)
+15. [Modular Project Structure](#16-modular-project-structure)
+16. [Local Setup and Execution Guide](#17-local-setup-and-execution-guide)
 
 ---
 
@@ -546,7 +548,6 @@ sequenceDiagram
     participant PlannerSvc as Planner Service
     participant Supervisor as PlannerAgent (Supervisor)
     participant Coord as CoordinatorAgent
-    participant Redis as cache
     participant DB as MongoDB Atlas
 
     Traveler->>FE: Enters "Trip to Ooty for 4 days"
@@ -632,10 +633,10 @@ sequenceDiagram
 * **Zero-Redundancy Routing**: The routing LLM checks current context fields. If a field is already occupied (e.g. hotel is selected, but user requested checking the weather), it invokes *only* the matching tool, leaving the rest untouched.
 * **Concurrent Execution**: Invokes the chosen tools concurrently in a `Promise.allSettled()` wrapper.
 
-### 4. Cache Check & MCP Layer Retrievals
-* **Caching Layer**: Each tool checks **Redis** using specific keys (e.g., `weather:Munnar:2026-10-10:2026-10-13`).
-  * **Cache HIT**: Instantly returns JSON content.
-  * **Cache MISS**: Triggers the **Model Context Protocol (MCP) server** (e.g., Maps MCP fetching Google Places attractions) using exponential backoff retry policies. Resolved payloads are saved in Redis memory for future queries.
+### 4. Context Check & MCP Layer Retrievals
+* **Context Preservation**: Each tool checks if the requested parameters (e.g., weather for destination city, flight options, or hotel lists) are already present and valid in the active session context.
+  * **Context HIT**: Reuses coordinates and cached data fields to prevent redundant external API and LLM calls.
+  * **Context MISS**: Triggers the **Model Context Protocol (MCP) server** (e.g., Maps MCP fetching Google Places attractions) using exponential backoff retry policies to retrieve fresh data.
 
 ### 5. Programmatic Budget Checks (`budgetAgent.ts`)
 * **Calibration**: The **Budget Agent** calculates base estimates:
@@ -1331,4 +1332,143 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 
 
 ---
+
+## 16. Modular Project Structure
+
+The project has been refactored to separate representation (UI components) from business logic (Axios services, React Query hooks, and backend Services) to align with enterprise-grade modular designs.
+
+### A. Frontend Layout (`client/src/`)
+```
+client/src/
+├── components/
+│   ├── layout/             # Global layout elements (Navbar.tsx, etc.)
+│   ├── common/             # Shared routing security models (ProtectedRoute.tsx, etc.)
+│   ├── chat/               # Modular panels (WeatherSpecialist, ダイニング, CheckedParameters, LocalTransit Cards)
+│   ├── admin/              # Administrative telemetry sub-components
+│   └── trips/              # Flight/Hotel cards and list item displays
+├── constants/
+│   └── enums.ts            # Client-side enums configured as const-objects for literal string compatibility
+├── hooks/
+│   ├── useAuth.ts          # Encapsulates login/register mutation states
+│   ├── useTrips.ts         # Handles active trip loading, preferences selection, and calendar requests
+│   └── useAdmin.ts         # Pulls analytics pipelines, audit lists, and logs
+├── services/
+│   ├── authService.ts      # Axios request handlers for security sessions and Google auth callback
+│   ├── tripService.ts      # Queries trip histories, planner swarm, and select-tier endpoint payloads
+│   └── adminService.ts     # Aggregates remote analytics and server diagnostic logs
+├── store/                  # Zustand global stores (authStore, themeStore)
+├── types/
+│   ├── trip.ts             # Strong interfaces for Attraction, Itinerary, Day, and Message structures
+│   ├── user.ts             # Strong interfaces for Auth profiles and User roles
+│   └── index.ts            # Unified module exports
+└── App.tsx                 # App router wrapping React QueryClient provider and page controllers
+```
+
+### B. Backend Layout (`server/src/`)
+```
+server/src/
+├── config/                 # Mongoose MongoDB connectivity setups
+├── constants/
+│   └── enums.ts            # Strong TS Enums matching db schema definitions (TripStatus, UserRole, MessageRole)
+├── controllers/            # Fat-free Express routing managers; handle client request/response pipelines
+│   ├── authController.ts   
+│   ├── tripController.ts   
+│   └── adminController.ts  
+├── services/               # Decoupled Business Core containing AI orchestrations, database queries, and OAuth
+│   ├── authService.ts      # Session tokens, Google Auth redirects, callback credential validation
+│   ├── tripService.ts      # AI Supervisor chains, hotel categories selections, local telemetry computations
+│   └── adminService.ts     # MongoDB statistical pipelines (budget limits, top hotels), log files reading
+├── models/                 # Mongoose schemas (User, Trip, Log templates)
+└── index.ts                # App boot file configuring helmet, rate-limit policies, and CORS
+```
+
+---
+
+## 17. Local Setup and Execution Guide
+
+Follow these instructions to clone, configure, build, and run the project locally.
+
+### Prerequisites
+Before running, you must install:
+- **Node.js** (v18.x or above)
+- **npm** (v9.x or above)
+- **MongoDB** (A local database instance or a MongoDB Atlas Cloud connection URI)
+- **Groq API Key** (Accessible from Groq Console)
+
+### Step 1: Clone the Repo
+```bash
+git clone https://github.com/Dhayananth1511/CapStoneProject_Presidio_InternShip.git
+cd CapStoneProject_Presidio_InternShip
+```
+
+### Step 2: Set Up Backend Environment Config
+Navigate into the `server` directory and create `.env`:
+```bash
+cd server
+```
+
+Create a `.env` file in the `server` directory (you can copy the template from `server/.env.example`):
+```env
+PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/travel_planner
+JWT_ACCESS_SECRET=your_jwt_access_token_secret_security_key
+JWT_REFRESH_SECRET=your_jwt_refresh_token_secret_security_key
+GROQ_API_KEY=gsk_your_groq_api_key_here
+CLIENT_URL=http://localhost:5173
+
+# Real Partner API Integration Keys
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+GEOAPIFY_API_KEY=your_geoapify_api_key
+HOTELBEDS_API_KEY=your_hotelbeds_api_key
+HOTELBEDS_API_SECRET=your_hotelbeds_api_secret
+AVIATIONSTACK_API_KEY=your_aviationstack_api_key
+
+# Google Calendar Integration (Optional)
+GOOGLE_CALENDAR_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:5000/api/auth/google/callback
+```
+
+### Step 3: Install & Start Backend
+Install dependencies and run the Express API in development watch mode:
+```bash
+npm install
+npm run dev
+```
+The backend server will start on `http://localhost:5000`. You can test it by visiting the health checks at:
+- Liveness Probe: `http://localhost:5000/health`
+- Database Check: `http://localhost:5000/health/db`
+
+### Step 4: Set Up Frontend Environment Config
+Open a new terminal window, navigate to the `client` directory, and create `.env`:
+```bash
+cd ../client
+```
+
+Create a `.env` file (you can copy the template from `client/.env.example`):
+```env
+VITE_API_URL=http://localhost:5000/api
+```
+
+### Step 5: Install & Start Frontend (Vite)
+Install dependencies and start the React client:
+```bash
+npm install
+npm run dev
+```
+Vite will serve the client on `http://localhost:5173`. Open this URL in your web browser to sign up and start planning customized trips!
+
+### Verification Script Checks
+Before committing code, verify it compiles cleanly:
+* **Server Verification (tsc check)**:
+  ```bash
+  cd server
+  npm run type-check   # Runs tsc --noEmit
+  ```
+* **Frontend Packaging**:
+  ```bash
+  cd client
+  npm run build        # Verifies React Vite production bundling
+  ```
 
