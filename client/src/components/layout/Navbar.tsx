@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
-import { useThemeStore } from '../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import {
   Compass, LogOut, User, LayoutDashboard, BarChart3,
   Moon, Sun, Menu, X,
