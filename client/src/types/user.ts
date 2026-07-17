@@ -1,7 +1,9 @@
+import { UserRole } from '../constants/enums';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'traveler' | 'admin';
+  role: UserRole;
   hasCalendarLinked?: boolean;
 }

@@ -1,6 +1,8 @@
+import { TripStatus, MessageRole } from '../constants/enums';
+
 export interface TripSummary {
   sessionId: string;
-  status: 'DRAFT' | 'PLANNED' | 'CONFIRMED' | 'CANCELLED';
+  status: TripStatus;
   createdAt: string;
   input: {
     destination?: string;
@@ -119,7 +121,7 @@ export interface TransportData {
 }
 
 export interface Message {
-  role: 'user' | 'assistant';
+  role: MessageRole;
   content: string;
 }
 
