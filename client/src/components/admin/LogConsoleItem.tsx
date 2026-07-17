@@ -7,8 +7,33 @@ interface LogConsoleItemProps {
 
 export const LogConsoleItem: React.FC<LogConsoleItemProps> = ({ log, isDark }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const formatLogTime = (ts: string) => {
+    if (!ts) return new Date().toLocaleString();
+    try {
+      // Normalize legacy 'YYYY-MM-DD HH:mm:ss' format by appending 'Z' to parse as UTC
+      let normalizedTs = ts;
+      if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(ts)) {
+        normalizedTs = ts.replace(' ', 'T') + 'Z';
+      }
+      
+      const date = new Date(normalizedTs);
+      if (isNaN(date.getTime())) return ts;
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      const mm = pad(date.getMonth() + 1);
+      const dd = pad(date.getDate());
+      const hh = pad(date.getHours());
+      const min = pad(date.getMinutes());
+      const ss = pad(date.getSeconds());
+      return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+    } catch {
+      return ts;
+    }
+  };
+
   const level = (log.level || 'info').toLowerCase();
-  const time = log.timestamp || new Date().toLocaleString();
+  const time = formatLogTime(log.timestamp);
   const msg = log.message || '';
   const service = log.service || 'unknown';
 

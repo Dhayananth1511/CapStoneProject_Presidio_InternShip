@@ -14,7 +14,6 @@ import MyTripsPage from './pages/MyTripsPage';
 import AdminDashboard from './pages/AdminDashboard';
 import { useThemeStore } from './store/themeStore';
 import { useAuthStore } from './store/authStore';
-import './App.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

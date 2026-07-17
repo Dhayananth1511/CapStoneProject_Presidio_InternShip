@@ -16,7 +16,7 @@ try {
 
 // Define the log format
 const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.timestamp(),
   winston.format.errors({ stack: true }),
   winston.format.json()
 );
