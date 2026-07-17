@@ -5,20 +5,20 @@ import { useState, useEffect, useRef } from 'react';
 import { Mail, Lock, Compass, AlertCircle } from 'lucide-react';
 import { loginSchema } from '../schemas/authSchemas';
 import type { LoginFormData } from '../schemas/authSchemas';
-import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import toast from 'react-hot-toast';
-import api from '../lib/axios';
+import { authService } from '../services/authService';
+import { useLoginMutation } from '../hooks/useAuth';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
   const { theme } = useThemeStore();
   const isDark = theme === 'dark';
   const [searchParams, setSearchParams] = useSearchParams();
   const roleParam = searchParams.get('role');
   const [selectedRole, setSelectedRole] = useState<'traveler' | 'admin'>('traveler');
   const lastStateRef = useRef('');
+  const loginMutation = useLoginMutation();
 
   const {
     register,
@@ -46,21 +46,25 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     try {
-      const res = await api.get('/auth/google-login?mode=login');
-      if (res.data.authUrl) window.location.href = res.data.authUrl;
+      const data = await authService.getGoogleLoginUrl('login');
+      if (data.authUrl) window.location.href = data.authUrl;
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Google Sign-In is temporarily offline.');
     }
   };
 
   const onSubmit = async (data: LoginFormData) => {
-    try {
-      const res = await api.post('/auth/login', { ...data, role: selectedRole });
-      setAuth(res.data.user, res.data.accessToken);
-      navigate(res.data.user.role === 'admin' ? '/admin' : '/dashboard');
-    } catch (err: any) {
-      setError('root', { message: err.response?.data?.message || 'Invalid email or password.' });
-    }
+    loginMutation.mutate(
+      { ...data, role: selectedRole },
+      {
+        onError: (err: any) => {
+          setError('root', { message: err.response?.data?.message || 'Invalid email or password.' });
+        },
+        onSuccess: (resData) => {
+          navigate(resData.user.role === 'admin' ? '/admin' : '/dashboard');
+        },
+      }
+    );
   };
 
   const cardClass = `premium-card rounded-2xl p-6 shadow-2xl space-y-5`;
@@ -172,10 +176,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || loginMutation.isPending}
               className="flex w-full justify-center rounded-lg bg-primary py-3 px-4 text-xs font-bold text-white transition hover:bg-opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-primary/20 cursor-pointer active:scale-[98%]"
             >
-              {isSubmitting ? 'Signing in…' : 'Sign In'}
+              {isSubmitting || loginMutation.isPending ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 

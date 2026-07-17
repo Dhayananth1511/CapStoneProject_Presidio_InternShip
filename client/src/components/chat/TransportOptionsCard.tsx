@@ -1,30 +1,6 @@
 import React from 'react';
 import { Send, Clock, Car, Check, Loader2 } from 'lucide-react';
-
-interface TransportOption {
-  mode: string;
-  operator: string;
-  cost_inr: number;
-  cost_per_traveler: number;
-  duration_hrs: number;
-  departure?: string;
-  arrival?: string;
-  data_source?: string;
-  amenities?: string[];
-  distance_km?: number;
-}
-
-interface TransportData {
-  options?: TransportOption[];
-  best_option?: string;
-  estimated_cost_inr?: number;
-  selected_option?: {
-    operator: string;
-    mode: string;
-  };
-  reasoning?: string;
-  distance_km?: number;
-}
+import type { TransportData } from '../../types';
 
 interface TransportOptionsCardProps {
   transport: TransportData;

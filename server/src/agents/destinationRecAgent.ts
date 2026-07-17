@@ -3,10 +3,12 @@
 // past travel history stored in long-term memory.
 
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { TripContext } from './plannerAgent';
+import { TripContext } from '../types';
 import { withRetry } from '../utils/retry';
 import { createChatModel } from '../utils/llm';
 import { getDestinationRecPrompt } from '../prompts';
+import { extractJsonObject } from '../utils/jsonHelpers';
+
 
 const llm = createChatModel({
   temperature: 0.7,
@@ -27,9 +29,7 @@ export async function runDestinationRecAgent(
   ]));
 
   try {
-    const jsonMatch = response.content.toString().match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in destination recommendation response');
-    const data = JSON.parse(jsonMatch[0]);
+    const data = extractJsonObject(response.content.toString());
 
     if (!data.destinations?.length || !data.top_pick) {
       throw new Error('Destination recommendation response was incomplete');

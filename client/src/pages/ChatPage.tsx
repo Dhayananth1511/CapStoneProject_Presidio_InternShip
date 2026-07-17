@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import toast from 'react-hot-toast';
@@ -18,20 +17,24 @@ import {
   Compass,
 } from 'lucide-react';
 
-import api from '../lib/axios';
 import { useThemeStore } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
-
+import type { Message } from '../types';
+import { authService } from '../services/authService';
+import { tripService } from '../services/tripService';
+import {
+  useActiveTripQuery,
+  usePlanTripMutation,
+  useSelectHotelMutation,
+  useSelectTransportMutation,
+  useApproveTripMutation,
+  useRejectTripMutation,
+} from '../hooks/useTrips';
 
 
 import { ItineraryTimeline } from '../components/chat/ItineraryTimeline';
 import { InspectorTab } from '../components/chat/InspectorTab';
 import { downloadItineraryPDF } from '../utils/pdfHelper';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 const MAX_MESSAGE_LENGTH = 500;
 
@@ -68,7 +71,6 @@ export default function ChatPage() {
     },
   ]);
   const [tripId, setTripId] = useState<string | undefined>(tripIdParam || undefined);
-  const [activeStep, setActiveStep] = useState<string | null>(null);
   const [context, setContext] = useState<any>(null);
   const [lodgingCategoryTab, setLodgingCategoryTab] = useState<'budget' | 'mid_range' | 'luxury'>('mid_range');
   const [activeTab, setActiveTab] = useState<'inspector' | 'itinerary'>('inspector');
@@ -103,35 +105,32 @@ export default function ChatPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch existing trip on mount if tripId query param is present
-  const { isLoading: isLoadingTrip } = useQuery({
-    queryKey: ['activeTrip', tripIdParam],
-    queryFn: async () => {
-      if (!tripIdParam) return null;
-      try {
-        const res = await api.get(`/trips/${tripIdParam}`);
-        const trip = res.data.trip;
-        if (trip) {
-          setTripId(trip.sessionId);
-          setContext(trip);
-          if (trip.conversationHistory && trip.conversationHistory.length > 0) {
-            setMessages(trip.conversationHistory);
-          }
-          if (trip.status === 'PLANNED' || trip.status === 'CONFIRMED') {
-            setActiveTab('itinerary');
-          }
-          // Restore booking refs so the InspectorTab confirmation card renders correctly
-          if (trip.status === 'CONFIRMED' && trip.booking?.refs) {
-            setBookingRefs(trip.booking.refs);
-          }
-        }
-        return trip;
-      } catch (err) {
-        console.error('Failed to load trip', err);
-        return null;
+  const { data: activeTripData, isLoading: isLoadingTrip } = useActiveTripQuery(tripIdParam);
+
+  const planTripMutation = usePlanTripMutation();
+  const selectHotelMutation = useSelectHotelMutation(tripId!);
+  const selectTransportMutation = useSelectTransportMutation(tripId!);
+  const rawApproveMutation = useApproveTripMutation(tripId!);
+  const rawRejectMutation = useRejectTripMutation(tripId!);
+
+  const activeStep = planTripMutation.activeStep || rawRejectMutation.activeStep;
+
+  useEffect(() => {
+    if (activeTripData) {
+      setTripId(activeTripData.sessionId);
+      setContext(activeTripData);
+      if (activeTripData.conversationHistory && activeTripData.conversationHistory.length > 0) {
+        setMessages(activeTripData.conversationHistory);
       }
-    },
-    enabled: !!tripIdParam,
-  });
+      if (activeTripData.status === 'PLANNED' || activeTripData.status === 'CONFIRMED') {
+        setActiveTab('itinerary');
+      }
+      // Restore booking refs so the InspectorTab confirmation card renders correctly
+      if (activeTripData.status === 'CONFIRMED' && activeTripData.booking?.refs) {
+        setBookingRefs(activeTripData.booking.refs);
+      }
+    }
+  }, [activeTripData]);
 
   // Reset to clean planning session if there is no tripId in search parameters
   useEffect(() => {
@@ -146,7 +145,7 @@ export default function ChatPage() {
         },
       ]);
       setActiveTab('inspector');
-      setActiveStep(null);
+      planTripMutation.setActiveStep(null);
       setShowReplanInput(false);
       setShowBudgetBreakdown(false);
       setSelectedInterests([]);
@@ -168,9 +167,9 @@ export default function ChatPage() {
       const syncCalendarAfterRedirect = async () => {
         // Refresh session to pull down updated user hasCalendarLinked flag
         try {
-          const refreshRes = await api.post('/auth/refresh');
-          if (refreshRes.data.user) {
-            useAuthStore.getState().setAuth(refreshRes.data.user, refreshRes.data.accessToken);
+          const refreshRes = await authService.refreshSession();
+          if (refreshRes.user) {
+            useAuthStore.getState().setAuth(refreshRes.user, refreshRes.accessToken);
           }
         } catch (err) {
           console.error('Failed to sync session profile on calendar OAuth callback:', err);
@@ -179,21 +178,21 @@ export default function ChatPage() {
         if (context?.status === 'CONFIRMED') {
           try {
             toast.loading('Syncing trip to Google Calendar...', { id: 'calendar-sync' });
-            const syncRes = await api.post(`/trips/${tripId}/sync-calendar`);
-            if (syncRes.data.success) {
+            const syncRes = await tripService.syncCalendar(tripId!);
+            if (syncRes.success) {
               toast.success('📅 Trip successfully synced to Google Calendar!', { id: 'calendar-sync' });
-              if (syncRes.data.calendarEventId) {
-                setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.data.calendarEventId } : { calendar: syncRes.data.calendarEventId });
+              if (syncRes.calendarEventId) {
+                setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.calendarEventId } : { calendar: syncRes.calendarEventId });
                 setContext((prev: any) => prev ? {
                   ...prev,
                   booking: {
                     ...prev.booking,
-                    refs: { ...prev.booking?.refs, calendar: syncRes.data.calendarEventId }
+                    refs: { ...prev.booking?.refs, calendar: syncRes.calendarEventId }
                   }
                 } : prev);
               }
             } else {
-              toast.error(syncRes.data.message || 'Auto-sync failed.', { id: 'calendar-sync' });
+              toast.error(syncRes.message || 'Auto-sync failed.', { id: 'calendar-sync' });
             }
           } catch (err: any) {
             toast.error(err.response?.data?.message || 'Auto-sync failed.', { id: 'calendar-sync' });
@@ -225,234 +224,170 @@ export default function ChatPage() {
     }
   }, [context]);
 
-  // Mutation for sending chat messages to the Planner Agent Swarm
-  const chatMutation = useMutation({
-    mutationFn: async (payload: { message: string; tripId?: string }) => {
-      const steps = [
-        'Supervisor Routing & Slot Extraction...',
-        'Running Programmatic Context Validations...',
-        'Coordinating MCP Parallel Retrieval (Weather, Hotels, Transport)...',
-        'Performing Budget Calibration & Conflict Checks...',
-        'Generating Day-by-Day Itinerary Layout...'
-      ];
 
-      let currentStepIndex = 0;
-      setActiveStep(steps[currentStepIndex]);
-
-      const interval = setInterval(() => {
-        if (currentStepIndex < steps.length - 1) {
-          currentStepIndex++;
-          setActiveStep(steps[currentStepIndex]);
-        }
-      }, 1200);
-
-      try {
-        const res = await api.post('/trips/plan', payload);
-        return res.data;
-      } catch (firstErr: any) {
-        const isTimeout = firstErr.code === 'ECONNABORTED' || firstErr.message?.includes('timeout') || firstErr.response?.status === 504;
-        // Auto-retry on timeout: MongoDB already saved the result during the first attempt,
-        // so the retry call returns instantly with the computed data.
-        if (isTimeout) {
-          setActiveStep('Agent swarm warming up — auto-retrying now...');
-          await new Promise(resolve => setTimeout(resolve, 2500));
-          try {
-            const retryRes = await api.post('/trips/plan', payload);
-            return retryRes.data;
-          } catch (retryErr) {
-            throw retryErr;
+  const chatMutation = {
+    ...planTripMutation,
+    mutate: (payload: { message: string; tripId?: string }) => {
+      planTripMutation.mutate(payload, {
+        onSuccess: (data) => {
+          if (data.tripId) {
+            setTripId(data.tripId);
+            setSearchParams((prev) => { prev.set('tripId', data.tripId); return prev; }, { replace: true });
           }
-        }
-        throw firstErr;
-      } finally {
-        clearInterval(interval);
-      }
-    },
-    onSuccess: (data) => {
-      setActiveStep(null);
-      if (data.tripId) {
-        setTripId(data.tripId);
-        // Sync tripId into the URL so a page refresh reloads this trip
-        setSearchParams((prev) => { prev.set('tripId', data.tripId); return prev; }, { replace: true });
-      }
-      if (data.context) {
-        setContext(data.context);
-        if (data.context.status === 'PLANNED') {
-          setActiveTab('itinerary');
-        }
-      }
+          if (data.context) {
+            setContext(data.context);
+            if (data.context.status === 'PLANNED') {
+              setActiveTab('itinerary');
+            }
+          }
 
-      if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: data.clarifyingQuestion },
-        ]);
-      } else if (data.status === 'PLANNED' && data.plan) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `Here is the curated trip plan for your approval:\n\n${data.plan}`,
-          },
-        ]);
-        toast.success('Trip plan ready for your review! ✈️');
-      }
-    },
-    onError: (err: any) => {
-      setActiveStep(null);
-      const isOffline = !navigator.onLine || err.code === 'ERR_NETWORK';
-      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
-      const errMessage = isOffline
-        ? 'Connection lost. Please check your internet and try again.'
-        : isTimeout
-        ? 'The AI agent swarm is warming up on the server. Please click Send again — it will work on the next attempt.'
-        : err.response?.data?.message || 'Connection to the agent swarm timed out. Please try again.';
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `${isOffline ? '📡' : '⚠️'} **${isOffline ? 'Offline' : 'Agent Error'}:** ${errMessage}`,
+          if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', content: data.clarifyingQuestion },
+            ]);
+          } else if (data.status === 'PLANNED' && data.plan) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: `Here is the curated trip plan for your approval:\n\n${data.plan}`,
+              },
+            ]);
+            toast.success('Trip plan ready for your review! ✈️');
+          }
         },
-      ]);
-      if (isOffline) toast.error('You appear to be offline.');
-      if (isTimeout) toast('The server is warming up — please send your message again.', { icon: '🔄', duration: 5000 });
-    },
-  });
-
-  // Mutation for choosing a hotel option
-  const selectHotelMutation = useMutation({
-    mutationFn: async (payload: { hotelName: string; category: string }) => {
-      const res = await api.post(`/trips/${tripId}/select-hotel`, payload);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      if (data.trip) {
-        setContext(data.trip);
-        if (data.trip.conversationHistory) {
-          setMessages(data.trip.conversationHistory);
+        onError: (err: any) => {
+          const isOffline = !navigator.onLine || err.code === 'ERR_NETWORK';
+          const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+          const errMessage = isOffline
+            ? 'Connection lost. Please check your internet and try again.'
+            : isTimeout
+            ? 'The AI agent swarm is warming up on the server. Please click Send again — it will work on the next attempt.'
+            : err.response?.data?.message || 'Connection to the agent swarm timed out. Please try again.';
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `${isOffline ? '📡' : '⚠️'} **${isOffline ? 'Offline' : 'Agent Error'}:** ${errMessage}`,
+            },
+          ]);
+          if (isOffline) toast.error('You appear to be offline.');
+          if (isTimeout) toast('The server is warming up — please send your message again.', { icon: '🔄', duration: 5000 });
         }
-      }
-      toast.success('🏨 Lodging preference updated!');
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Failed to update lodging selection.');
+      });
     }
-  });
+  };
 
   const handleSelectHotel = (hotelName: string, category: string) => {
-    selectHotelMutation.mutate({ hotelName, category });
-  };
-
-  // Mutation for choosing a transport option
-  const selectTransportMutation = useMutation({
-    mutationFn: async (payload: { operator: string; mode: string }) => {
-      const res = await api.post(`/trips/${tripId}/select-transport`, payload);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      if (data.trip) {
-        setContext(data.trip);
-        if (data.trip.conversationHistory) {
-          setMessages(data.trip.conversationHistory);
+    selectHotelMutation.mutate(
+      { hotelName, category },
+      {
+        onSuccess: (data) => {
+          if (data.trip) {
+            setContext(data.trip);
+            if (data.trip.conversationHistory) {
+              setMessages(data.trip.conversationHistory);
+            }
+          }
+          toast.success('🏨 Lodging preference updated!');
+        },
+        onError: (err: any) => {
+          toast.error(err.response?.data?.message || 'Failed to update lodging selection.');
         }
       }
-      toast.success('🎫 Transport preference updated!');
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'Failed to update transport selection.');
-    }
-  });
+    );
+  };
 
   const handleSelectTransport = (operator: string, mode: string) => {
-    selectTransportMutation.mutate({ operator, mode });
-  };
-
-  // Mutation for approving / confirming the trip (HITL Gate)
-  const approveMutation = useMutation({
-    mutationFn: async () => {
-      if (!tripId) return;
-      const res = await api.post(`/trips/${tripId}/approve`);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      toast.success('Trip confirmed! Booking references generated. 🎉');
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `🎉 Awesome! The trip has been successfully approved & confirmed.\n\n🔑 **Booking References:**\n* 🏨 **Hotel:** \`${data.bookingRefs?.hotel}\`\n* ✈️ **Transport:** \`${data.bookingRefs?.transport}\`\n* 📅 **Calendar integration:** ${
-            data.bookingRefs?.calendar === 'No calendar synced'
-              ? 'Calendar event will be created once you sync your Google Calendar'
-              : `Created Google Calendar event (\`${data.bookingRefs?.calendar}\`)`
-          }`,
+    selectTransportMutation.mutate(
+      { operator, mode },
+      {
+        onSuccess: (data) => {
+          if (data.trip) {
+            setContext(data.trip);
+            if (data.trip.conversationHistory) {
+              setMessages(data.trip.conversationHistory);
+            }
+          }
+          toast.success('🎫 Transport preference updated!');
         },
-      ]);
-      // Prefer the full trip document returned by the backend; fall back to a shallow merge
-      if (data.trip) {
-        setContext(data.trip);
-      } else if (context) {
-        setContext({ ...context, status: 'CONFIRMED', booking: { refs: data.bookingRefs, confirmed_at: new Date().toISOString() } });
-      }
-      // Cache booking refs in local state so InspectorTab card can display them immediately
-      if (data.bookingRefs) {
-        setBookingRefs(data.bookingRefs);
-      }
-      // Stay on Plan Details (inspector) tab post-approval so user sees the booking
-      // confirmation card with references. Only initial page-load auto-switches to itinerary.
-      setActiveTab('inspector');
-    },
-    onError: (err: any) => {
-      toast.error(`Approval failed: ${err.response?.data?.message || err.message}`);
-    },
-  });
-
-  // Mutation for rejecting / replanning the trip (HITL rejection)
-  const rejectMutation = useMutation({
-    mutationFn: async (reason: string) => {
-      setActiveStep('Replanning Agent: Clearing Selective Stale Contexts...');
-      
-      const interval = setInterval(() => {
-        setActiveStep('Recycling Swarm Pipelines & Re-calculating...');
-      }, 1000);
-
-      try {
-        const res = await api.post(`/trips/${tripId}/reject`, { reason });
-        return res.data;
-      } finally {
-        clearInterval(interval);
-      }
-    },
-    onSuccess: (data) => {
-      setActiveStep(null);
-      if (data.context) {
-        setContext(data.context);
-        if (data.context.status === 'PLANNED') {
-          setActiveTab('itinerary');
+        onError: (err: any) => {
+          toast.error(err.response?.data?.message || 'Failed to update transport selection.');
         }
       }
-      
-      if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: data.clarifyingQuestion },
-        ]);
-        toast.error('Re-planning requires additional information or budget adjustment.');
-      } else if (data.status === 'PLANNED' && data.plan) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `🔄 I modified your plan based on your feedback:\n\n${data.plan}`,
-          },
-        ]);
-        toast.success('Plan updated based on your changes! 🔄');
-      }
-    },
-    onError: (err: any) => {
-      setActiveStep(null);
-      toast.error(`Replanning failed: ${err.response?.data?.message || err.message}`);
-    },
-  });
+    );
+  };
+
+  const approveMutation = {
+    ...rawApproveMutation,
+    mutate: () => {
+      rawApproveMutation.mutate(undefined, {
+        onSuccess: (data) => {
+          toast.success('Trip confirmed! Booking references generated. 🎉');
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `🎉 Awesome! The trip has been successfully approved & confirmed.\n\n🔑 **Booking References:**\n* 🏨 **Hotel:** \`${data.bookingRefs?.hotel}\`\n* ✈️ **Transport:** \`${data.bookingRefs?.transport}\`\n* 📅 **Calendar integration:** ${
+                data.bookingRefs?.calendar === 'No calendar synced'
+                  ? 'Calendar event will be created once you sync your Google Calendar'
+                  : `Created Google Calendar event (\`${data.bookingRefs?.calendar}\`)`
+              }`,
+            },
+          ]);
+          if (data.trip) {
+            setContext(data.trip);
+          } else if (context) {
+            setContext({ ...context, status: 'CONFIRMED', booking: { refs: data.bookingRefs, confirmed_at: new Date().toISOString() } });
+          }
+          if (data.bookingRefs) {
+            setBookingRefs(data.bookingRefs);
+          }
+          setActiveTab('inspector');
+        },
+        onError: (err: any) => {
+          toast.error(`Approval failed: ${err.response?.data?.message || err.message}`);
+        }
+      });
+    }
+  };
+
+  const rejectMutation = {
+    ...rawRejectMutation,
+    mutate: (reason: string) => {
+      rawRejectMutation.mutate(reason, {
+        onSuccess: (data) => {
+          if (data.context) {
+            setContext(data.context);
+            if (data.context.status === 'PLANNED') {
+              setActiveTab('itinerary');
+            }
+          }
+          
+          if (data.status === 'NEEDS_INFO' && data.clarifyingQuestion) {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', content: data.clarifyingQuestion },
+            ]);
+            toast.error('Re-planning requires additional information or budget adjustment.');
+          } else if (data.status === 'PLANNED' && data.plan) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: `🔄 I modified your plan based on your feedback:\n\n${data.plan}`,
+              },
+            ]);
+            toast.success('Plan updated based on your changes! 🔄');
+          }
+        },
+        onError: (err: any) => {
+          toast.error(`Replanning failed: ${err.response?.data?.message || err.message}`);
+        }
+      });
+    }
+  };
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -501,21 +436,21 @@ export default function ChatPage() {
       if (context?.status === 'CONFIRMED') {
         try {
           toast.loading('Syncing trip to Google Calendar...', { id: 'calendar-sync-direct' });
-          const syncRes = await api.post(`/trips/${tripId}/sync-calendar`);
-          if (syncRes.data.success) {
+          const syncRes = await tripService.syncCalendar(tripId!);
+          if (syncRes.success) {
             toast.success('📅 Trip successfully synced to Google Calendar!', { id: 'calendar-sync-direct' });
-            if (syncRes.data.calendarEventId) {
-              setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.data.calendarEventId } : { calendar: syncRes.data.calendarEventId });
+            if (syncRes.calendarEventId) {
+              setBookingRefs((prev) => prev ? { ...prev, calendar: syncRes.calendarEventId } : { calendar: syncRes.calendarEventId });
               setContext((prev: any) => prev ? {
                 ...prev,
                 booking: {
                   ...prev.booking,
-                  refs: { ...prev.booking?.refs, calendar: syncRes.data.calendarEventId }
+                  refs: { ...prev.booking?.refs, calendar: syncRes.calendarEventId }
                 }
               } : prev);
             }
           } else {
-            toast.error(syncRes.data.message || 'Failed to sync calendar event.', { id: 'calendar-sync-direct' });
+            toast.error(syncRes.message || 'Failed to sync calendar event.', { id: 'calendar-sync-direct' });
           }
         } catch (err: any) {
           toast.error(err.response?.data?.message || 'Failed to sync calendar event.', { id: 'calendar-sync-direct' });
@@ -527,9 +462,9 @@ export default function ChatPage() {
     }
 
     try {
-      const res = await api.get(`/auth/google${tripId ? `?tripId=${tripId}` : ''}`);
-      if (res.data.authUrl) {
-        window.location.href = res.data.authUrl;
+      const res = await tripService.getGoogleOAuthUrl(tripId);
+      if (res.authUrl) {
+        window.location.href = res.authUrl;
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Google Calendar is not configured on the server.');
@@ -1190,7 +1125,7 @@ export default function ChatPage() {
                 onClick={async () => {
                   setShowDiscardConfirm(false);
                   try {
-                    await api.delete(`/trips/${context.sessionId}`);
+                    await tripService.deleteTrip(context.sessionId);
                     toast.success('Trip discarded successfully.');
                     navigate('/dashboard');
                   } catch (err: any) {

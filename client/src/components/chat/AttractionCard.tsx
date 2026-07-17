@@ -1,18 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, MapPin } from 'lucide-react';
-
-interface Attraction {
-  name: string;
-  vicinity?: string;
-  rating?: number;
-  description?: string;
-  user_ratings_total?: number;
-  photo_reference?: string;
-  place_id?: string;
-  is_llm_recommended?: boolean;
-  source_type?: 'geoapify_places' | 'llm_recommendation' | 'hotelbeds_api';
-  price_per_person_inr?: number;
-}
+import type { Attraction } from '../../types';
 
 interface AttractionCardProps {
   item: Attraction;

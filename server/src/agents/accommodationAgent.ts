@@ -7,6 +7,7 @@ import { withRetry } from '../utils/retry';
 import logger from '../utils/logger';
 import { createChatModel } from '../utils/llm';
 import { getAccommodationFallbackPrompt, getAccommodationReasoningPrompt } from '../prompts';
+import { calculateNights } from '../utils/dateHelpers';
 
 const llm = createChatModel({
   temperature: 0.3,
@@ -19,10 +20,7 @@ async function generateAccommodationFallback(
   travelers: number,
   max_price_per_night?: number
 ): Promise<any[]> {
-  const nights = Math.max(
-    1,
-    (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const nights = calculateNights(check_in, check_out);
 
   const systemPrompt = getAccommodationFallbackPrompt(destination, max_price_per_night);
 
@@ -72,10 +70,7 @@ export const accommodationTool = tool(
       data.hotels = [];
     }
 
-    const nights = Math.max(
-      1,
-      (new Date(check_out).getTime() - new Date(check_in).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const nights = calculateNights(check_in, check_out);
 
     // Also fetch Geoapify hotels and merge them in (deduped by name)
     let geoapifyHotels: any[] = [];

@@ -29,12 +29,8 @@ export interface TransitDirectionsInfo {
   mode: 'transit' | 'driving' | 'walking';
 }
 
-// JSON extraction helper
-function extractJsonObject(text: string): any {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in response');
-  return JSON.parse(match[0]);
-}
+import { extractJsonObject } from '../utils/jsonHelpers';
+
 
 // 1. Geocoding Helper: Convert place name → latitude/longitude
 export async function getCoordinates(placeName: string): Promise<{ lat: number; lon: number }> {

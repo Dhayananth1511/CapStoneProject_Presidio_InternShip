@@ -20,22 +20,8 @@ const createOAuth2Client = () =>
     GOOGLE_REDIRECT_URI
   );
 
-// Helper: Signs Access & Refresh tokens
-const generateTokens = (userId: string, role: string) => {
-  const accessToken = jwt.sign(
-    { userId, role },
-    process.env.JWT_ACCESS_SECRET!,
-    { expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m' } as jwt.SignOptions
-  );
+import { generateTokens } from '../utils/authHelpers';
 
-  const refreshToken = jwt.sign(
-    { userId, role },
-    process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d' } as jwt.SignOptions
-  );
-
-  return { accessToken, refreshToken };
-};
 
 /**
  * Register Controller: Adds new user to DB.
