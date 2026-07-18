@@ -45,6 +45,9 @@ const IATA_MAP: Record<string, string> = {
   'srinagar': 'SXR',
   'leh': 'IXL',
   'port blair': 'IXZ',
+  'nicobar': 'IXZ',
+  'nicobar islands': 'IXZ',
+  'andaman and nicobar': 'IXZ',
   'agra': 'AGR',
   'shimla': 'SLV',
   'darjeeling': 'IXB', // Bagdogra
@@ -112,20 +115,23 @@ export async function getTransportOptions(
 ): Promise<{ options: TransportOption[]; estimated_cost_inr: number; selected_option?: TransportOption; distance_km: number }> {
   return withRetry(async () => {
     const options: TransportOption[] = [];
+    const isNicobar = destination.toLowerCase().includes('nicobar');
 
     // 1. Get real travel distance & time from Google Maps
-    let distanceKm = 300;
-    let durationMin = 360;
-    try {
-      const mapsData = await getDistanceMatrix(origin, destination);
-      distanceKm = mapsData.distance_km;
-      durationMin = mapsData.duration_min;
-    } catch {
-      // Keep fallbacks if Google lookup fails
+    let distanceKm = isNicobar ? 1500 : 300;
+    let durationMin = isNicobar ? 180 : 360;
+    if (!isNicobar) {
+      try {
+        const mapsData = await getDistanceMatrix(origin, destination);
+        distanceKm = mapsData.distance_km;
+        durationMin = mapsData.duration_min;
+      } catch {
+        // Keep fallbacks if Google lookup fails
+      }
     }
 
     // 0. Fetch real transfer options via Hotelbeds if configured
-    if (isHotelbedsConfigured('transfers')) {
+    if (isHotelbedsConfigured('transfers') && !isNicobar) {
       try {
         const transfersResult = await searchHotelbedsTransfers(origin, destination, travel_date, travelers);
         if (transfersResult && transfersResult.options && transfersResult.options.length > 0) {
@@ -224,84 +230,90 @@ export async function getTransportOptions(
     }
 
     // 3. Add real-distance-based Train options (multiple classes)
-    const trainDuration = Math.max(0.5, Math.round((distanceKm / 60) * 10) / 10); // ~60km/h avg Indian Express
-    
-    // 3AC (cheapest AC tier)
-    const train3ACCostPerPerson = Math.round(150 + distanceKm * 1.4);
-    options.push({
-      mode: 'Train',
-      operator: 'Indian Railways — Superfast Express',
-      duration_hrs: trainDuration,
-      cost_per_traveler: train3ACCostPerPerson * 2, // Double for round-trip return travel
-      cost_inr: train3ACCostPerPerson * travelers * 2, // Double for round-trip return travel
-      departure: '06:15',
-      arrival: new Date(new Date('2000-01-01T06:15:00').getTime() + trainDuration * 3600000)
-        .toTimeString().substring(0, 5),
-      rating: 3.9,
-      amenities: ['AC', 'Berths', 'Pantry Car', 'Charging Port'],
-      class: '3AC Sleeper',
-      distance_km: distanceKm,
-    });
+    if (!isNicobar) {
+      const trainDuration = Math.max(0.5, Math.round((distanceKm / 60) * 10) / 10); // ~60km/h avg Indian Express
+      
+      // 3AC (cheapest AC tier)
+      const train3ACCostPerPerson = Math.round(150 + distanceKm * 1.4);
+      options.push({
+        mode: 'Train',
+        operator: 'Indian Railways — Superfast Express',
+        duration_hrs: trainDuration,
+        cost_per_traveler: train3ACCostPerPerson * 2, // Double for round-trip return travel
+        cost_inr: train3ACCostPerPerson * travelers * 2, // Double for round-trip return travel
+        departure: '06:15',
+        arrival: new Date(new Date('2000-01-01T06:15:00').getTime() + trainDuration * 3600000)
+          .toTimeString().substring(0, 5),
+        rating: 3.9,
+        amenities: ['AC', 'Berths', 'Pantry Car', 'Charging Port'],
+        class: '3AC Sleeper',
+        distance_km: distanceKm,
+      });
 
-    // 2AC (premium tier)
-    const train2ACCostPerPerson = Math.round(250 + distanceKm * 2.0);
-    options.push({
-      mode: 'Train',
-      operator: 'Indian Railways — Rajdhani / Shatabdi',
-      duration_hrs: Math.max(0.5, Math.round((distanceKm / 75) * 10) / 10), // slightly faster
-      cost_per_traveler: train2ACCostPerPerson * 2, // Double for round-trip return travel
-      cost_inr: train2ACCostPerPerson * travelers * 2, // Double for round-trip return travel
-      departure: '16:30',
-      arrival: new Date(new Date('2000-01-01T16:30:00').getTime() + Math.max(0.5, Math.round((distanceKm / 75) * 10) / 10) * 3600000)
-        .toTimeString().substring(0, 5),
-      rating: 4.2,
-      amenities: ['AC', '2-Tier Berths', 'Meals Included', 'Charging Port'],
-      class: '2AC Sleeper',
-      distance_km: distanceKm,
-    });
+      // 2AC (premium tier)
+      const train2ACCostPerPerson = Math.round(250 + distanceKm * 2.0);
+      options.push({
+        mode: 'Train',
+        operator: 'Indian Railways — Rajdhani / Shatabdi',
+        duration_hrs: Math.max(0.5, Math.round((distanceKm / 75) * 10) / 10), // slightly faster
+        cost_per_traveler: train2ACCostPerPerson * 2, // Double for round-trip return travel
+        cost_inr: train2ACCostPerPerson * travelers * 2, // Double for round-trip return travel
+        departure: '16:30',
+        arrival: new Date(new Date('2000-01-01T16:30:00').getTime() + Math.max(0.5, Math.round((distanceKm / 75) * 10) / 10) * 3600000)
+          .toTimeString().substring(0, 5),
+        rating: 4.2,
+        amenities: ['AC', '2-Tier Berths', 'Meals Included', 'Charging Port'],
+        class: '2AC Sleeper',
+        distance_km: distanceKm,
+      });
+    }
 
     // 4. Add Bus options (Volvo Sleeper & Regular AC)
-    const busDuration = Math.max(0.5, Math.round((durationMin / 60 + 1.0) * 10) / 10);
+    if (!isNicobar) {
+      const busDuration = Math.max(0.5, Math.round((durationMin / 60 + 1.0) * 10) / 10);
 
-    const busVolvoPerPerson = Math.round(80 + distanceKm * 2.5);
-    options.push({
-      mode: 'Bus',
-      operator: 'Intercity Volvo — Multi-Axle Sleeper',
-      duration_hrs: busDuration,
-      cost_per_traveler: busVolvoPerPerson * 2, // Double for round-trip return travel
-      cost_inr: busVolvoPerPerson * travelers * 2, // Double for round-trip return travel
-      departure: '21:30',
-      arrival: new Date(new Date('2000-01-01T21:30:00').getTime() + busDuration * 3600000)
-        .toTimeString().substring(0, 5),
-      rating: 4.0,
-      amenities: ['AC', 'Blanket', 'Push-Back Seats', 'Charging Port'],
-      class: 'Volvo Sleeper',
-      distance_km: distanceKm,
-    });
+      const busVolvoPerPerson = Math.round(80 + distanceKm * 2.5);
+      options.push({
+        mode: 'Bus',
+        operator: 'Intercity Volvo — Multi-Axle Sleeper',
+        duration_hrs: busDuration,
+        cost_per_traveler: busVolvoPerPerson * 2, // Double for round-trip return travel
+        cost_inr: busVolvoPerPerson * travelers * 2, // Double for round-trip return travel
+        departure: '21:30',
+        arrival: new Date(new Date('2000-01-01T21:30:00').getTime() + busDuration * 3600000)
+          .toTimeString().substring(0, 5),
+        rating: 4.0,
+        amenities: ['AC', 'Blanket', 'Push-Back Seats', 'Charging Port'],
+        class: 'Volvo Sleeper',
+        distance_km: distanceKm,
+      });
 
-    const busRegularPerPerson = Math.round(50 + distanceKm * 1.6);
-    options.push({
-      mode: 'Bus',
-      operator: 'KSRTC / State RTC — Semi-Sleeper',
-      duration_hrs: Math.round((durationMin / 60 + 1.5) * 10) / 10,
-      cost_per_traveler: busRegularPerPerson * 2, // Double for round-trip return travel
-      cost_inr: busRegularPerPerson * travelers * 2, // Double for round-trip return travel
-      departure: '22:00',
-      arrival: new Date(new Date('2000-01-01T22:00:00').getTime() + Math.round((durationMin / 60 + 1.5) * 10) / 10 * 3600000)
-        .toTimeString().substring(0, 5),
-      rating: 3.5,
-      amenities: ['AC', 'Reclining Seats', 'Water Bottle'],
-      class: 'Semi-Sleeper AC',
-      distance_km: distanceKm,
-    });
+      const busRegularPerPerson = Math.round(50 + distanceKm * 1.6);
+      options.push({
+        mode: 'Bus',
+        operator: 'KSRTC / State RTC — Semi-Sleeper',
+        duration_hrs: Math.round((durationMin / 60 + 1.5) * 10) / 10,
+        cost_per_traveler: busRegularPerPerson * 2, // Double for round-trip return travel
+        cost_inr: busRegularPerPerson * travelers * 2, // Double for round-trip return travel
+        departure: '22:00',
+        arrival: new Date(new Date('2000-01-01T22:00:00').getTime() + Math.round((durationMin / 60 + 1.5) * 10) / 10 * 3600000)
+          .toTimeString().substring(0, 5),
+        rating: 3.5,
+        amenities: ['AC', 'Reclining Seats', 'Water Bottle'],
+        class: 'Semi-Sleeper AC',
+        distance_km: distanceKm,
+      });
+    }
 
-    const cheapestOption = options.reduce((lowest, curr) =>
-      curr.cost_inr < lowest.cost_inr ? curr : lowest, options[0]);
+    const filteredOptions = isNicobar ? options.filter(option => option.mode === 'Flight') : options;
+
+    const cheapestOption = filteredOptions.reduce((lowest, curr) =>
+      curr.cost_inr < lowest.cost_inr ? curr : lowest, filteredOptions[0]);
 
     return {
-      options,
+      options: filteredOptions,
       estimated_cost_inr: cheapestOption?.cost_inr || 0,
-      selected_option: options[0] || null, // default select first option
+      selected_option: filteredOptions[0] || null, // default select first option
       distance_km: distanceKm,
     };
   });

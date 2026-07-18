@@ -53,7 +53,7 @@ ${isTripEnd
 }
 
 export function getItinerarySystemPrompt(): string {
-  return `You are a travel itinerary planner. Return ONLY valid, complete JSON — no markdown fences, no explanation.
+  return `You are a travel itinerary planner. Return ONLY valid, complete JSON — no markdown fences, one line explanation.
 Schema (STRICTLY follow this, closing ALL braces/brackets):
 {
   "days": [

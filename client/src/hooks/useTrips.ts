@@ -48,6 +48,7 @@ export function usePlanTripMutation() {
   const mutation = useMutation({
     mutationFn: async (payload: { message: string; tripId?: string; confirmCancel?: boolean }) => {
       const steps = [
+        'Working on it...',
         'Supervisor Routing & Slot Extraction...',
         'Running Programmatic Context Validations...',
         'Coordinating MCP Parallel Retrieval (Weather, Hotels, Transport)...',
