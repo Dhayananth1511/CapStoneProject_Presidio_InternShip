@@ -26,6 +26,16 @@ export const getAnalyticsDashboardStats = async () => {
   const [statusCounts, topDestinations, avgBudget, totalUsers, totalTrips] = await Promise.all([
     Trip.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
     Trip.aggregate([
+      {
+        $match: {
+          'input.destination': {
+            $exists: true,
+            $ne: null,
+            $nin: ['', 'null', 'undefined'],
+            $not: /^\s*$/
+          }
+        }
+      },
       { $group: { _id: '$input.destination', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
