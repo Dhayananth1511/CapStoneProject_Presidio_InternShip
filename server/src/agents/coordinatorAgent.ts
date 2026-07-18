@@ -29,6 +29,13 @@ const routerLlm = createChatModel({
 
 function isBudgetOnlyAdjustment(userMessage: string): boolean {
   const message = userMessage.toLowerCase();
+
+  // Guard: "increase N days" / "increase by N days" / "add N days" are duration requests, NOT budget.
+  // These must be excluded before the general budget regex runs so they are never misclassified.
+  if (/(?:increase|add|extend|more)\s+\d+\s*(?:day|days|night|nights|week|weeks)/i.test(message)) {
+    return false;
+  }
+
   const mentionsBudget = /(budget|increase limit|increase budget|raise budget|more money|adjust budget|budget ceiling|limit to|my budget is|increase to comfortable|comfortable budget|make it comfortable|raise the limit|increase the limit|add more funds|more funds|up the budget|higher budget|bump the budget|increase spend|more spending|can afford more|afford more|i have more|more cash|increase to \d|raise to \d|bump to \d|up to \d)/.test(message);
   const mentionsOtherReplanTargets = /(change hotel|different hotel|cheaper hotel|find hotel|find cheaper|change accommodation|different accommodation|change lodging|change stay|transport|flight|train|bus|date|day|duration|shorten|extend|activity|activities|restaurant|destination|go to|change to)/.test(message);
   return mentionsBudget && !mentionsOtherReplanTargets;
@@ -105,15 +112,35 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
   );
 
   if (hasExistingPlanData && isBudgetOnlyAdjustment(userMessage)) {
-    logger.info('Budget-only adjustment detected. Preserving existing accommodation data entirely — no hotel re-fetch.', {
+    // Safety net: even for a budget-only change, if key data was cleared (e.g. by a
+    // datesChanged guard upstream), we must NOT skip fetching it.  Return early only
+    // when ALL four data categories are already populated.
+    const hasMissingData =
+      !context.weather?.forecast?.length ||
+      !context.transport?.options?.length ||
+      !context.accommodation?.hotels?.length ||
+      !context.activities?.attractions?.length;
+
+    if (!hasMissingData) {
+      logger.info('Budget-only adjustment detected. Preserving all existing agent data — no re-fetch.', {
+        userMessage,
+        sessionId: context.sessionId,
+      });
+      // When the user only adjusts the budget (increase/decrease overall spend),
+      // there is no reason to re-run any agent. The hotel list and the selected hotel
+      // stay exactly as they are. The downstream runBudgetAgent will recalculate
+      // feasibility and costs with the new budget figure.
+      return { ...context };
+    }
+
+    logger.info('Budget-only adjustment detected, but some agent data is missing — proceeding to re-fetch missing data.', {
       userMessage,
       sessionId: context.sessionId,
+      missingWeather: !context.weather?.forecast?.length,
+      missingTransport: !context.transport?.options?.length,
+      missingAccommodation: !context.accommodation?.hotels?.length,
+      missingActivities: !context.activities?.attractions?.length,
     });
-    // When the user only adjusts the budget (increase/decrease overall spend),
-    // there is no reason to re-run the accommodation agent. The hotel list and
-    // the selected hotel stay exactly as they are. The downstream runBudgetAgent
-    // will recalculate feasibility and costs with the new budget figure.
-    return { ...context };
   }
 
   logger.info('Starting Dynamic LLM Tool router analysis', { userMessage });
@@ -146,18 +173,67 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
   const toolCalls = response.tool_calls || [];
   logger.info('LLM Router tool selection result', { toolCallsCount: toolCalls.length, toolCalls: toolCalls.map((t: any) => t.name) });
 
-  // If the LLM did not choose any tools despite missing data, fall back to executing all tools
-  if (toolCalls.length === 0 && (!context.weather?.forecast?.length || !context.accommodation?.hotels?.length)) {
-    logger.warn('LLM chose no tools on empty context. Falling back to executing all tools.');
-    toolCalls.push(
-      { name: 'fetch_weather', args: { destination: input.destination!, start_date: input.start_date!, end_date: input.end_date! } },
-      { name: 'fetch_transport', args: { origin: input.origin!, destination: input.destination!, travel_date: input.start_date!, travelers: input.travelers } },
-      { name: 'fetch_accommodation', args: { destination: input.destination!, check_in: input.start_date!, check_out: input.end_date!, travelers: input.travelers } },
-      { name: 'fetch_activities', args: { destination: input.destination!, interests: input.interests || [], days } }
-    );
+  // Mandatory per-category enforcement:
+  // The LLM router can miss tools when it sees partial context (e.g. it picked 'fetch_weather'
+  // so the toolCalls.length > 0 check never fires the old blanket fallback). We now check
+  // each category individually and inject the missing fetch unconditionally.
+  // This is the primary fix for:
+  //   - Hotel not updating after destination change (accommodation cleared → must re-fetch)
+  //   - Sightseeing missing from 2nd request onwards (activities cleared → must re-fetch)
+  const toolNames = new Set(toolCalls.map((tc: any) => tc.name));
+
+  if (!context.weather?.forecast?.length && !toolNames.has('fetch_weather')) {
+    logger.warn('[Coordinator] Enforcing fetch_weather — weather missing from context after data clear.');
+    toolCalls.push({
+      name: 'fetch_weather',
+      args: { destination: input.destination!, start_date: input.start_date!, end_date: input.end_date! },
+    });
+  }
+  if (!context.transport?.options?.length && !toolNames.has('fetch_transport')) {
+    logger.warn('[Coordinator] Enforcing fetch_transport — transport missing from context after data clear.');
+    toolCalls.push({
+      name: 'fetch_transport',
+      args: { origin: input.origin!, destination: input.destination!, travel_date: input.start_date!, travelers: input.travelers },
+    });
+  }
+  // fetch_accommodation enforcement is gated below by the hard hotel-selection guard,
+  // so only inject it here if there is NO selected hotel (i.e. data was cleared).
+  if (!context.accommodation?.hotels?.length && !toolNames.has('fetch_accommodation') && !context.accommodation?.selected_hotel?.name) {
+    logger.warn('[Coordinator] Enforcing fetch_accommodation — accommodation missing from context after data clear.');
+    toolCalls.push({
+      name: 'fetch_accommodation',
+      args: { destination: input.destination!, check_in: input.start_date!, check_out: input.end_date!, travelers: input.travelers },
+    });
+  }
+  if (!context.activities?.attractions?.length && !toolNames.has('fetch_activities')) {
+    logger.warn('[Coordinator] Enforcing fetch_activities — activities missing from context after data clear.');
+    toolCalls.push({
+      name: 'fetch_activities',
+      args: { destination: input.destination!, interests: input.interests || [], days },
+    });
   }
 
+
   const newContext = { ...context };
+
+  // Hard guard: if a hotel is already selected and the user did NOT ask to change it,
+  // REMOVE fetch_accommodation from the tool call list entirely.
+  // This is the most reliable way to prevent a non-deterministic API re-fetch from
+  // overwriting the user's selected hotel when they only adjust budget/dates/travelers.
+  const hasSelectedHotel = !!context.accommodation?.selected_hotel?.name;
+  const isHotelChangeRequest = isAccommodationChangeRequest(userMessage);
+  if (hasSelectedHotel && !isHotelChangeRequest) {
+    const beforeCount = toolCalls.length;
+    const filtered = toolCalls.filter((tc: any) => tc.name !== 'fetch_accommodation');
+    if (filtered.length < beforeCount) {
+      logger.info(
+        'Hard guard: Removed fetch_accommodation from tool calls — hotel already selected and no change requested.',
+        { selectedHotel: context.accommodation?.selected_hotel?.name, userMessage }
+      );
+    }
+    toolCalls.length = 0;
+    toolCalls.push(...filtered);
+  }
 
   const promises = toolCalls.map(async (toolCall: any) => {
     const toolName = toolCall.name;
@@ -231,7 +307,11 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
       const { name, value } = res.value;
       if (name === 'fetch_weather') newContext.weather = value;
       else if (name === 'fetch_transport') newContext.transport = value;
-      else if (name === 'fetch_accommodation') newContext.accommodation = preserveSelectedHotel(context.accommodation, value, userMessage);
+      else if (name === 'fetch_accommodation') {
+        // preserveSelectedHotel is now a safety fallback only for the rare case
+        // where fetch_accommodation was intentionally called (hotel change request).
+        newContext.accommodation = preserveSelectedHotel(context.accommodation, value, userMessage);
+      }
       else if (name === 'fetch_activities') newContext.activities = value;
     } else {
       const err = res.reason;

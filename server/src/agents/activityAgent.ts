@@ -119,9 +119,13 @@ export const activityTool = tool(
     try {
       const attractionCount = Math.max(8, Math.min(80, days * 4));
       const filteringPrompt = getActivityFilteringPrompt(destination, attractionCount, interests);
+      // Cap the raw payload sent to the filter LLM — large lists on long trips (>15 days)
+      // can exceed token limits and cause rate-limit errors or truncated responses.
+      const rawPayloadCap = Math.min(40, attractionCount);
+      const cappedAttractions = data.attraction_options.slice(0, rawPayloadCap);
       const filterRes = await withRetry(() => llm.invoke([
         new SystemMessage(filteringPrompt),
-        new HumanMessage(`Raw list of attractions to filter and supplement: ${JSON.stringify(data.attraction_options)}`)
+        new HumanMessage(`Raw list of attractions to filter and supplement: ${JSON.stringify(cappedAttractions)}`)
       ]));
 
       const parsed = extractJsonObject(filterRes.content.toString());

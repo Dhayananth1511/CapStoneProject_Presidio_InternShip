@@ -156,7 +156,10 @@ export async function runItineraryAgent(context: TripContext): Promise<{ days: a
   // Build the list of all trip days
   const startDate = new Date(input.start_date || new Date());
   const totalDays = calculateNights(input.start_date, input.end_date) + 1;
-  const dailyBudget = Math.round((budget?.remaining_budget_inr || 10000) / totalDays);
+  // 'spendingMoneyPerDay' = remaining budget after fixed costs (transport + accommodation)
+  // divided equally across all days. This is the per-day allowance for food, activities, and
+  // local commutes. It is NOT the total daily trip cost.
+  const spendingMoneyPerDay = Math.round((budget?.remaining_budget_inr || 10000) / totalDays);
 
   const allDays: { day: number; date: string }[] = [];
   for (let i = 0; i < totalDays; i++) {
@@ -178,7 +181,7 @@ export async function runItineraryAgent(context: TripContext): Promise<{ days: a
   const alreadyScheduledLocations: string[] = [];
 
   for (const batch of batches) {
-    const days = await generateBatch(batch, context, dailyBudget, totalDays, alreadyScheduledLocations);
+    const days = await generateBatch(batch, context, spendingMoneyPerDay, totalDays, alreadyScheduledLocations);
     allGeneratedDays.push(...days);
 
     // Extract newly scheduled locations to avoid duplication in subsequent batches
@@ -208,7 +211,7 @@ export async function runItineraryAgent(context: TripContext): Promise<{ days: a
 
   return {
     days: allGeneratedDays,
-    notes: `${totalDays}-day trip to ${input.destination}. Staying at ${hotelName}. Budget ≈₹${dailyBudget}/day. ${attractionCount} tourist spots covered. Book accommodations and transport well in advance.`,
+    notes: `${totalDays}-day trip to ${input.destination}. Staying at ${hotelName}. Spending money ≈₹${spendingMoneyPerDay}/day. ${attractionCount} tourist spots covered. Book accommodations and transport well in advance.`,
   };
 }
 

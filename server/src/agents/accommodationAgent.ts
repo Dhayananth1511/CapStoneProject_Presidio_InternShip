@@ -293,7 +293,7 @@ export const accommodationTool = tool(
       check_in: z.string().describe('Check-in travel date (YYYY-MM-DD)'),
       check_out: z.string().describe('Check-out travel date (YYYY-MM-DD)'),
       travelers: z.number().describe('Number of guests/travelers'),
-      tier: z.enum(['luxury', 'mid-range', 'budget']).optional().describe('Hotel budget tier preference. Use budget for <₹5000/night, mid-range for ₹5000-₹15000/night, luxury for >₹15000/night.'),
+      tier: z.enum(['luxury', 'mid_range', 'budget']).optional().describe('Hotel budget tier preference. Use budget for <₹5000/night, mid_range for ₹5000-₹15000/night, luxury for >₹15000/night.'),
       max_price_per_night: z.number().optional().describe('Optional strict price ceiling in INR per night. When provided, only hotels at or below this price will be returned.')
     }),
   }

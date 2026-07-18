@@ -242,6 +242,33 @@ You must respond ONLY with a valid JSON block of this exact structure:
     updatedContext.input.budget_inr = value;
   }
 
+  // --- Stale Past-Date Guard (Programmatic Safety Net) ---
+  // When the user sends a modification message (e.g. "increase 2 days", "change hotel"),
+  // the LLM extractor may accidentally re-emit the *first* start_date the user ever typed
+  // (which could already be in the past). Detect this and silently restore the valid
+  // start_date that was already approved inside the existing context.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const extractedStart = updatedContext.input.start_date ? new Date(updatedContext.input.start_date) : null;
+  const contextStart = context.input.start_date ? new Date(context.input.start_date) : null;
+  if (
+    extractedStart &&
+    extractedStart < today &&        // Newly extracted date is in the past
+    contextStart &&
+    contextStart >= today            // But the context already had a valid future date
+  ) {
+    logger.warn(
+      `Stale date guard triggered: LLM re-emitted past start_date "${updatedContext.input.start_date}". ` +
+      `Restoring valid context date "${context.input.start_date}".`,
+      { sessionId: context.sessionId }
+    );
+    updatedContext.input.start_date = context.input.start_date;
+    // Also restore end_date if it wasn't explicitly extended in this turn
+    if (!updatedContext.input.end_date || updatedContext.input.end_date === context.input.end_date) {
+      updatedContext.input.end_date = context.input.end_date;
+    }
+  }
+
   // --- Date Sanity Check ---
   if (updatedContext.input.start_date && updatedContext.input.end_date) {
     const dateCheck = validateTripDates(updatedContext.input.start_date, updatedContext.input.end_date);

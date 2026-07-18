@@ -497,10 +497,8 @@ graph TD
         subgraph LCTools ["MCP Tool Connections"]
             WeatherTool["Weather MCP"]:::ext
             MapsTool["Maps MCP"]:::ext
-            MockBus["Mock Bus MCP"]:::ext
-            MockTrain["Mock Train MCP"]:::ext
-            MockHotel["Mock Hotel MCP"]:::ext
-            MockPayment["Mock Payment MCP"]:::ext
+            TransitTool["Transit MCP"]:::ext
+            BookingTool["Booking MCP"]:::ext
             CalendarTool["Calendar MCP"]:::ext
         end
         
@@ -618,6 +616,23 @@ sequenceDiagram
     FE-->>Traveler: Renders Trip Summary & Schedule Grid
 ```
 
+### Key Resilience Features
+
+| Feature | Implementation | Description |
+|:---|:---|:---|
+| **India-Only Destination Guard** | `plannerAgent.ts → checkIfDestinationInIndia()` | Two-tier validation: fast lookup against a 200+ city index, then LLM-based fallback. Non-Indian destinations are rejected immediately without triggering any downstream agents. |
+| **Budget-Only Adjustment Bypass** | `coordinatorAgent.ts → isBudgetOnlyAdjustment()` | Regex-based classifier distinguishes budget changes from trip modifications. When only the budget changes, all existing agent data (hotels, transport, sightseeing, weather) is preserved — no APIs are re-called. |
+| **Mandatory Per-Category Enforcement** | `coordinatorAgent.ts → runParallelAgents()` | After LLM routing, each data category is inspected individually. If any category is missing (e.g. after a destination change cleared cached data), its fetch tool is unconditionally injected into the tool-call list regardless of what the LLM chose. |
+| **Selected Hotel Preservation Guard** | `coordinatorAgent.ts → preserveSelectedHotel()` | Hard guard removes `fetch_accommodation` from the tool call list when a hotel is already selected and the user did not explicitly request a hotel change, preventing non-deterministic API overwrites. |
+| **Destination/Date Change Auto-clear** | `plannerAgent.ts` | When destination or dates change, all stale cached agent outputs (weather, transport, accommodation, activities, itinerary, local transit) are programmatically cleared before re-running. |
+| **Stale Past-Date Guard** | `plannerAgent.ts` | If the LLM extractor re-emits a past start date during a modification request, the valid future date already in context is silently restored. |
+| **Cancellation Confirmation Flow** | `plannerAgent.ts → NEEDS_CANCEL_CONFIRM` | Cancel intent triggers a confirmation prompt rather than immediate action. Only `confirmCancel: true` from the frontend executes the cancellation, setting status to `CANCELLED` while preserving all trip data. |
+| **Irrelevant Query Handling** | `plannerAgent.ts → IRRELEVANT` intent | Off-topic messages (e.g. math questions, general chat) are classified and deflected with a friendly redirect message — no agents are invoked. |
+| **Activity Agent Token Cap** | `activityAgent.ts` | Raw attractions payload sent to the filter LLM is sliced to a maximum token-safe size to prevent 429 rate-limit errors on long-duration trips. |
+| **Round-Trip Transport Costs** | `transitMCP.ts` | All transport fares (flights, trains, buses) are doubled to represent the full round-trip cost (outward + return), preventing budget underestimation. |
+
+---
+
 ### 1. Request Input & Context Ingestion
 * **Trigger**: A traveler sends a message (e.g., *"I want to go to Munnar next week for 3 days, budget is ₹15,000"*) via the React app chat box.
 * **REST Dispatch**: The browser issues a `POST` request to the Express server route handler (`/api/trips`).
@@ -702,19 +717,20 @@ graph TD
     CoordAgent --> BookingMCP["Booking MCP Server"]:::mcp
     CoordAgent --> CalendarMCP["Calendar MCP Server"]:::mcp
 
-    WeatherMCP --> OpenMeteo["OpenMeteo API<br/>(Free — Weather Forecasts)"]:::api
+    WeatherMCP --> OpenMeteo["OpenMeteo API\n(Free — Weather Forecasts)"]:::api
 
-    MapsMCP --> GMaps["Google Maps API<br/>(Geocoding)"]:::api
-    MapsMCP --> Places["Google Places API<br/>(Attractions, Restaurants)"]:::api
-    MapsMCP --> Distance["Distance Matrix API<br/>(Travel Times)"]:::api
+    MapsMCP --> GMaps["Google Maps API\n(Geocoding)"]:::api
+    MapsMCP --> Places["Google Places API\n(Attractions, Restaurants, Near-Hotel Dining)"]:::api
+    MapsMCP --> Distance["Geoapify Directions API\n(Walking / Drive / Transit Distances)"]:::api
 
-    TransitMCP --> AviationStack["AviationStack API & Maps Distance<br/>(Real Flights & Modelled Train/Bus)"]:::api
+    TransitMCP --> AviationStack["AviationStack API\n(Real Flight Schedules)"]:::api
+    TransitMCP --> TrainBus["Maps Distance Model\n(Modelled Train / Bus Fares — Round-Trip)"]:::api
 
-    BookingMCP --> HotelbedsHotels["Hotelbeds API<br/>(Real Hotel Inventory & Rates)"]:::api
-    BookingMCP --> GooglePlacesLodging["Google Places API<br/>(Fallback Hotel Search)"]:::api
-    BookingMCP --> MockPayment["Mock Payment Gateway<br/>(Simulated Booking Confirmation)"]:::api
+    BookingMCP --> HotelbedsHotels["Hotelbeds API\n(Real Hotel Inventory & Rates)"]:::api
+    BookingMCP --> GooglePlacesLodging["Google Places API\n(Fallback Hotel Search)"]:::api
+    BookingMCP --> MockPayment["Mock Payment Gateway\n(Simulated Booking Confirmation)"]:::api
 
-    CalendarMCP --> GCalendar["Google Calendar API<br/>(Real Event Sync via googleapis)"]:::api
+    CalendarMCP --> GCalendar["Google Calendar API\n(Real Event Sync via googleapis)"]:::api
 ```
 
 ### MCP Tool Schema (Example — Weather MCP)
@@ -756,15 +772,18 @@ Each MCP tool exposes a strictly typed JSON schema so the LLM can call it determ
 
 | Integration | How Accessed | MCP Server |
 |:---|:---|:---|
-| OpenMeteo Weather | Via MCP | `weather-mcp-server` |
-| Google Maps Geocoding | Via MCP | `maps-mcp-server` |
-| Google Places (Attractions) | Via MCP | `maps-mcp-server` |
-| Distance Matrix | Via MCP | `maps-mcp-server` |
-| AviationStack Flights / Maps Rail | Via MCP | `transit-mcp-server` |
-| Hotelbeds Hotels | Via MCP | `booking-mcp-server` |
-| Google Places Lodging Fallback | Via MCP | `booking-mcp-server` |
-| Google Calendar | Via MCP | `calendar-mcp-server` |
-| Groq LLM API | Direct (LangChain) | — |
+| OpenMeteo Weather | Via MCP | `weatherMCP.ts` |
+| Google Maps Geocoding | Via MCP | `mapsMCP.ts` |
+| Google Places (Attractions + Near-Hotel Dining) | Via MCP | `mapsMCP.ts` |
+| Geoapify Directions API (Local Transit Commutes) | Via MCP | `mapsMCP.ts` |
+| AviationStack (Real Flights) | Via MCP | `transitMCP.ts` |
+| Maps Distance Model (Rail / Bus — Round-Trip) | Via MCP | `transitMCP.ts` |
+| Hotelbeds (Real Hotel Inventory & Rates) | Via MCP | `bookingMCP.ts` |
+| Google Places Lodging Fallback | Via MCP | `bookingMCP.ts` |
+| Hotelbeds Activities | Via MCP | `hotelbedsActivitiesMCP.ts` |
+| Hotelbeds Transfers | Via MCP | `hotelbedsTransfersMCP.ts` |
+| Google Calendar | Via MCP | `calendarMCP.ts` |
+| Groq LLM API (`@langchain/groq`) | Direct (LangChain) | — |
 | MongoDB Atlas | Direct (Mongoose) | — |
 
 ---
@@ -1299,25 +1318,32 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 
 | Layer | Technology | Purpose | Free Tier Status |
 |:------|:-----------|:--------|:-----------------|
-| **Frontend** | React (TypeScript) | Single Page Application UI | 100% Free |
-| | Vite | Dev server & production bundler | 100% Free |
-| | Tailwind CSS | Utility-first styling framework | 100% Free |
-| | React Hook Form + Zod | Authentication forms state & validation schema | 100% Free |
-| | TanStack Query | Query caching, pagination & dashboard HTTP states | 100% Free |
-| | Zustand / Context API | Client-side stores & local session state | 100% Free |
-| | Chart.js | Admin analytical statistics visualizer | 100% Free |
-| | Axios | REST HTTP Requests Client | 100% Free |
-| **Backend** | Node.js + Express.js | REST API server (MVC code structure) | 100% Free |
+| **Frontend** | React 19 (TypeScript) | Single Page Application UI | 100% Free |
+| | Vite 8 | Dev server & production bundler | 100% Free |
+| | Tailwind CSS v4 | Utility-first styling framework | 100% Free |
+| | React Hook Form + Zod | Form state management & schema validation | 100% Free |
+| | TanStack Query v5 | Server-state caching & async data management | 100% Free |
+| | Zustand | Client-side auth & theme stores | 100% Free |
+| | Chart.js + react-chartjs-2 | Admin analytics visualizer | 100% Free |
+| | Axios | REST HTTP requests client | 100% Free |
+| | react-markdown + remark-gfm | Render LLM-generated markdown plans | 100% Free |
+| | react-hot-toast | Notification toasts | 100% Free |
+| | lucide-react | Icon library | 100% Free |
+| | jsPDF | PDF export of trip summaries | 100% Free |
+| **Backend** | Node.js + Express 5 (TypeScript) | REST API server (MVC code structure) | 100% Free |
 | | Mongoose | MongoDB ODM schema rules & index tracking | 100% Free |
 | | JSON Web Token (JWT) | Authentication & security roles | 100% Free |
-| | bcrypt | Password hashing security controls | 100% Free |
+| | bcryptjs | Password hashing security controls | 100% Free |
 | | express-rate-limit | API endpoint rate throttling | 100% Free |
-| | Helmet | Express header validation security | 100% Free |
+| | express-validator | Input sanitization & request validation | 100% Free |
+| | Helmet | Express security header enforcement | 100% Free |
 | | CORS | Domain access policy configurations | 100% Free |
-| | Morgan / Winston | Request tracing & server diagnostic records | 100% Free |
-| **AI / Agents** | Groq LLM API | AI Inference operations (Llama 3 execution model) | 100% Free Developer Tier |
-| | LangChain JS | AI Agent chain orchestration framework | 100% Free |
-| | Model Context Protocol (MCP) | Interface structure standard for tool integrations | 100% Free |
+| | Morgan + Winston | HTTP request tracing & structured app logging | 100% Free |
+| | cookie-parser | httpOnly refresh token cookie handling | 100% Free |
+| | googleapis | Google Calendar OAuth2 event sync | 100% Free Developer API |
+| **AI / Agents** | Groq LLM API (`@langchain/groq`) | AI inference (llama3-8b router + llama3-70b planner) | 100% Free Developer Tier |
+| | LangChain JS (`langchain`, `@langchain/core`) | Agent chain orchestration, tool-calling framework | 100% Free |
+| | Model Context Protocol (MCP) | Typed, schema-validated adapter interface for external APIs | 100% Free |
 | **Database** | MongoDB Atlas | Primary database (Indexed scopes, users & trips) | Shared M0 Cluster — 100% Free |
 | **DevOps & Infra** | GitHub Actions | Automatically triggers CI/CD build scripts | 2,000 build minutes/month Free |
 | | Docker | System container orchestration packaging | 100% Free Community Tier |
@@ -1327,60 +1353,109 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 | | AWS SSM Parameter Store | Secure application parameter configuration storage | Always Free Tier (Up to 10,000 Parameters) |
 | | Amazon CloudWatch | System alarms monitoring, health, & logging records | Standard Free Tier metrics |
 | **External APIs** | OpenMeteo API | Weather forecast readings | 100% Free for Non-Commercial |
-| | Google Maps API | Location geocoding & mapping coordinates | $200 Monthly Free Credit Bundle |
+| | Google Maps + Google Places API | Geocoding, attractions, near-hotel dining | $200 Monthly Free Credit Bundle |
+| | Geoapify Directions API | Local transit commute directions & distances | Free Tier (3,000 req/day) |
+| | AviationStack API | Real-time flight schedules | Free Tier (500 req/month) |
+| | Hotelbeds API | Real hotel inventory, rates & activities | Partner API — Sandbox Free |
 | | Google Calendar API | Event reminder synchronization updates | 100% Free Developer API |
-| | Booking MCP Tool Engines | Mock Bus, Train, Hotel, and Payment integrations | 100% Free Mock Interfaces |
 
 
 ---
 
 ## 16. Modular Project Structure
 
-The project has been refactored to separate representation (UI components) from business logic (Axios services, React Query hooks, and backend Services) to align with enterprise-grade modular designs.
+The project separates presentation (UI components) from business logic (Axios services, TanStack Query hooks, and backend services) to align with enterprise-grade modular design principles.
 
 ### A. Frontend Layout (`client/src/`)
 ```
 client/src/
 ├── components/
-│   ├── layout/             # Global layout elements (Navbar.tsx, etc.)
-│   ├── common/             # Shared routing security models (ProtectedRoute.tsx, etc.)
-│   ├── chat/               # Modular panels (WeatherSpecialist, ダイニング, CheckedParameters, LocalTransit Cards)
-│   ├── admin/              # Administrative telemetry sub-components
-│   └── trips/              # Flight/Hotel cards and list item displays
+│   ├── layout/             # Global layout elements (Navbar.tsx, ThemeToggle, etc.)
+│   ├── common/             # Shared routing guards (ProtectedRoute.tsx)
+│   ├── chat/               # Modular plan detail panels (WeatherCard, HotelCard,
+│   │                       # TransportOptionsCard, LocalTransitCard, InspectorTab, etc.)
+│   ├── admin/              # Administrative analytics sub-components
+│   └── trips/              # Trip list items, hotel/flight summary cards
 ├── constants/
-│   └── enums.ts            # Client-side enums configured as const-objects for literal string compatibility
+│   └── enums.ts            # Client-side enums as const-objects for literal-string compatibility
 ├── hooks/
-│   ├── useAuth.ts          # Encapsulates login/register mutation states
-│   ├── useTrips.ts         # Handles active trip loading, preferences selection, and calendar requests
-│   └── useAdmin.ts         # Pulls analytics pipelines, audit lists, and logs
+│   ├── useAuth.ts          # Encapsulates login / register / Google OAuth mutation states
+│   ├── useTrips.ts         # Handles active trip loading, hotel-tier selection, calendar sync
+│   └── useAdmin.ts         # Pulls analytics pipelines, audit lists, and server log feeds
+├── pages/
+│   ├── HomePage.tsx        # Marketing landing page
+│   ├── LoginPage.tsx       # Auth login
+│   ├── RegisterPage.tsx    # Auth registration
+│   ├── GoogleCallbackPage  # Google OAuth2 callback handler
+│   ├── ChatPage.tsx        # Main AI chat + plan-detail inspector (dual-panel layout)
+│   ├── MyTripsPage.tsx     # Trip history (Upcoming / Completed / Cancelled / Drafts)
+│   └── AdminDashboard.tsx  # Role-gated admin analytics dashboard
 ├── services/
-│   ├── authService.ts      # Axios request handlers for security sessions and Google auth callback
-│   ├── tripService.ts      # Queries trip histories, planner swarm, and select-tier endpoint payloads
+│   ├── authService.ts      # Axios handlers for auth, token refresh, Google OAuth
+│   ├── tripService.ts      # Queries trip history, planner swarm, hotel-selection endpoint
 │   └── adminService.ts     # Aggregates remote analytics and server diagnostic logs
-├── store/                  # Zustand global stores (authStore, themeStore)
+├── store/
+│   ├── authStore.ts        # Zustand store — user profile, in-memory access token
+│   └── themeStore.ts       # Zustand store — dark / light theme persistence
 ├── types/
-│   ├── trip.ts             # Strong interfaces for Attraction, Itinerary, Day, and Message structures
+│   ├── trip.ts             # Strong interfaces for Attraction, Itinerary, Day, Message structures
 │   ├── user.ts             # Strong interfaces for Auth profiles and User roles
 │   └── index.ts            # Unified module exports
-└── App.tsx                 # App router wrapping React QueryClient provider and page controllers
+└── App.tsx                 # SPA root — QueryClientProvider + BrowserRouter + route definitions
 ```
 
 ### B. Backend Layout (`server/src/`)
 ```
 server/src/
-├── config/                 # Mongoose MongoDB connectivity setups
+├── agents/                 # AI Agent implementations (LangChain tool-calling)
+│   ├── plannerAgent.ts     # Supervisor: intent classification, slot extraction, guard rails,
+│   │                       # India validation, destination/date-change clearing, swarm dispatch
+│   ├── coordinatorAgent.ts # LLM tool router, mandatory per-category enforcement,
+│   │                       # budget-only bypass, hotel preservation guard, plan synthesizer
+│   ├── missingInfoAgent.ts # Slot-gap detection & clarifying question generation
+│   ├── destinationRecAgent.ts # Destination recommendation (no-destination path)
+│   ├── weatherAgent.ts     # Wraps Weather MCP as a LangChain tool
+│   ├── transportAgent.ts   # Wraps Transit MCP as a LangChain tool
+│   ├── accommodationAgent.ts # Wraps Booking MCP + tier categorization logic
+│   ├── activityAgent.ts    # Wraps Maps MCP + LLM-based attraction filtering (token-capped)
+│   ├── budgetAgent.ts      # Programmatic cost feasibility checks & alternative suggestions
+│   ├── itineraryAgent.ts   # Day-by-day JSON schedule generation (llama3-70b)
+│   ├── localTransitAgent.ts# Hotel → attraction commute telemetry & budget enrichment
+│   ├── replanningAgent.ts  # Targeted context-slice clearing & re-entry into supervisor loop
+│   └── bookingAgent.ts     # Mocked booking confirmation & booking reference generation
+├── mcp-servers/            # Typed MCP server adapters (one per external API domain)
+│   ├── weatherMCP.ts       # OpenMeteo weather forecast integration
+│   ├── mapsMCP.ts          # Google Maps geocoding, Google Places (attractions + near-hotel
+│   │                       # dining), Geoapify local transit directions
+│   ├── transitMCP.ts       # AviationStack flights + modelled train/bus (round-trip costs)
+│   ├── bookingMCP.ts       # Hotelbeds hotel inventory + Google Places lodging fallback
+│   ├── hotelbedsActivitiesMCP.ts # Hotelbeds packaged activities
+│   ├── hotelbedsTransfersMCP.ts  # Hotelbeds airport transfers
+│   ├── hotelbedsClient.ts  # Shared Hotelbeds API authentication helper
+│   └── calendarMCP.ts      # Google Calendar OAuth2 event creation
+├── config/                 # Mongoose MongoDB connectivity setup
 ├── constants/
-│   └── enums.ts            # Strong TS Enums matching db schema definitions (TripStatus, UserRole, MessageRole)
-├── controllers/            # Fat-free Express routing managers; handle client request/response pipelines
-│   ├── authController.ts   
-│   ├── tripController.ts   
-│   └── adminController.ts  
-├── services/               # Decoupled Business Core containing AI orchestrations, database queries, and OAuth
-│   ├── authService.ts      # Session tokens, Google Auth redirects, callback credential validation
-│   ├── tripService.ts      # AI Supervisor chains, hotel categories selections, local telemetry computations
-│   └── adminService.ts     # MongoDB statistical pipelines (budget limits, top hotels), log files reading
-├── models/                 # Mongoose schemas (User, Trip, Log templates)
-└── index.ts                # App boot file configuring helmet, rate-limit policies, and CORS
+│   └── enums.ts            # Strong TS enums — TripStatus, UserRole, MessageRole
+├── controllers/            # Thin Express request/response pipeline handlers
+│   ├── authController.ts
+│   ├── tripController.ts
+│   └── adminController.ts
+├── middleware/             # Express middleware chain (JWT, RBAC, input validation)
+├── models/                 # Mongoose schemas (User, Trip)
+├── prompts/                # Centralised LLM prompt templates (extractor, supervisor, router, synthesizer)
+├── services/               # Business logic decoupled from controllers
+│   ├── authService.ts      # Session tokens, Google Auth redirects, refresh-token rotation
+│   ├── tripService.ts      # Supervisor chain execution, hotel-tier selection, cost recalculation
+│   └── adminService.ts     # MongoDB aggregation pipelines, log file reading
+├── types/                  # Shared TypeScript interfaces (TripContext, PlannerAgentResult, etc.)
+├── utils/                  # Shared utilities
+│   ├── llm.ts              # createChatModel() factory (Groq LLM via LangChain)
+│   ├── logger.ts           # Winston structured logger (IST timestamp, log rotation)
+│   ├── retry.ts            # withRetry() exponential-backoff wrapper for MCP calls
+│   ├── dateHelpers.ts      # calculateNights() and trip date utilities
+│   ├── jsonHelpers.ts      # extractJson() safe LLM output parser
+│   └── inputSanitizer.ts   # clampTravelers(), clampBudget(), validateTripDates()
+└── index.ts                # App boot — helmet, rate-limit, CORS, all routes, error handler
 ```
 
 ---
