@@ -79,6 +79,7 @@ export default function ChatPage() {
   const [showInterestPicker, setShowInterestPicker] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showAbortConfirm, setShowAbortConfirm] = useState(false);
   const [showConfirmBookingModal, setShowConfirmBookingModal] = useState(false);
   const [bookingRefs, setBookingRefs] = useState<{ hotel?: string; transport?: string; calendar?: string } | null>(null);
   
@@ -420,6 +421,21 @@ export default function ChatPage() {
         : `My travel interests are: ${selectedInterests.join(', ')}`;
     }
     if (!finalMessage || chatMutation.isPending || approveMutation.isPending || rejectMutation.isPending) return;
+
+    // Intercept cancellation/abort intents to confirm with user first
+    const lowerMessage = finalMessage.toLowerCase();
+    const isCancelIntent = /^(cancel|abort|discard|reset|clear|delete)(\s+the\s+trip|\s+this|\s+please|\s+trip|\s+plan|\s+planning|\s+session|\s+design)?$/i.test(finalMessage.trim()) ||
+      lowerMessage === 'cancel' || lowerMessage === 'abort' || lowerMessage === 'reset' || lowerMessage === 'discard' || lowerMessage === 'clear' || lowerMessage === 'cancel please';
+
+    if (isCancelIntent) {
+      setMessage('');
+      setSelectedInterests([]);
+      setShowInterestPicker(false);
+      // Show a lightweight confirmation before opening the full discard dialog
+      setShowAbortConfirm(true);
+      return;
+    }
+
     setMessages((prev) => [...prev, { role: 'user', content: finalMessage }]);
     setMessage('');
     if (selectedInterests.length > 0 && !context?.input?.interests?.length) {
@@ -1128,6 +1144,53 @@ export default function ChatPage() {
                 <Send className="h-4.5 w-4.5" />
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Abort / Cancel-intent confirmation gate */}
+      {showAbortConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className={`premium-card rounded-2xl max-w-sm w-full p-6 mx-4 border shadow-2xl space-y-4 ${
+            isDark ? 'border-card-border/80 bg-card-bg/95' : 'border-slate-200 bg-white'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-amber-500/10 rounded-xl flex items-center justify-center border border-amber-500/20">
+                <X className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Cancel Trip Planning?</h3>
+                <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>This action will stop the current planning session.</p>
+              </div>
+            </div>
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Are you sure you want to <span className="font-bold text-amber-400">cancel</span> your trip plan to{' '}
+              <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {context?.input?.destination || 'this destination'}
+              </span>?
+              <span className="block mt-2 text-[11px]">
+                This will open discard options where you can soft-cancel or permanently delete the plan.
+              </span>
+            </p>
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => setShowAbortConfirm(false)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition active:scale-95 cursor-pointer text-center ${
+                  isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                No, Keep Planning
+              </button>
+              <button
+                onClick={() => {
+                  setShowAbortConfirm(false);
+                  setShowDiscardConfirm(true);
+                }}
+                className="flex-1 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-xs font-bold text-white transition active:scale-95 cursor-pointer text-center"
+              >
+                Yes, Cancel Trip
+              </button>
+            </div>
           </div>
         </div>
       )}
