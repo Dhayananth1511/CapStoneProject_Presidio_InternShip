@@ -153,6 +153,35 @@ You must respond ONLY with a valid JSON block of this exact structure:
     input: updatedInput
   };
 
+  // --- Destination Change Guard ---
+  // If the user has explicitly changed the destination (e.g. "change destination to Mumbai"),
+  // all previously cached agent outputs are stale and MUST be cleared.
+  // Without this, the old hotel, local transit, weather, transport and activities from the
+  // previous destination survive into the new plan because `runParallelAgents` sees
+  // `hasExistingPlanData === true` and skips re-fetching, and `local_transport` is never
+  // cleared by the chat path (only the reject/replan path clears it).
+  const previousDestination = (context.input.destination || '').trim().toLowerCase();
+  const newDestination = (updatedInput.destination || '').trim().toLowerCase();
+  const destinationChanged =
+    previousDestination !== '' &&           // there was a prior destination
+    newDestination !== '' &&                // a new destination was extracted
+    previousDestination !== newDestination; // and they are different
+
+  if (destinationChanged) {
+    logger.info(
+      `Supervisor: Destination changed from "${context.input.destination}" to "${updatedInput.destination}". Clearing all stale cached agent outputs.`,
+      { sessionId: context.sessionId }
+    );
+    updatedContext.weather = undefined;
+    updatedContext.transport = undefined;
+    updatedContext.accommodation = undefined;
+    updatedContext.activities = undefined;
+    updatedContext.budget = undefined;
+    updatedContext.itinerary = undefined;
+    updatedContext.local_transport = undefined;
+    updatedContext.formattedPlan = undefined;
+  }
+
   // --- Programmatic Input Clamping (applied AFTER LLM extraction, BEFORE supervisor routing) ---
   // These guards cannot be bypassed by the LLM because they run on the extracted output.
   if (updatedContext.input.travelers !== undefined) {
