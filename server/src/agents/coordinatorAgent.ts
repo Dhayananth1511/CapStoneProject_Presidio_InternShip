@@ -52,10 +52,7 @@ function isAccommodationChangeRequest(userMessage: string): boolean {
 }
 
 function preserveSelectedHotel(existingAccommodation: any, fetchedAccommodation: any, userMessage: string): any {
-  const isBudgetAdjustment = isBudgetOnlyAdjustment(userMessage);
-  const isIncreaseLimit = /increase limit to/i.test(userMessage);
-
-  if (!existingAccommodation?.selected_hotel || isAccommodationChangeRequest(userMessage) || (isBudgetAdjustment && !isIncreaseLimit)) {
+  if (!existingAccommodation?.selected_hotel || isAccommodationChangeRequest(userMessage)) {
     return fetchedAccommodation;
   }
 
@@ -108,48 +105,15 @@ export async function runParallelAgents(context: TripContext, userMessage: strin
   );
 
   if (hasExistingPlanData && isBudgetOnlyAdjustment(userMessage)) {
-    logger.info('Budget-only adjustment detected. Reusing existing fetched data, but rerunning accommodation agent to adapt to budget.', {
+    logger.info('Budget-only adjustment detected. Preserving existing accommodation data entirely — no hotel re-fetch.', {
       userMessage,
       sessionId: context.sessionId,
     });
-    const newContext = { ...context };
-
-    // Calculate a budget-derived limit: 50% of total budget divided by nights
-    const nights = days > 0 ? days : 5;
-    let budgetDerivedMaxPrice: number | undefined = undefined;
-    if (input.budget_inr && input.budget_inr > 0) {
-      budgetDerivedMaxPrice = Math.round((input.budget_inr * 0.5) / nights);
-    }
-
-    // Extract explicit price ceiling from user message if present (e.g. "below 1000/night", "under ₹2000")
-    const priceCeilingMatch = userMessage.match(/(?:below|under|less than|within|max|maximum|upto|up to)\s*[₹]?\s*(\d+)/i);
-    const userPriceCeiling = priceCeilingMatch ? parseInt(priceCeilingMatch[1], 10) : null;
-
-    const finalMaxPrice = userPriceCeiling || input.max_price_per_night || budgetDerivedMaxPrice;
-
-    const args: any = {
-      destination: input.destination!,
-      check_in: input.start_date!,
-      check_out: input.end_date!,
-      travelers: input.travelers || 1,
-    };
-    if (finalMaxPrice) {
-      args.max_price_per_night = finalMaxPrice;
-      args.tier = 'budget';
-    }
-
-    try {
-      const rawResult = await accommodationTool.invoke(args);
-      const resultString = typeof rawResult === 'string'
-        ? rawResult
-        : (rawResult && 'content' in rawResult ? String(rawResult.content) : JSON.stringify(rawResult));
-      const value = JSON.parse(resultString);
-      newContext.accommodation = preserveSelectedHotel(context.accommodation, value, userMessage);
-    } catch (err: any) {
-      logger.error('Failed to rerun fetch_accommodation on budget adjustment', err);
-    }
-
-    return newContext;
+    // When the user only adjusts the budget (increase/decrease overall spend),
+    // there is no reason to re-run the accommodation agent. The hotel list and
+    // the selected hotel stay exactly as they are. The downstream runBudgetAgent
+    // will recalculate feasibility and costs with the new budget figure.
+    return { ...context };
   }
 
   logger.info('Starting Dynamic LLM Tool router analysis', { userMessage });

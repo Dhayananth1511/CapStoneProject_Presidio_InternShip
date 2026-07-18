@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 import User from '../models/User';
+import { seedHotelbedsDestinations } from '../utils/hotelbedsDestinationSeeder';
 
 /**
  * Connects the Express server to MongoDB Atlas database.
@@ -31,6 +32,9 @@ const connectDB = async (): Promise<void> => {
       });
       logger.info('Default Admin user successfully seeded: admin@gmail.com / admin123');
     }
+
+    // Seed Hotelbeds destinations list
+    await seedHotelbedsDestinations();
   } catch (error: any) {
     logger.error(`Database Connection Error: ${error.message}`);
     // Exit process with failure (1) to prevent server running without a DB

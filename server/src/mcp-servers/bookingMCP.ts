@@ -7,14 +7,13 @@
 import { createHash } from 'crypto';
 import { withRetry } from '../utils/retry';
 import { HotelOption } from '../types';
-import hotelbedsDestMap from '../constants/hotelbedsDestMap.json';
+import HotelbedsDestination from '../models/HotelbedsDestination';
+import hotelbedsAliases from '../constants/hotelbedsAliases.json';
 import { calculateNights } from '../utils/dateHelpers';
 
 const HOTELBEDS_API_KEY = process.env.HOTELBEDS_API_KEY;
 const HOTELBEDS_API_SECRET = process.env.HOTELBEDS_API_SECRET;
 const HOTELBEDS_BASE_URL = process.env.HOTELBEDS_BASE_URL || 'https://api.test.hotelbeds.com';
-
-const HOTELBEDS_DEST_MAP: Record<string, string> = hotelbedsDestMap;
 
 // ---------------------------------------------------------------------------
 // Destination code map — Hotelbeds destination codes for Indian cities
@@ -110,19 +109,36 @@ async function searchHotelbedsContentHotels(
 ): Promise<HotelOption[] | null> {
   if (!HOTELBEDS_API_KEY || !HOTELBEDS_API_SECRET) return null;
 
-  const normDest = destination.trim().toLowerCase();
+  // Resolve official city name via aliases
+  const queryDest = destination.trim().toLowerCase();
+  let officialCityName = destination.trim();
 
-  // Find the Hotelbeds destination code
-  let destCode: string | undefined;
-  for (const [key, code] of Object.entries(HOTELBEDS_DEST_MAP)) {
-    if (normDest.includes(key) || key.includes(normDest)) {
-      destCode = code;
-      break;
+  if ((hotelbedsAliases as Record<string, string>)[queryDest]) {
+    officialCityName = (hotelbedsAliases as Record<string, string>)[queryDest];
+  } else {
+    for (const [aliasKey, officialName] of Object.entries(hotelbedsAliases)) {
+      if (queryDest.includes(aliasKey) || aliasKey.includes(queryDest)) {
+        officialCityName = officialName;
+        break;
+      }
     }
   }
 
+  // Find the Hotelbeds destination code via MongoDB
+  let destCode: string | undefined;
+  try {
+    const match = await HotelbedsDestination.findOne({
+      city: { $regex: new RegExp(`^${officialCityName}$`, 'i') }
+    });
+    if (match) {
+      destCode = match.code;
+    }
+  } catch (err: any) {
+    console.warn(`[bookingMCP] Database resolution failed for '${officialCityName}': ${err.message}`);
+  }
+
+  // Fallback to live API lookup (refresh cache if found)
   if (!destCode) {
-    // Try to resolve via Hotelbeds destinations lookup
     const { timestamp, signature } = buildHotelbedsSignature();
     const headers: Record<string, string> = {
       'Api-key': HOTELBEDS_API_KEY as string,
@@ -131,7 +147,7 @@ async function searchHotelbedsContentHotels(
     };
     try {
       const res = await fetch(
-        `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations/destinations?language=ENG&countryCodes=IN&from=1&to=200`,
+        `${HOTELBEDS_BASE_URL}/hotel-content-api/1.0/locations/destinations?language=ENG&countryCodes=IN&from=1&to=250`,
         { headers }
       );
       if (res.ok) {
@@ -139,9 +155,21 @@ async function searchHotelbedsContentHotels(
         const destinations = body?.destinations || [];
         const match = destinations.find((d: any) => {
           const name = String(d?.name?.content || d?.name || '').toLowerCase();
-          return name.includes(normDest) || normDest.includes(name);
+          const target = officialCityName.toLowerCase();
+          return name.includes(target) || target.includes(name);
         });
         destCode = match?.code;
+
+        if (destCode) {
+          try {
+            await HotelbedsDestination.create({
+              code: destCode,
+              city: match.name?.content || match.name || officialCityName,
+              country: match.countryCode || 'IN'
+            });
+            console.log(`[bookingMCP] Dynamically cached new destination: ${officialCityName} -> ${destCode}`);
+          } catch {}
+        }
       }
     } catch {
       // continue without code

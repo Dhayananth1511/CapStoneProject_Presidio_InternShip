@@ -1,0 +1,257 @@
+[
+  {
+    "code": "OOT",
+    "city": "Ooty",
+    "country": "IN"
+  },
+  {
+    "code": "DEL",
+    "city": "Delhi",
+    "country": "IN"
+  },
+  {
+    "code": "BOM",
+    "city": "Mumbai",
+    "country": "IN"
+  },
+  {
+    "code": "BLR",
+    "city": "Bengaluru",
+    "country": "IN"
+  },
+  {
+    "code": "CNN",
+    "city": "Chennai",
+    "country": "IN"
+  },
+  {
+    "code": "CCU",
+    "city": "Kolkata",
+    "country": "IN"
+  },
+  {
+    "code": "HYD",
+    "city": "Hyderabad",
+    "country": "IN"
+  },
+  {
+    "code": "GOO",
+    "city": "Goa",
+    "country": "IN"
+  },
+  {
+    "code": "JAI",
+    "city": "Jaipur",
+    "country": "IN"
+  },
+  {
+    "code": "AGR",
+    "city": "Agra",
+    "country": "IN"
+  },
+  {
+    "code": "SIM",
+    "city": "Shimla",
+    "country": "IN"
+  },
+  {
+    "code": "KUL",
+    "city": "Manali",
+    "country": "IN"
+  },
+  {
+    "code": "COK",
+    "city": "Kochi",
+    "country": "IN"
+  },
+  {
+    "code": "PNQ",
+    "city": "Pune",
+    "country": "IN"
+  },
+  {
+    "code": "PNY",
+    "city": "Puducherry",
+    "country": "IN"
+  },
+  {
+    "code": "PYP",
+    "city": "Alappuzha",
+    "country": "IN"
+  },
+  {
+    "code": "SXR",
+    "city": "Srinagar",
+    "country": "IN"
+  },
+  {
+    "code": "VNS",
+    "city": "Varanasi",
+    "country": "IN"
+  },
+  {
+    "code": "UDR",
+    "city": "Udaipur",
+    "country": "IN"
+  },
+  {
+    "code": "JDH",
+    "city": "Jodhpur",
+    "country": "IN"
+  },
+  {
+    "code": "ATQ",
+    "city": "Amritsar",
+    "country": "IN"
+  },
+  {
+    "code": "MYQ",
+    "city": "Mysuru",
+    "country": "IN"
+  },
+  {
+    "code": "KOD",
+    "city": "Kodaikanal",
+    "country": "IN"
+  },
+  {
+    "code": "AZQ",
+    "city": "Munnar",
+    "country": "IN"
+  },
+  {
+    "code": "DAR",
+    "city": "Darjeeling",
+    "country": "IN"
+  },
+  {
+    "code": "GAN",
+    "city": "Gangtok",
+    "country": "IN"
+  },
+  {
+    "code": "IXL",
+    "city": "Leh",
+    "country": "IN"
+  },
+  {
+    "code": "CJB",
+    "city": "Coimbatore",
+    "country": "IN"
+  },
+  {
+    "code": "IXM",
+    "city": "Madurai",
+    "country": "IN"
+  },
+  {
+    "code": "TRZ",
+    "city": "Tiruchirappalli",
+    "country": "IN"
+  },
+  {
+    "code": "TIR",
+    "city": "Tirupati",
+    "country": "IN"
+  },
+  {
+    "code": "ISK",
+    "city": "Nashik",
+    "country": "IN"
+  },
+  {
+    "code": "IXU",
+    "city": "Aurangabad",
+    "country": "IN"
+  },
+  {
+    "code": "BHO",
+    "city": "Bhopal",
+    "country": "IN"
+  },
+  {
+    "code": "IDR",
+    "city": "Indore",
+    "country": "IN"
+  },
+  {
+    "code": "AMD",
+    "city": "Ahmedabad",
+    "country": "IN"
+  },
+  {
+    "code": "STV",
+    "city": "Surat",
+    "country": "IN"
+  },
+  {
+    "code": "IXC",
+    "city": "Chandigarh",
+    "country": "IN"
+  },
+  {
+    "code": "LKO",
+    "city": "Lucknow",
+    "country": "IN"
+  },
+  {
+    "code": "PAT",
+    "city": "Patna",
+    "country": "IN"
+  },
+  {
+    "code": "BBI",
+    "city": "Bhubaneswar",
+    "country": "IN"
+  },
+  {
+    "code": "RPR",
+    "city": "Raipur",
+    "country": "IN"
+  },
+  {
+    "code": "VTZ",
+    "city": "Visakhapatnam",
+    "country": "IN"
+  },
+  {
+    "code": "VGA",
+    "city": "Vijayawada",
+    "country": "IN"
+  },
+  {
+    "code": "NTL",
+    "city": "Nainital",
+    "country": "IN"
+  },
+  {
+    "code": "DED",
+    "city": "Dehradun",
+    "country": "IN"
+  },
+  {
+    "code": "HWI",
+    "city": "Haridwar",
+    "country": "IN"
+  },
+  {
+    "code": "DHM",
+    "city": "Dharamsala",
+    "country": "IN"
+  },
+  {
+    "code": "CXB",
+    "city": "Coorg",
+    "country": "IN"
+  },
+  {
+    "code": "YNW",
+    "city": "Wayanad",
+    "country": "IN"
+  },
+  {
+    "code": "PBH",
+    "city": "Puri",
+    "country": "IN"
+  }
+]

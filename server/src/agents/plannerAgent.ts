@@ -171,6 +171,26 @@ You must respond ONLY with a valid JSON block of this exact structure:
     input: updatedInput
   };
 
+  // --- India Location Validation ---
+  if (updatedInput.destination && updatedInput.destination.trim() !== '') {
+    const inIndia = await checkIfDestinationInIndia(updatedInput.destination);
+    if (!inIndia) {
+      logger.warn('Validation failed: Non-Indian destination requested', { destination: updatedInput.destination });
+      
+      // Clear the invalid destination
+      updatedInput.destination = undefined;
+      updatedContext.input.destination = undefined;
+      
+      const errorMsg = `⚠️ I can only plan trips for destinations in India. Please specify an Indian destination (e.g. Manali, Ooty, Goa, Kerala, Delhi).`;
+      updatedContext.conversationHistory.push({ role: 'assistant', content: errorMsg });
+      return {
+        context: updatedContext,
+        status: 'NEEDS_INFO',
+        clarifyingQuestion: errorMsg,
+      };
+    }
+  }
+
   // --- Destination Change Guard ---
   // If the user has explicitly changed the destination (e.g. "change destination to Mumbai"),
   // all previously cached agent outputs are stale and MUST be cleared.
@@ -482,4 +502,81 @@ You must respond ONLY with a valid JSON block of this exact structure:
     plan: formattedPlan,
     budgetFeasible: true
   };
+}
+
+async function checkIfDestinationInIndia(destination: string): Promise<boolean> {
+  const normalizedDest = destination.trim().toLowerCase();
+  if (normalizedDest === '') return true;
+
+  // Set of common Indian cities & regions to skip LLM call
+  const commonIndianCities = new Set([
+    'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad', 'ahmedabad', 'chennai', 'kolkata', 'surat', 'pune',
+    'jaipur', 'lucknow', 'kanpur', 'indore', 'thane', 'bhopal', 'visakhapatnam', 'patna', 'vadodara', 'ghaziabad',
+    'ludhiana', 'agra', 'nashik', 'faridabad', 'meerut', 'rajkot', 'kalyan', 'vasai', 'varanasi', 'srinagar',
+    'aurangabad', 'dhanbad', 'amritsar', 'navi mumbai', 'allahabad', 'prayagraj', 'howrah', 'gwalior', 'jabalpur', 'coimbatore',
+    'vijayawada', 'jodhpur', 'madurai', 'raipur', 'kota', 'chandigarh', 'guwahati', 'solapur', 'hubli', 'dharwad',
+    'bareilly', 'mysore', 'mysuru', 'tiruchirappalli', 'trichy', 'gurgaon', 'gurugram', 'aligarh', 'jalandhar', 'bhubaneswar',
+    'salem', 'warangal', 'guntur', 'raurkela', 'rourkela', 'noida', 'kochi', 'cochin', 'thiruvananthapuram', 'trivandrum',
+    'dehradun', 'jammu', 'ooty', 'manali', 'shimla', 'goa', 'darjeeling', 'munnar', 'wayanad', 'pondicherry', 'puducherry',
+    'rishikesh', 'haridwar', 'varanasi', 'alleppey', 'alappuzha', 'kovalam', 'hampi', 'khajuraho', 'ajanta', 'ellora',
+    'udaipur', 'jaisalmer', 'jodhpur', 'pushkar', 'ranthambore', 'kaziranga', 'leh', 'ladakh', 'spiti', 'mussoorie',
+    'nainital', 'ranikhet', 'kodaikanal', 'coorg', 'kodagu', 'kumarakom', 'varkala', 'gokarna', 'mahabaleshwar', 'lonavala',
+    'shirdi', 'tirupati', 'shillong', 'gangtok', 'cherrapunji', 'tawang', 'dharamshala', 'mcleodganj', 'dalhousie', 'gulmarg',
+    'pahalgam', 'sonamarg', 'katra', 'andaman', 'nicobar', 'port blair', 'havelock', 'neil island', 'lakshadweep', 'kavaratti',
+    'mahabalipuram', 'mamallapuram', 'madurai', 'rameshwaram', 'kanyakumari', 'tirupati', 'chittuoor', 'nellore', 'tirunelveli',
+    'vellore', 'kanchipuram', 'pondicherry', 'trichy', 'tanjore', 'thanjavur', 'chidambaram', 'umbray', 'ooty', 'coonoor',
+    'kotagiri', 'yercaud', 'valparai', 'munnar', 'thekkady', 'vagamon', 'alleppey', 'kumarakom', 'varkala', 'kovalam',
+    'poovar', 'kollam', 'ashtamudi', 'bekal', 'wayanad', 'kabini', 'bandipur', 'mudumalai', 'nagarhole', 'coorg',
+    'chikmagalur', 'gokarna', 'murudeshwar', 'udupi', 'mangalore', 'hampi', 'badami', 'pattadakal', 'aihole', 'bijapur',
+    'vijayapura', 'mysore', 'kabini', 'bandipur', 'belur', 'halebidu', 'shravanabelagola', 'jog falls', 'dandeli', 'nandi hills',
+    'bengaluru', 'bangalore', 'coimbatore', 'ooty', 'kodaikanal', 'munnar', 'wayanad', 'kerala'
+  ]);
+
+  if (commonIndianCities.has(normalizedDest)) {
+    return true;
+  }
+
+  // Set of common international cities for fast reject
+  const commonIntCities = new Set([
+    'paris', 'london', 'new york', 'nyc', 'tokyo', 'singapore', 'dubai', 'bangkok', 'phuket', 'bali',
+    'sydney', 'melbourne', 'rome', 'milan', 'venice', 'florence', 'barcelona', 'madrid', 'amsterdam', 'berlin',
+    'munich', 'frankfurt', 'zurich', 'geneva', 'vienna', 'prague', 'budapest', 'istanbul', 'cairo', 'cape town',
+    'rio de janeiro', 'buenos aires', 'toronto', 'vancouver', 'montreal', 'san francisco', 'los angeles', 'la',
+    'chicago', 'miami', 'las vegas', 'seattle', 'boston', 'washington', 'dublin', 'edinburgh', 'copenhagen', 'oslo',
+    'stockholm', 'helsinki', 'reykjavik', 'athens', 'santorini', 'mykonos', 'split', 'dubrovnik', 'krakow', 'warsaw',
+    'moscow', 'st petersburg', 'kyiv', 'seoul', 'beijing', 'shanghai', 'hong kong', 'macau', 'taipei', 'manila',
+    'hanoi', 'ho chi minh', 'saigon', 'kuala lumpur', 'jakarta', 'maldives', 'male', 'colombo', 'kathmandu', 'pokhara',
+    'lhasa', 'thimphu', 'paro', 'dhaka', 'karachi', 'lahore', 'islamabad', 'tehran', 'baghdad', 'damascus',
+    'beirut', 'tel aviv', 'jerusalem', 'amman', 'petra', 'riyadh', 'jeddah', 'doha', 'abu dhabi', 'muscat',
+    'nairobi', 'mombasa', 'zanzibar', 'dar es salaam', 'johannesburg', 'cairo', 'marrakesh', 'casablanca', 'tunis', 'algiers'
+  ]);
+
+  if (commonIntCities.has(normalizedDest)) {
+    return false;
+  }
+
+  // Fallback to LLM for other locations
+  try {
+    const checkLlm = createChatModel({ temperature: 0.1 });
+    const systemPrompt = `You are a geographical validation assistant.
+Identify if the given location is located in India.
+Location: "${destination}"
+
+You must respond ONLY with a valid JSON block of this exact structure:
+{
+  "isInIndia": true | false,
+  "reasoning": "brief explanation"
+}`;
+
+    const response = await withRetry(() => checkLlm.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(`Validate location: ${destination}`),
+    ]));
+
+    const parsed = extractJson(response.content.toString().trim());
+    return parsed.isInIndia === true;
+  } catch (err: any) {
+    logger.warn('Failed to validate location via LLM, falling back to false for safety', { error: err.message });
+    return false;
+  }
 }
