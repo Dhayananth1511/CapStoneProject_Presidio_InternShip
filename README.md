@@ -1369,6 +1369,7 @@ The Budget Agent analyzes all estimated costs compiled by the parallel agents an
 | | AviationStack API | Real-time flight schedules | Free Tier (500 req/month) |
 | | Hotelbeds API | Real hotel inventory, rates & activities | Partner API — Sandbox Free |
 | | Google Calendar API | Event reminder synchronization updates | 100% Free Developer API |
+| | Razor pay API | Test mode real payment gateway (not real money transition) |
 
 
 ---
